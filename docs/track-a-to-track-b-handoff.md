@@ -70,7 +70,10 @@ mean_rcr}`.
 - **Query:** dementia (the `Dementia` MeSH tree + Alzheimer/FTD/Lewy/vascular/
   cognitive-impairment synonyms) **AND** mentions GWAS. Full definition in
   `topics/config.py::SEARCH_TERM`.
-- **When:** the full-field run is in progress (reference + cited-by fetch, the
-  long phase). The enriched export (abstract + MeSH + references) follows in a
-  quick second pass. Track A will notify when `data/processed/topic-dynamics/`
-  is updated on the branch and give the final paper count.
+- **When / what's live now:** an **enriched interim dataset of 2,507 papers**
+  (the first ~53% of the field) is committed to `data/processed/topic-dynamics/`
+  now — with abstracts (98%), MeSH (70%), references (72%), 17 topic clusters
+  (78% of papers assigned), and ~105k coupling+co-citation edges. The remaining
+  ~2,300 papers are backfilling in the background; Track A will re-export the
+  full ~4,780-paper dataset and notify when it lands. **The schema/contract is
+  final — build against the interim data now; only row counts grow.**
