@@ -1,0 +1,110 @@
+{
+  "edges_csv": {
+    "by_type": {
+      "drug_pathway": 174,
+      "gene_disease": 535,
+      "gene_pathway": 36,
+      "topic_disease": 33,
+      "topic_gene": 316,
+      "topic_pathway": 29,
+      "trial_drug": 3350,
+      "trial_pathway": 5271,
+      "variant_gene": 1274
+    },
+    "dangling_endpoints": 0,
+    "edge_id_collisions_uniquified": 0,
+    "header": [
+      "edge_id",
+      "source_id",
+      "target_id",
+      "edge_type",
+      "score",
+      "evidence",
+      "method",
+      "confidence"
+    ],
+    "path": "data/exports/graph/neo4j/edges.csv",
+    "rows": 11018
+  },
+  "generated_by": "translational-evidence/exports/build_neo4j_export.py",
+  "generated_on": "2026-07-01",
+  "load_cypher": "data/exports/graph/neo4j/load.cypher",
+  "nodes_csv": {
+    "by_type": {
+      "disease": 7,
+      "drug": 2111,
+      "gene": 523,
+      "pathway": 9,
+      "topic": 17,
+      "trial": 6841,
+      "variant": 5786
+    },
+    "duplicate_node_ids": 0,
+    "header": [
+      "node_id",
+      "node_type",
+      "label",
+      "score",
+      "genetic_support",
+      "functional_support",
+      "translation_gap",
+      "disease_groups",
+      "pathway_group",
+      "n_conflicting",
+      "n_trials",
+      "n_drugs",
+      "n_associations",
+      "n_studies",
+      "first_gwas_year",
+      "latest_gwas_year",
+      "n_recent_gwas",
+      "first_trial_year",
+      "latest_trial_year",
+      "n_recent_trials",
+      "first_year",
+      "latest_year",
+      "n_recent",
+      "stopped_ratio",
+      "direction_agreement",
+      "metrics_translation_gap",
+      "has_approval",
+      "provenance"
+    ],
+    "metric_columns": {
+      "bool": [
+        "has_approval"
+      ],
+      "float": [
+        "stopped_ratio",
+        "direction_agreement",
+        "metrics_translation_gap"
+      ],
+      "int": [
+        "n_conflicting",
+        "n_trials",
+        "n_drugs",
+        "n_associations",
+        "n_studies",
+        "first_gwas_year",
+        "latest_gwas_year",
+        "n_recent_gwas",
+        "first_trial_year",
+        "latest_trial_year",
+        "n_recent_trials",
+        "first_year",
+        "latest_year",
+        "n_recent"
+      ],
+      "note": "flat per-entity metrics hoisted from entity_metrics.jsonl; blank column == Cypher null for node types that do not carry that metric",
+      "renamed": {
+        "metrics_translation_gap": "translation_gap"
+      }
+    },
+    "path": "data/exports/graph/neo4j/nodes.csv",
+    "rows": 15294
+  },
+  "source": {
+    "edges_jsonl": "data/exports/graph/edges.jsonl",
+    "nodes_jsonl": "data/exports/graph/nodes.jsonl"
+  }
+}

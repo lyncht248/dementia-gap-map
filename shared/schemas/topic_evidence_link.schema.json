@@ -10,14 +10,14 @@
     },
     "evidence_type": {
       "type": "string",
-      "enum": ["gwas_association", "gene", "pathway", "target", "trial"]
+      "enum": ["gwas_association", "gene", "pathway", "target", "trial", "disease"]
     },
     "evidence_id": {
       "type": "string"
     },
     "link_type": {
       "type": "string",
-      "enum": ["paper_overlap", "gene_mention", "pathway_mapping", "manual_mapping", "model_inference"]
+      "enum": ["paper_overlap", "gene_mention", "pathway_mapping", "manual_mapping", "model_inference", "mesh_annotation", "chemical_annotation"]
     },
     "supporting_paper_ids": {
       "type": "array",
@@ -25,6 +25,17 @@
     },
     "score": {
       "type": ["number", "null"]
+    },
+    "method": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true
     },
     "notes": {
       "type": ["string", "null"]

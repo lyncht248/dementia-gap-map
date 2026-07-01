@@ -26,6 +26,22 @@ data/exports/**
 !data/**/.gitkeep
 !data/README.md
 
+# Exception: publish Track B processed outputs + graph/Neo4j exports so
+# consumers (Track A / the UI / agents) have the data without re-running the
+# pipeline. Raw API responses (data/raw, ~800MB) and the Track A interim
+# snapshot (data/interim) deliberately stay ignored.
+!data/processed/translational-evidence/*.jsonl
+!data/processed/shared/*.jsonl
+!data/processed/shared/*.json
+!data/exports/graph/*.jsonl
+!data/exports/graph/*.json
+!data/exports/graph/*.js
+!data/exports/graph/*.html
+!data/exports/graph/neo4j/*.csv
+!data/exports/graph/neo4j/*.cypher
+!data/exports/graph/neo4j/*.json
+!data/exports/graph/neo4j/*.md
+
 # Logs and temporary outputs
 *.log
 tmp/

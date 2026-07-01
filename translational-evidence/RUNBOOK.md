@@ -223,51 +223,88 @@ provenance, and Alzheimer stays recoverable downstream as the subset
 
   - Track B processed evidence (this track's own outputs):
     `genes.jsonl`, `gwas_associations.jsonl`, `pathways.jsonl`, `trials.jsonl`.
-  - The authoritative `translational-evidence/map/gene_pathway.csv`
-    (`gene_symbol` → `pathway_group`).
+  - Curated **structured join tables** (see the crosswalk CSVs below).
 
-  **Join method** — three link types, because bare PMID overlap alone is thin
-  (only ~10 of ~410 snapshot papers share a PMID with the GWAS corpus):
-  - `gene_mention` — case-sensitive whole-word gene-symbol match in member-paper
-    title+abstract text (symbols < 3 chars and an audited ambiguous-symbol
-    blocklist are excluded);
-  - `paper_overlap` — shared PMIDs between the topic's papers and Track B's GWAS
-    publications (also pulls in each association's `reported_genes`);
-  - `pathway_mapping` — linked-gene → `pathway_group` via `gene_pathway.csv`,
-    plus topic `top_terms`/`label` keyword matches to the mechanism vocabulary.
+  **Join method (BridgeV2) — STRUCTURED-FIRST, fully provenanced.** The bridge is
+  now v2, built on the enriched **2,507-paper / 17-cluster** `track_a_snapshot`
+  (abstracts, MeSH descriptors, chemical descriptors, and references are now
+  populated). Prefer **structured, ID-based joins over text/regex**, and record
+  on **every** link a machine-readable `method`, a `confidence`
+  (`high`/`medium`/`low`), a `provenance` object with the exact join key, and a
+  human-readable `notes`. Method priority (highest → lowest):
 
-  **Outputs** (both under `data/processed/shared/`, both gitignored):
-  - `topic_evidence_links.jsonl` — one explainable record per (topic, evidence,
-    link_type) join (`topic_evidence_link.schema.json`); every record carries a
-    `notes` string.
+  1. `pmid_join` (high) — topic member **PMIDs** ∩ GWAS association PMIDs →
+     `topic → gwas_association` (`paper_overlap`) + `topic → gene` for each
+     reported gene. Join key: `pmid`.
+  2. `mesh_ui_join` (high) — member-paper **MeSH UIs** looked up in the curated
+     `map/mesh_disease.csv` → `topic → disease` (`mesh_annotation`), tallied per
+     `disease_group`. Join key: `mesh_ui`.
+  3. `chemical_ui_crosswalk` (high) — member-paper **chemical/substance UIs** in
+     the curated `map/chemical_gene.csv` (a gene-product descriptor points at its
+     gene) → `topic → gene` (`chemical_annotation`). Join key: `chemical_ui`.
+  4. `gene_pathway_curated` (medium) — pathway groups of the topic's
+     **structurally-linked** genes via `map/gene_pathway.csv`, weighted by summed
+     `genetic_support` → `topic → pathway` (`pathway_mapping`). Join key:
+     `gene_symbol->pathway_group`.
+  5. `regex_symbol_match` (low) — **DEMOTED fallback only**: case-sensitive
+     whole-word gene-symbol match in member title+abstract, run **only** for
+     genes not already linked structurally (symbols < 3 chars + an audited
+     ambiguous-symbol blocklist excluded). Join key:
+     `case_sensitive_whole_word_symbol`; provenance flags `fallback: true`.
+
+  The full taxonomy — how each method works, its confidence, the join key it
+  records, and the design principle — is documented in
+  **`translational-evidence/exports/LINK_METHODS.md`**.
+
+  **Curated crosswalk CSVs** (`translational-evidence/map/`, the auditable
+  structured join tables — extend a method by adding rows, no code change):
+
+  | CSV | columns | rows | feeds |
+  | --- | --- | --- | --- |
+  | `mesh_disease.csv` | `mesh_ui, mesh_term, disease_group, notes` | 13 | `mesh_ui_join` |
+  | `chemical_gene.csv` | `chemical_ui, chemical_term, gene_symbol, notes` | 46 | `chemical_ui_crosswalk` |
+  | `gene_pathway.csv` | `gene_symbol, pathway_group, notes` | 41 | `gene_pathway_curated` |
+
+  **Outputs** (all under `data/processed/shared/`, all gitignored):
+  - `topic_evidence_links.jsonl` — one explainable record per
+    (topic, evidence_type, evidence_id, link_type) join
+    (`topic_evidence_link.schema.json`); every record carries `method`,
+    `confidence`, `provenance`, and `notes`.
   - `topic_evidence_rollup.jsonl` — one record per topic, the Track B half of the
     frontend `map_data.json` cluster (`topic_evidence_rollup.schema.json`).
   - `topic_bridge_manifest.json` — snapshot-awareness metadata (input counts +
-    the SUBSET / full-run note). Not schema-validated.
+    `link_methods` / `link_types` / `link_confidence` tallies). Not
+    schema-validated.
 
   No counts are hardcoded in the script — they are read from the inputs, so a
-  re-run against the full corpus just works.
+  re-run against a refreshed corpus just works.
 
-#### Refresh when Track A full run lands
+  **BridgeV2 counts (`track_a_snapshot`: 2,507 papers / 17 clusters):** 6,902
+  links total — by method: `pmid_join` 6,607, `regex_symbol_match` 164,
+  `chemical_ui_crosswalk` 69, `mesh_ui_join` 33, `gene_pathway_curated` 29; by
+  confidence: high 6,709, low 164, medium 29.
 
-The current bridge is built against a Track A **SUBSET** snapshot
-(the `2026-07-01` build: **410** papers / **9** clusters — see
-`topic_bridge_manifest.json`). Track A's **FULL** run is still **pending**. When
-it lands on `origin/main`, refresh the bridge:
+#### Refresh when Track A publishes a new snapshot
 
-1. **Re-materialize** the three `track_a_snapshot` files from `origin/main` (the
-   three `git show origin/main:data/processed/topic-dynamics/<file> > …` commands
-   above). Fetch first: `git fetch origin`.
+The bridge is built against a **materialized** `track_a_snapshot`. To refresh it
+against a newer Track A run on `origin/main` (do not edit `topic-dynamics/**`):
+
+1. `git fetch origin`, then **re-materialize** the snapshot files from
+   `origin/main` into `data/interim/translational-evidence/track_a_snapshot/`
+   (the `git show origin/main:data/processed/topic-dynamics/<file> > …` commands
+   above — at minimum `topic_clusters.jsonl` and `papers.jsonl`).
 2. **Re-run** the bridge:
    `python3 translational-evidence/exports/build_topic_bridge.py`.
-3. **Re-validate**: `python3 translational-evidence/validate.py` (both shared
-   outputs must be `OK`).
+3. **Regenerate the graph pack** so the new links surface as edges:
+   `python3 translational-evidence/exports/build_evidence_graph.py`, then
+   `python3 translational-evidence/exports/build_neo4j_export.py`, then
+   `python3 translational-evidence/viz/build_graph_viz.py`.
+4. **Re-validate**: `python3 translational-evidence/validate.py` (all files,
+   including the graph `nodes.jsonl` / `edges.jsonl`, must be `OK` → exit 0).
 
-Bridge coverage — especially `gene_mention` (more abstracts to match against) and
-`paper_overlap` (more topic PMIDs overlapping the GWAS corpus) — will grow
-**substantially** with the full corpus; several topics that currently have zero
-links (e.g. topics with no gene mentions and no GWAS-PMID overlap) will gain
-evidence. No schema or code change is needed for the refresh.
+Bridge coverage grows with a larger corpus (more PMID overlap, more MeSH/chemical
+descriptors, more abstracts for the regex fallback). No schema or code change is
+needed for the refresh.
 
 ---
 
@@ -349,24 +386,25 @@ record and sum to the record total.)
 
 ### Shared bridge outputs (`data/processed/shared/`)
 
-`exports/build_topic_bridge.py` writes two schema-validated shared files (both
-gitignored). Counts below are from the `2026-07-01` build against the Track A
-**SUBSET** snapshot (410 papers / 9 clusters):
+`exports/build_topic_bridge.py` (BridgeV2) writes two schema-validated shared
+files (both gitignored). Counts below are from the BridgeV2 build against the
+enriched Track A snapshot (**2,507 papers / 17 clusters**):
 
 | Output file | Schema (`shared/schemas/`) | Records |
 | --- | --- | --- |
-| `topic_evidence_links.jsonl` | `topic_evidence_link.schema.json` | 1,099 |
-| `topic_evidence_rollup.jsonl` | `topic_evidence_rollup.schema.json` | 9 |
+| `topic_evidence_links.jsonl` | `topic_evidence_link.schema.json` | 6,902 |
+| `topic_evidence_rollup.jsonl` | `topic_evidence_rollup.schema.json` | 17 |
 
-The 1,099 links break down as **1,072** `paper_overlap` (1,007 GWAS
-associations + reported genes; heavily concentrated in `topic:002`,
-`alzheimer / genome-wide / meta-analysis`), **13** `gene_mention`, and **14**
-`pathway_mapping`. Six of the nine topics carry links; three (`topic:001`,
-`topic:003`, `topic:006`) currently have none (no gene mentions and no
-GWAS-PMID overlap) and are expected to gain evidence under the full corpus.
+The 6,902 links break down (by **method** / structured-first) as `pmid_join`
+6,607 (`paper_overlap`), `regex_symbol_match` 164 (`gene_mention`, low-confidence
+fallback), `chemical_ui_crosswalk` 69 (`chemical_annotation`), `mesh_ui_join` 33
+(`mesh_annotation` → topic↔disease), and `gene_pathway_curated` 29
+(`pathway_mapping`). By **confidence**: high 6,709, low 164, medium 29. Every
+link carries `method` / `confidence` / `provenance` / `notes` — see
+`exports/LINK_METHODS.md`.
 
-Validator result for the `2026-07-01` build (all files, including the two shared
-outputs):
+Validator result (all files, including the two shared outputs and the graph
+`nodes.jsonl` / `edges.jsonl`):
 
 ```
 data/processed/translational-evidence/gwas_associations.jsonl: 7351 records, OK
@@ -375,8 +413,11 @@ data/processed/translational-evidence/pathways.jsonl: 9 records, OK
 data/processed/translational-evidence/trials.jsonl: 6841 records, OK
 data/processed/translational-evidence/target_evidence.jsonl: 1499 records, OK
 data/processed/translational-evidence/functional_links.jsonl: 3372 records, OK
-data/processed/shared/topic_evidence_links.jsonl: 1099 records, OK
-data/processed/shared/topic_evidence_rollup.jsonl: 9 records, OK
+data/processed/translational-evidence/entity_metrics.jsonl: 6318 records, OK
+data/processed/shared/topic_evidence_links.jsonl: 6902 records, OK
+data/processed/shared/topic_evidence_rollup.jsonl: 17 records, OK
+data/exports/graph/nodes.jsonl: 15294 records, OK
+data/exports/graph/edges.jsonl: 11018 records, OK
 ```
 
 ---
@@ -557,18 +598,22 @@ does the legibility work**. Every node carries `provenance` + scores and every
 edge carries a `score` + `evidence` label, so anything you filter to stays
 explainable. Nothing is fabricated.
 
-> The topic overlay (`topic` nodes + `topic_gene` / `topic_pathway` edges) is
-> joined from the shared bridge, which currently reflects the Track A **SUBSET**
-> snapshot (the `2026-07-01` build: 410 papers / 9 clusters). It refreshes for
-> free when Track A's full run lands and the bridge is rebuilt (see §3 →
-> "Refresh when Track A full run lands").
+> The topic overlay (`topic` nodes + `topic_gene` / `topic_pathway` /
+> `topic_disease` edges) is joined from the shared BridgeV2 (the enriched
+> **2,507-paper / 17-cluster** snapshot). Each bridge edge **carries the link's
+> `method` + `confidence`** (hoisted onto the edge and mirrored in `provenance`
+> with the exact join key), so how+why every Track A↔B link was made is
+> queryable in Neo4j and visible in the HTML explorer. It refreshes for free when
+> Track A publishes a new snapshot and the bridge + graph pack are rebuilt (see
+> §3 → "Refresh when Track A publishes a new snapshot"). Method taxonomy:
+> `exports/LINK_METHODS.md`.
 
-### Node & edge types + full counts (`2026-07-01` build)
+### Node & edge types + full counts (BridgeV2 build)
 
 Counts are the real numbers from
 `data/exports/graph/graph_manifest.json`.
 
-**Nodes — 15,286 total:**
+**Nodes — 15,294 total:**
 
 | node type | count | source |
 | --- | --- | --- |
@@ -577,11 +622,11 @@ Counts are the real numbers from
 | `drug` | 2,111 | trial `interventions[]` |
 | `gene` | 523 | `genes.jsonl` |
 | `pathway` | 9 | `pathways.jsonl` |
-| `topic` | 9 | `topic_evidence_rollup.jsonl` (Track A subset overlay) |
+| `topic` | 17 | `topic_evidence_rollup.jsonl` (Track A overlay) |
 | `disease` | 7 | `disease_group` vocabulary |
-| **total** | **15,286** | |
+| **total** | **15,294** | |
 
-**Edges — 10,732 total:**
+**Edges — 11,018 total:**
 
 | edge type | count | meaning |
 | --- | --- | --- |
@@ -589,11 +634,21 @@ Counts are the real numbers from
 | `trial_drug` | 3,350 | trial → intervention/drug |
 | `variant_gene` | 1,274 | GWAS variant → reported gene |
 | `gene_disease` | 535 | gene → dementia disease group |
+| `topic_gene` | 316 | topic → gene (bridge; carries method/confidence) |
 | `drug_pathway` | 174 | drug → pathway (via mechanism) |
-| `topic_gene` | 78 | topic → gene (bridge) |
 | `gene_pathway` | 36 | gene → pathway group |
-| `topic_pathway` | 14 | topic → pathway (bridge) |
-| **total** | **10,732** | |
+| `topic_disease` | 33 | **NEW** topic → disease group (bridge; `mesh_ui_join`) |
+| `topic_pathway` | 29 | topic → pathway (bridge; carries method/confidence) |
+| **total** | **11,018** | |
+
+The **378** topic bridge edges (`topic_gene` + `topic_pathway` +
+`topic_disease`) each carry `method` + `confidence`. By method: `regex_symbol_match`
+164, `pmid_join` 83, `chemical_ui_crosswalk` 69, `mesh_ui_join` 33,
+`gene_pathway_curated` 29. By confidence: high 185, low 164, medium 29. (These are
+also in the manifest under `edges.topic_bridge`.) `paper_overlap` links to GWAS
+associations are **not** edges — a GWAS association is not a graph node, so those
+topic→association links would dangle; the reported genes already appear as
+high-confidence `topic_gene` (`pmid_join`) edges.
 
 (The builder dropped **1,949** dangling edges whose endpoints were not present as
 nodes — reported as `edges.dangling_dropped` in the manifest — so every retained
@@ -601,7 +656,7 @@ edge resolves to two real nodes.)
 
 Graph inputs (from the manifest): `genes` 523, `gwas_associations` 7,351,
 `pathways` 9, `trials` 6,841, `target_evidence` 1,499, `functional_links` 3,372,
-`topic_links` 1,099, `topic_rollup` 9.
+`topic_links` 6,902, `topic_rollup` 17.
 
 ### How to regenerate
 
@@ -609,13 +664,17 @@ Run after the pipeline (and after the topic bridge, so the topic overlay is
 current):
 
 ```bash
-# 1. Build the full graph (nodes.jsonl + edges.jsonl + graph_manifest.json)
+# 1. Build the full graph (nodes.jsonl + edges.jsonl + graph_manifest.json).
+#    Adds topic_gene / topic_pathway / topic_disease edges carrying method+confidence.
 python3 translational-evidence/exports/build_evidence_graph.py
 
-# 2a. Build the zero-install browser viz (graph_data.js + evidence_graph.html)
+# 2a. Build the zero-install browser viz (graph_data.js + evidence_graph.html).
+#     Click a bridge edge to see its method / confidence / join provenance.
 python3 translational-evidence/viz/build_graph_viz.py
 
-# 2b. Build the Neo4j-ready CSVs + loader (neo4j/{nodes,edges}.csv, load.cypher, README)
+# 2b. Build the Neo4j-ready CSVs + loader (neo4j/{nodes,edges}.csv, load.cypher, README).
+#     edges.csv gains method/confidence columns; load.cypher adds a TOPIC_DISEASE
+#     relationship and SET r.method / r.confidence on every bridge relationship.
 python3 translational-evidence/exports/build_neo4j_export.py
 ```
 
@@ -725,22 +784,27 @@ That README covers: starting `neo4j:5` with the export dir mounted, loading via
 pathways, microglia genes with strong genetic support, the full
 variant→gene→pathway→drug chain, pleiotropic genes across disease groups, trials
 by phase for a mechanism, highest-confidence Alzheimer variant→gene links, …).
-Expect **15,286** nodes and **10,732** relationships loaded. `disease_groups` is
-loaded as a Neo4j list (`'alzheimer' IN n.disease_groups`); `provenance` is a
-JSON string (filter with `CONTAINS`, or parse it in your app). APOC is **not**
-required.
+Expect **15,294** nodes and **11,018** relationships loaded (incl. the new
+`TOPIC_DISEASE` relationship). `disease_groups` is loaded as a Neo4j list
+(`'alzheimer' IN n.disease_groups`); `provenance` is a JSON string (filter with
+`CONTAINS`, or parse it in your app). Track A↔B bridge relationships
+(`TOPIC_GENE` / `TOPIC_PATHWAY` / `TOPIC_DISEASE`) carry `r.method` +
+`r.confidence` (from `edges.csv` `method` / `confidence` columns) so you can
+filter to structured, high-confidence links, e.g.
+`MATCH (t:Topic)-[r]->(x) WHERE r.confidence='high' AND r.method<>'regex_symbol_match'`.
+APOC is **not** required.
 
 ### Graph export files (all under `data/exports/graph/`, gitignored)
 
 | file | what it is |
 | --- | --- |
-| `nodes.jsonl` | 15,286 evidence nodes (`evidence_node.schema.json`) |
-| `edges.jsonl` | 10,732 evidence edges (`evidence_edge.schema.json`) |
-| `graph_manifest.json` | node/edge counts by type, inputs, layout, dangling-drop count |
+| `nodes.jsonl` | 15,294 evidence nodes (`evidence_node.schema.json`) |
+| `edges.jsonl` | 11,018 evidence edges (`evidence_edge.schema.json`); bridge edges carry `method` + `confidence` |
+| `graph_manifest.json` | node/edge counts by type, inputs, layout, dangling-drop count, `edges.topic_bridge` method/confidence tally |
 | `graph_data.js` | the same graph as `window.GRAPH` for the browser viz |
-| `evidence_graph.html` | zero-install sigma.js explorer (option A) |
-| `neo4j/nodes.csv`, `neo4j/edges.csv` | Neo4j `LOAD CSV` inputs |
-| `neo4j/load.cypher` | constraint + typed-label loader (no APOC) |
+| `evidence_graph.html` | zero-install sigma.js explorer (option A); click a bridge edge for method/confidence/provenance |
+| `neo4j/nodes.csv`, `neo4j/edges.csv` | Neo4j `LOAD CSV` inputs (`edges.csv` has `method` / `confidence` cols) |
+| `neo4j/load.cypher` | constraint + typed-label loader (no APOC); adds `TOPIC_DISEASE` + `SET r.method` / `r.confidence` |
 | `neo4j/README.md`, `neo4j/neo4j_manifest.json` | load instructions + export manifest |
 
 `nodes.jsonl` and `edges.jsonl` are schema-validated by
@@ -790,6 +854,36 @@ A `variant_gene` edge (`data/exports/graph/edges.jsonl`):
   "score": 0.5051633986661914,
   "source_id": "variant:APOE",
   "target_id": "gene:ENSG00000130203"
+}
+```
+
+A `topic_disease` bridge edge (`data/exports/graph/edges.jsonl`) — carries the
+`method` + `confidence` (hoisted + mirrored in `provenance` with the join key):
+
+```json
+{
+  "confidence": "high",
+  "edge_id": "e:tds:topic:013:disease:alzheimer:mesh_annotation",
+  "edge_type": "topic_disease",
+  "evidence": "mesh_annotation",
+  "method": "mesh_ui_join",
+  "provenance": {
+    "evidence_type": "disease",
+    "evidence_id": "disease:alzheimer",
+    "join_key": "mesh_ui",
+    "link_provenance": {
+      "disease_group": "alzheimer",
+      "mesh_uis": [{"mesh_term": "Alzheimer Disease", "mesh_ui": "D000544", "n_papers": 2}],
+      "n_major": 2, "n_papers": 2
+    },
+    "link_type": "mesh_annotation",
+    "method": "mesh_ui_join", "confidence": "high",
+    "source": "topic_evidence_links", "topic_id": "topic:013",
+    "notes": "disease group 'alzheimer' via curated MeSH-UI crosswalk in 2/3 member papers (2 major)"
+  },
+  "score": 0.6667,
+  "source_id": "topic:013",
+  "target_id": "disease:alzheimer"
 }
 ```
 

@@ -125,6 +125,7 @@ EDGE_COLORS = {
     "drug_pathway": "rgba(214,39,40,0.22)",
     "topic_gene": "rgba(227,119,194,0.35)",
     "topic_pathway": "rgba(227,119,194,0.30)",
+    "topic_disease": "rgba(227,119,194,0.40)",
     "trial_drug": "rgba(255,127,14,0.14)",
     "trial_pathway": "rgba(255,127,14,0.12)",
 }
@@ -203,8 +204,15 @@ def slim_node(rec):
 
 
 def slim_edge(rec):
-    """Project a full evidence_edge into the compact record the viz needs."""
-    return {
+    """Project a full evidence_edge into the compact record the viz needs.
+
+    Track A<->B bridge edges (topic_gene/topic_pathway/topic_disease) carry the
+    structured-join ``method`` + ``confidence`` and a ``provenance`` object (the
+    exact join key + counts). We keep these so the side panel can render HOW and
+    WHY the link was made, and so the bridge edges are inspectable/queryable in
+    the browser. Track-B-internal edges simply omit method/confidence.
+    """
+    slim = {
         "id": rec.get("edge_id"),
         "source": rec.get("source_id"),
         "target": rec.get("target_id"),
@@ -212,6 +220,14 @@ def slim_edge(rec):
         "evidence": rec.get("evidence"),
         "score": rec.get("score"),
     }
+    if rec.get("method") is not None:
+        slim["method"] = rec.get("method")
+    if rec.get("confidence") is not None:
+        slim["confidence"] = rec.get("confidence")
+    prov = rec.get("provenance")
+    if prov:
+        slim["provenance"] = prov
+    return slim
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +376,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <p class="sub">Track B - the FULL graph. Use the filters to make it legible;
       nothing is capped.</p>
     <p class="note">Needs internet: sigma.js + graphology load from a CDN.</p>
+    <p class="note">Click a node for its scores/provenance; click a Track A&harr;B
+      <em>bridge edge</em> (topic&rarr;gene/pathway/disease) to see its
+      <code>method</code> + <code>confidence</code> + join provenance.</p>
 
     <h2>Node types</h2>
     <div id="typeFilters"></div>
@@ -499,6 +518,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   loading.style.display = "none";
   var renderer = new Sigma(g, document.getElementById("sigma"), {
     renderEdges: true,
+    enableEdgeEvents: true,   // needed for clickEdge (bridge-edge side panel)
+    enableEdgeClickEvents: true,
     labelRenderedSizeThreshold: 8,
     labelDensity: 0.6,
     labelGridCellSize: 120,
@@ -730,9 +751,62 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     panel.style.display = "block";
   }
 
+  // Edge side panel: surface the Track A<->B bridge join metadata (method,
+  // confidence, provenance join key) so HOW + WHY a link was made is visible.
+  var EDGE_TYPE_LABELS = {
+    variant_gene: "Variant -> Gene",
+    gene_pathway: "Gene -> Pathway",
+    gene_disease: "Gene -> Disease",
+    drug_pathway: "Drug -> Pathway",
+    trial_drug: "Trial -> Drug",
+    trial_pathway: "Trial -> Pathway",
+    topic_gene: "Topic -> Gene (bridge)",
+    topic_pathway: "Topic -> Pathway (bridge)",
+    topic_disease: "Topic -> Disease (bridge)"
+  };
+
+  function showEdgePanel(edata, srcNode, tgtNode) {
+    var e = edata.dataRef || {};
+    var rows = "";
+    rows += '<dt>Relationship</dt><dd>' +
+      escapeHtml(EDGE_TYPE_LABELS[e.type] || e.type || "edge") + '</dd>';
+    if (srcNode) rows += '<dt>From</dt><dd>' + escapeHtml(srcNode.label) + '</dd>';
+    if (tgtNode) rows += '<dt>To</dt><dd>' + escapeHtml(tgtNode.label) + '</dd>';
+    if (e.evidence) rows += '<dt>Evidence</dt><dd>' + escapeHtml(e.evidence) + '</dd>';
+    if (e.score != null) rows += '<dt>Score</dt><dd>' + fmtScore(e.score) + '</dd>';
+    // Structured-join metadata (present on topic_* bridge edges).
+    if (e.method) rows += '<dt>Method</dt><dd><code>' + escapeHtml(e.method) + '</code></dd>';
+    if (e.confidence) rows += '<dt>Confidence</dt><dd>' + escapeHtml(e.confidence) + '</dd>';
+
+    var html = '';
+    html += '<span class="close" id="panelClose2">&times;</span>';
+    var title = e.method ? "Bridge link" : "Edge";
+    html += '<h1 style="padding-right:18px;">' + escapeHtml(title) + '</h1>';
+    html += '<dl class="kv">' + rows + '</dl>';
+    if (e.method) {
+      html += '<p class="note">HOW + WHY this link was made. Structured ID joins ' +
+        'are preferred over text/regex; <code>method</code> + <code>confidence</code> ' +
+        'record the join, and provenance carries the exact join key. See ' +
+        'LINK_METHODS.md.</p>';
+    }
+    if (e.provenance) {
+      html += '<h2>Provenance</h2><pre>' +
+        escapeHtml(JSON.stringify(e.provenance, null, 2)) + '</pre>';
+    }
+    panelBody.innerHTML = html;
+    document.getElementById("panelClose2").onclick = function () { panel.style.display = "none"; };
+    panel.style.display = "block";
+  }
+
   renderer.on("clickNode", function (e) {
     var n = g.getNodeAttribute(e.node, "dataRef");
     if (n) showPanel(n);
+  });
+  renderer.on("clickEdge", function (e) {
+    var attr = g.getEdgeAttributes(e.edge);
+    var srcNode = nodeById[g.source(e.edge)];
+    var tgtNode = nodeById[g.target(e.edge)];
+    showEdgePanel(attr, srcNode, tgtNode);
   });
   renderer.on("clickStage", function () { /* keep panel open on stage click */ });
 

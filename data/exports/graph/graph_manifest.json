@@ -1,0 +1,112 @@
+{
+  "edges": {
+    "by_type": {
+      "drug_pathway": 174,
+      "gene_disease": 535,
+      "gene_pathway": 36,
+      "topic_disease": 33,
+      "topic_gene": 316,
+      "topic_pathway": 29,
+      "trial_drug": 3350,
+      "trial_pathway": 5271,
+      "variant_gene": 1274
+    },
+    "dangling_dropped": 1949,
+    "topic_bridge": {
+      "by_confidence": {
+        "high": 185,
+        "low": 164,
+        "medium": 29
+      },
+      "by_method": {
+        "chemical_ui_crosswalk": 69,
+        "gene_pathway_curated": 29,
+        "mesh_ui_join": 33,
+        "pmid_join": 83,
+        "regex_symbol_match": 164
+      },
+      "note": "topic_gene/topic_pathway/topic_disease edges carry the bridge link's method + confidence (hoisted onto the edge and mirrored in provenance with the exact join_key). See translational-evidence/exports/LINK_METHODS.md.",
+      "total": 378
+    },
+    "total": 11018
+  },
+  "generated_by": "translational-evidence/exports/build_evidence_graph.py",
+  "generated_on": "2026-07-01",
+  "inputs": {
+    "functional_links": 3372,
+    "genes": 523,
+    "gwas_associations": 7351,
+    "pathways": 9,
+    "target_evidence": 1499,
+    "topic_links": 6902,
+    "topic_rollup": 17,
+    "trials": 6841
+  },
+  "layout": {
+    "columns_x": {
+      "disease": -1.0,
+      "drug": 3.0,
+      "gene": 1.0,
+      "pathway": 2.0,
+      "topic": 1.5,
+      "trial": 4.0,
+      "variant": 0.0
+    },
+    "coord_max": 1000.0,
+    "note": "deterministic layered layout; x per node_type, y spread by score with index-based jitter; no randomness"
+  },
+  "metrics": {
+    "attached_by_type": {
+      "gene": 523,
+      "pathway": 9,
+      "variant": 5786
+    },
+    "flat_keys": {
+      "gene": {
+        "direction_agreement": "genetic.direction_agreement",
+        "first_gwas_year": "temporal.first_gwas_year",
+        "has_approval": "clinical.has_approval",
+        "latest_gwas_year": "temporal.latest_gwas_year",
+        "n_conflicting": "genetic.n_conflicting",
+        "n_recent_gwas": "temporal.n_recent_gwas",
+        "n_trials": "clinical.n_trials",
+        "stopped_ratio": "clinical.stopped_ratio",
+        "translation_gap": "composite.translation_gap"
+      },
+      "pathway": {
+        "first_trial_year": "temporal.first_trial_year",
+        "has_approval": "clinical.has_approval",
+        "latest_trial_year": "temporal.latest_trial_year",
+        "n_drugs": "clinical.n_drugs",
+        "n_recent_trials": "temporal.n_recent_trials",
+        "n_trials": "clinical.n_trials",
+        "stopped_ratio": "clinical.stopped_ratio",
+        "translation_gap": "composite.translation_gap"
+      },
+      "variant": {
+        "direction_agreement": "genetic.direction_agreement",
+        "first_year": "temporal.first_year",
+        "latest_year": "temporal.latest_year",
+        "n_associations": "genetic.n_associations",
+        "n_recent": "temporal.n_recent",
+        "n_studies": "genetic.n_studies"
+      }
+    },
+    "note": "full metrics object attached as node['metrics']; flat queryable props hoisted per FLAT_METRIC_KEYS",
+    "records_loaded": 6318,
+    "source": "data/processed/translational-evidence/entity_metrics.jsonl",
+    "unmatched_records": 0
+  },
+  "nodes": {
+    "by_type": {
+      "disease": 7,
+      "drug": 2111,
+      "gene": 523,
+      "pathway": 9,
+      "topic": 17,
+      "trial": 6841,
+      "variant": 5786
+    },
+    "total": 15294
+  }
+}

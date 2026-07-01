@@ -735,7 +735,23 @@ def build_drug_pathway_edges(drug_agg, trial_mech_to_pathway):
 
 
 def build_topic_edges(topic_links, node_ids):
-    """topic_gene / topic_pathway from topic_evidence_links.
+    """topic_gene / topic_pathway / topic_disease from topic_evidence_links.
+
+    Each Track A<->B bridge link is surfaced as a graph edge that CARRIES the
+    link's structured provenance: the machine-readable ``method`` and
+    ``confidence`` are hoisted onto the edge top-level (queryable in Neo4j /
+    filterable in the HTML explorer) AND kept inside ``provenance`` alongside
+    the exact join key so future agents can trust/extend the link.
+
+      evidence_type=gene     -> topic_gene    (methods: pmid_join,
+                                chemical_ui_crosswalk, regex_symbol_match)
+      evidence_type=pathway  -> topic_pathway (method: gene_pathway_curated)
+      evidence_type=disease  -> topic_disease (method: mesh_ui_join)
+
+    ``gwas_association`` links are intentionally NOT emitted as topic edges here:
+    the association is not a standalone graph node, so a topic->gwas edge would
+    dangle. The genes reported by those associations already appear as high-
+    confidence topic_gene (pmid_join) edges.
 
     Endpoints must already exist as nodes (dangling links are dropped here;
     they would also be dropped by the global dangling-edge pass).
@@ -761,25 +777,46 @@ def build_topic_edges(topic_links, node_ids):
             target = pathway_node_id(mech)
             edge_type = "topic_pathway"
             prefix = "e:tpw"
+        elif etype == "disease":
+            # disease evidence_id is already "disease:<group>" == the node_id.
+            dg = eid.split(":", 1)[1] if ":" in eid else eid
+            target = disease_node_id(dg)
+            edge_type = "topic_disease"
+            prefix = "e:tds"
         else:
             continue
 
         if target not in node_ids:
             continue
 
+        method = link.get("method")
+        confidence = link.get("confidence")
+        # The bridge dedup key is (topic, evidence_type, evidence_id, link_type),
+        # so include link_type in the edge_id to keep parallel-method edges (e.g.
+        # a topic_gene found by BOTH pmid_join/paper_overlap AND
+        # chemical_ui_crosswalk/chemical_annotation) distinct and lossless.
+        link_type = link.get("link_type")
         edges.append({
-            "edge_id": "%s:%s:%s" % (prefix, topic_id, target),
+            "edge_id": "%s:%s:%s:%s" % (prefix, topic_id, target,
+                                        link_type or "na"),
             "source_id": topic_id,
             "target_id": target,
             "edge_type": edge_type,
             "score": link.get("score"),
-            "evidence": link.get("link_type"),
+            "evidence": link_type,
+            # Hoisted, queryable structured-join metadata (mirrors provenance).
+            "method": method,
+            "confidence": confidence,
             "provenance": {
                 "source": "topic_evidence_links",
                 "topic_id": tid,
                 "evidence_type": etype,
                 "evidence_id": eid,
-                "link_type": link.get("link_type"),
+                "link_type": link_type,
+                "method": method,
+                "confidence": confidence,
+                "join_key": (link.get("provenance") or {}).get("join_key"),
+                "link_provenance": link.get("provenance") or {},
                 "notes": link.get("notes"),
             },
         })
@@ -972,6 +1009,17 @@ def counts_by(records, key):
     return dict(sorted(out.items()))
 
 
+def counts_by_optional(records, key):
+    """Count records by a key that may be absent/None (skips missing)."""
+    out = {}
+    for r in records:
+        v = r.get(key)
+        if v is None:
+            continue
+        out[v] = out.get(v, 0) + 1
+    return dict(sorted(out.items()))
+
+
 def main():
     common.log("loading Track B processed inputs")
     genes = common.read_jsonl(common.PROCESSED_DIR / "genes.jsonl")
@@ -1070,6 +1118,15 @@ def main():
     node_type_counts = counts_by(nodes, "node_type")
     edge_type_counts = counts_by(edges, "edge_type")
 
+    # Structured-join summary for the Track A<->B bridge edges (topic_*): how
+    # each edge was made (method) and how confident it is (confidence). This
+    # makes the "how + why" of every bridge link auditable straight from the
+    # graph manifest, not just the underlying links file.
+    topic_edge_types = {"topic_gene", "topic_pathway", "topic_disease"}
+    topic_edges = [e for e in edges if e["edge_type"] in topic_edge_types]
+    topic_edge_methods = counts_by_optional(topic_edges, "method")
+    topic_edge_confidence = counts_by_optional(topic_edges, "confidence")
+
     manifest = {
         "generated_by": "translational-evidence/exports/build_evidence_graph.py",
         "generated_on": common.today_stamp(),
@@ -1081,6 +1138,16 @@ def main():
             "total": e_written,
             "by_type": edge_type_counts,
             "dangling_dropped": dropped,
+            "topic_bridge": {
+                "note": ("topic_gene/topic_pathway/topic_disease edges carry the "
+                         "bridge link's method + confidence (hoisted onto the "
+                         "edge and mirrored in provenance with the exact "
+                         "join_key). See translational-evidence/exports/"
+                         "LINK_METHODS.md."),
+                "total": len(topic_edges),
+                "by_method": topic_edge_methods,
+                "by_confidence": topic_edge_confidence,
+            },
         },
         "metrics": {
             "source": str(ENTITY_METRICS_PATH.relative_to(common.REPO_ROOT))
@@ -1125,6 +1192,15 @@ def main():
     print("Edges: %d total (dangling dropped: %d)" % (e_written, dropped))
     for k, v in edge_type_counts.items():
         print("  %-14s %d" % (k, v))
+    if topic_edges:
+        print("Topic bridge edges: %d (topic_gene/topic_pathway/topic_disease)"
+              % len(topic_edges))
+        print("  by method:")
+        for k, v in topic_edge_methods.items():
+            print("    %-24s %d" % (k, v))
+        print("  by confidence:")
+        for k, v in topic_edge_confidence.items():
+            print("    %-24s %d" % (k, v))
     if metrics_by_node:
         print("Metrics attached: %d node(s)" % sum(metrics_matched.values()))
         for k, v in sorted(metrics_matched.items()):

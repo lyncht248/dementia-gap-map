@@ -16,7 +16,10 @@ Outputs (gitignored build products under data/exports/graph/neo4j/):
                 functional_support,translation_gap,disease_groups,
                 pathway_group,provenance
                 (disease_groups is pipe-joined; provenance is a JSON string)
-  edges.csv     columns: edge_id,source_id,target_id,edge_type,score,evidence
+  edges.csv     columns: edge_id,source_id,target_id,edge_type,score,evidence,
+                method,confidence
+                (method/confidence are the Track A<->B bridge join metadata,
+                blank/Cypher-null on Track-B-internal edges)
   load.cypher   constraint + LOAD CSV passes that MERGE nodes (generic :Entity
                 label + per-type :Gene/:Variant/... labels, APOC-free) and
                 CREATE typed relationships by edge_type
@@ -135,6 +138,10 @@ EDGE_HEADER = [
     "edge_type",
     "score",
     "evidence",
+    # Structured-join metadata carried on Track A<->B bridge edges (topic_*);
+    # blank (Cypher null) for Track-B-internal edges that have no bridge method.
+    "method",
+    "confidence",
 ]
 
 # node_type -> concrete Neo4j label (used for the per-type SET passes).
@@ -158,6 +165,7 @@ EDGE_TYPE_RELS = {
     "drug_pathway": "DRUG_PATHWAY",
     "topic_gene": "TOPIC_GENE",
     "topic_pathway": "TOPIC_PATHWAY",
+    "topic_disease": "TOPIC_DISEASE",
 }
 
 
@@ -244,6 +252,10 @@ def edge_to_row(edge, edge_id):
         edge.get("edge_type", ""),
         _fmt_num(edge.get("score")),
         edge.get("evidence", ""),
+        # method / confidence are only present on the Track A<->B bridge edges;
+        # render None as '' so Cypher reads them as null on Track-B edges.
+        edge.get("method") or "",
+        edge.get("confidence") or "",
     ]
 
 
@@ -326,9 +338,13 @@ def build_load_cypher(node_types, edge_types):
         lines.append("MATCH (s:Entity {node_id: row.source_id})")
         lines.append("MATCH (t:Entity {node_id: row.target_id})")
         lines.append("CREATE (s)-[r:%s {edge_id: row.edge_id}]->(t)" % rel)
-        lines.append("SET r.score    = toFloat(row.score),")
-        lines.append("    r.evidence = row.evidence,")
-        lines.append("    r.edge_type = row.edge_type;")
+        lines.append("SET r.score      = toFloat(row.score),")
+        lines.append("    r.evidence   = row.evidence,")
+        lines.append("    r.edge_type  = row.edge_type,")
+        lines.append("    // Track A<->B bridge edges carry how (method) + how "
+                     "confident (confidence); null on Track-B-internal edges.")
+        lines.append("    r.method     = row.method,")
+        lines.append("    r.confidence = row.confidence;")
         lines.append("")
 
     lines.append("// --- 3.5 OPTIONAL: per-type node COLOURS in Neo4j Browser. ---")
@@ -406,6 +422,29 @@ def build_load_cypher(node_types, edge_types):
                  "g.genetic_support")
     lines.append("// ORDER BY g.n_conflicting DESC, g.direction_agreement ASC "
                  "LIMIT 25;")
+    lines.append("")
+    lines.append("// 5e. Track A<->B bridge: which literature topics map to "
+                 "which disease groups,")
+    lines.append("//     and by what structured method (mesh_ui_join) at what "
+                 "confidence. TOPIC_DISEASE")
+    lines.append("//     relationships carry r.method / r.confidence hoisted from "
+                 "the bridge link.")
+    lines.append("// MATCH (t:Topic)-[r:TOPIC_DISEASE]->(d:Disease)")
+    lines.append("// RETURN t.label AS topic, d.label AS disease, r.method, "
+                 "r.confidence, r.score")
+    lines.append("// ORDER BY r.score DESC LIMIT 25;")
+    lines.append("")
+    lines.append("// 5f. Trust filter on bridge edges: keep only STRUCTURED, "
+                 "high-confidence topic")
+    lines.append("//     links (drops the low-confidence regex_symbol_match "
+                 "fallback). Works across")
+    lines.append("//     TOPIC_GENE / TOPIC_PATHWAY / TOPIC_DISEASE.")
+    lines.append("// MATCH (t:Topic)-[r]->(x)")
+    lines.append("// WHERE r.confidence = 'high' AND r.method <> "
+                 "'regex_symbol_match'")
+    lines.append("// RETURN t.label, type(r) AS rel, r.method, r.confidence, "
+                 "x.label")
+    lines.append("// ORDER BY t.label LIMIT 50;")
     lines.append("")
 
     return "\n".join(lines)
