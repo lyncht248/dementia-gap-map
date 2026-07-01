@@ -31,3 +31,6 @@ data/exports/**
 tmp/
 .vercel
 .env*
+
+# TypeScript build info
+*.tsbuildinfo
