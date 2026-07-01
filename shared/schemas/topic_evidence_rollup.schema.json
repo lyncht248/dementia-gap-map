@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/topic_evidence_rollup.schema.json",
+  "title": "Topic Evidence Rollup",
+  "description": "The Track B half of a frontend map_data.json cluster: one record per Track A topic, aggregating the topic's linked genes, GWAS, trials, and scores. Joined to Track A on topic_id. Every score carries its components/method so it stays explainable.",
+  "type": "object",
+  "required": ["topic_id"],
+  "properties": {
+    "topic_id": {
+      "type": "string"
+    },
+    "label": {
+      "type": ["string", "null"]
+    },
+    "pathway_group": {
+      "type": ["string", "null"],
+      "description": "Dominant pathway_group for the topic (highest summed genetic_support among linked genes), or null when no linked gene maps to a group."
+    },
+    "top_genes": {
+      "type": "array",
+      "description": "Linked genes ranked by genetic_support (up to 8).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "symbol": { "type": "string" },
+          "gene_id": { "type": "string" },
+          "genetic_support": { "type": ["number", "null"] },
+          "functional_support": { "type": ["number", "null"] },
+          "disease_groups": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "top_gwas": {
+      "type": "array",
+      "description": "GWAS associations linked via paper_overlap (up to 8, deduped by association_id).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "association_id": { "type": "string" },
+          "rsid": { "type": ["string", "null"] },
+          "reported_genes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "trait": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "trials": {
+      "type": "array",
+      "description": "Trials whose mechanism_group is the dominant pathway_group's crosswalked trial mechanism (up to 10).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "nct_id": { "type": ["string", "null"] },
+          "brief_title": { "type": ["string", "null"] },
+          "phase": { "type": ["string", "null"] },
+          "mechanism_group": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "scores": {
+      "type": "object",
+      "description": "Aggregated, explainable scores. genetic_support/functional_support are means over linked genes; clinical_* and translation_gap are copied from the dominant pathway record. A _method string documents the derivation.",
+      "properties": {
+        "genetic_support": { "type": ["number", "null"] },
+        "functional_support": { "type": ["number", "null"] },
+        "clinical_translation": { "type": ["number", "null"] },
+        "clinical_saturation": { "type": ["number", "null"] },
+        "translation_gap": { "type": ["number", "null"] },
+        "_method": { "type": ["string", "null"] }
+      }
+    },
+    "evidence_counts": {
+      "type": "object",
+      "description": "Per-topic link tallies backing the rollup.",
+      "properties": {
+        "n_linked_genes": { "type": "integer" },
+        "n_gene_mention": { "type": "integer" },
+        "n_paper_overlap_genes": { "type": "integer" },
+        "n_gwas_assoc": { "type": "integer" },
+        "n_pathways": { "type": "integer" }
+      }
+    },
+    "disease_groups": {
+      "type": "array",
+      "description": "Union of disease_groups across the topic's linked genes (dedup + sorted).",
+      "items": { "type": "string" }
+    },
+    "provenance": {
+      "type": ["string", "null"],
+      "description": "How the record was built, including the Track A snapshot size and its SUBSET / full-run status."
+    }
+  },
+  "additionalProperties": true
+}

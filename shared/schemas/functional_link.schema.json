@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/functional_link.schema.json",
+  "title": "Functional Link",
+  "type": "object",
+  "required": ["link_id", "gene_id", "evidence_type", "source"],
+  "properties": {
+    "link_id": {
+      "type": "string"
+    },
+    "gene_id": {
+      "type": "string",
+      "description": "Stable gene identifier, preferably Ensembl when available."
+    },
+    "gene_symbol": {
+      "type": ["string", "null"]
+    },
+    "variant_or_locus": {
+      "type": ["string", "null"]
+    },
+    "rsid": {
+      "type": ["string", "null"]
+    },
+    "cell_type": {
+      "type": ["string", "null"],
+      "description": "biosample / brain cell type or tissue where known"
+    },
+    "evidence_type": {
+      "type": "string",
+      "enum": ["l2g_prediction", "gwas_qtl_colocalisation", "eqtl_catalogue", "other"]
+    },
+    "score": {
+      "type": ["number", "null"],
+      "description": "L2G score or colocalisation h4"
+    },
+    "disease_group": {
+      "type": ["string", "null"],
+      "description": "Controlled disease dimension. One of: alzheimer, vascular_dementia, frontotemporal_dementia, lewy_body_dementia, mixed_dementia, dementia_unspecified, other."
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_study": {
+      "type": ["string", "null"]
+    },
+    "method": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

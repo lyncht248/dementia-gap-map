@@ -26,6 +26,11 @@
     "evidence_scores": {
       "type": "object",
       "additionalProperties": true
+    },
+    "disease_groups": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Dedup+sorted controlled disease dimensions this gene spans across its traits/associations. Each value is one of: alzheimer, vascular_dementia, frontotemporal_dementia, lewy_body_dementia, mixed_dementia, dementia_unspecified, other."
     }
   },
   "additionalProperties": true

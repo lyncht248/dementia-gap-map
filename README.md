@@ -5,7 +5,7 @@ A map of papers discussing dementia, Alzheimer disease, GWAS loci, genes, pathwa
 The project is split into two independent work areas so two people can work without touching the same files most of the time:
 
 - **Track A: Topic dynamics layer** - papers, citation/co-citation links, topic clusters, and topic trajectories.
-- **Track B: Translational evidence layer** - GWAS/eQTL evidence, genes, pathways, drugs/interventions, and clinical trials.
+- **Track B: Translational evidence layer** - GWAS genetics, a functional / eQTL layer (aggregated Open Targets Locus-to-Gene predictions in `functional_links.jsonl`, feeding a real `functional_support` score), genes, pathways, drugs/interventions, and clinical trials, covering Alzheimer disease and related dementias (ADRD). Every record is tagged with a controlled `disease_group`, so the map supports a dementia-vs-Alzheimer filter (Alzheimer is the subset `disease_group == "alzheimer"`).
 
 The visual layer will be added after both tracks have stable processed outputs.
 

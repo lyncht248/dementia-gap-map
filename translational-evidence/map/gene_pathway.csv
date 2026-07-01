@@ -1,0 +1,42 @@
+gene_symbol,pathway_group,notes
+APP,amyloid,Amyloid precursor protein; cleaved to Abeta; Mendelian autosomal-dominant early-onset AD and duplications.
+PSEN1,amyloid,Presenilin-1; catalytic subunit of gamma-secretase cleaving APP; most common Mendelian EOAD gene.
+PSEN2,amyloid,Presenilin-2; gamma-secretase subunit; rarer Mendelian autosomal-dominant EOAD.
+ADAM10,amyloid,Alpha-secretase; non-amyloidogenic APP cleavage; rare AD-associated coding variants.
+MAPT,tau,Microtubule-associated protein tau; forms neurofibrillary tangles; Mendelian in FTD-tau; 17q21 haplotype.
+APOE,lipid_metabolism,Apolipoprotein E; e4 is the strongest common AD risk allele; lipid and cholesterol transport, also Abeta clearance.
+CLU,lipid_metabolism,Clusterin/ApoJ; lipid transport chaperone; GWAS AD risk; also linked to Abeta clearance.
+ABCA7,lipid_metabolism,ATP-binding cassette lipid transporter; strong GWAS locus; lipid homeostasis and phagocytosis.
+ABCA1,lipid_metabolism,ATP-binding cassette lipid transporter; cholesterol efflux and APOE lipidation; AD risk variants.
+SORL1,endocytosis_endosomal,Sortilin-related receptor; APP trafficking and retromer-mediated sorting; both Mendelian-like and common AD variants.
+TREM2,microglia_immune,Triggering receptor expressed on myeloid cells 2; microglial sensing/phagocytosis; rare high-risk coding variants (R47H).
+PLCG2,microglia_immune,Phospholipase C gamma 2; TREM2-downstream microglial signaling; protective P522R variant.
+ABI3,microglia_immune,ABI family member 3; microglial actin/phagocytosis regulator; rare AD coding variant.
+INPP5D,microglia_immune,SHIP1 inositol phosphatase; myeloid/microglial signaling downstream of immune receptors; GWAS locus.
+CD33,microglia_immune,Siglec-3 sialic-acid receptor on microglia; modulates phagocytosis; GWAS AD risk/protective splice variant.
+MS4A6A,microglia_immune,Membrane-spanning 4A cluster; myeloid/microglial expression; GWAS AD locus (MS4A region).
+MS4A4A,microglia_immune,Membrane-spanning 4A cluster; regulates soluble TREM2; myeloid immune GWAS locus.
+SPI1,microglia_immune,PU.1 master myeloid transcription factor; sets microglial gene expression; AD GWAS locus.
+HLA-DRB1,microglia_immune,MHC class II; adaptive/innate immune antigen presentation; AD GWAS locus in MHC region.
+CR1,microglia_immune,Complement receptor 1; complement-mediated clearance of Abeta and immune complexes; GWAS AD locus.
+SCIMP,microglia_immune,SLP adaptor and CSK-interacting membrane protein; microglial TLR/immune signaling; AD GWAS locus.
+TSPOAP1,microglia_immune,TSPO-associated protein 1; myeloid/immune associated locus near BZRAP1; AD GWAS.
+BIN1,endocytosis_endosomal,Bridging integrator 1; clathrin-mediated endocytosis and membrane remodeling; 2nd strongest common AD locus.
+PICALM,endocytosis_endosomal,Phosphatidylinositol-binding clathrin assembly protein; clathrin-mediated endocytosis; strong AD GWAS locus.
+CD2AP,endocytosis_endosomal,CD2-associated protein; endocytic cytoskeletal adaptor; AD GWAS locus.
+PTK2B,endocytosis_endosomal,Protein tyrosine kinase 2 beta (Pyk2); endocytosis/synaptic signaling; AD GWAS locus.
+FERMT2,endocytosis_endosomal,Kindlin-2; integrin adhesion and APP metabolism/endocytosis; AD GWAS locus.
+RIN3,endocytosis_endosomal,Ras and Rab interactor 3; early-endosome trafficking (BIN1/RAB5 pathway); AD GWAS locus.
+EPHA1,endocytosis_endosomal,Ephrin type-A receptor 1; receptor endocytosis and immune trafficking; AD GWAS locus.
+CASS4,endocytosis_endosomal,Cas scaffold protein family member 4; cytoskeletal/endocytic adaptor signaling; AD GWAS locus.
+ACE,vascular,Angiotensin-converting enzyme; renin-angiotensin/vascular regulation, also Abeta degradation; AD GWAS locus.
+ADAMTS1,vascular,ADAM metallopeptidase with thrombospondin motifs 1; extracellular matrix/vascular remodeling; AD GWAS locus.
+WWOX,lipid_metabolism,WW domain oxidoreductase; lipid/steroid metabolism and tau interaction; AD GWAS locus.
+SLC24A4,synaptic_neuronal,Sodium/potassium/calcium exchanger; neuronal calcium homeostasis; AD GWAS locus.
+CNTNAP2,synaptic_neuronal,Contactin-associated protein 2; neuronal cell adhesion and synapse organization; neurodevelopmental/AD-associated.
+KAT8,epigenetic_transcription,Lysine acetyltransferase 8 (MOF); histone H4K16 acetylation; chromatin regulation; AD GWAS locus (17q21).
+ZCWPW1,epigenetic_transcription,Zinc finger CW-type PWWP domain 1; histone-mark epigenetic reader; AD GWAS locus.
+CELF1,epigenetic_transcription,CUGBP Elav-like family member 1; RNA-binding post-transcriptional regulation; AD GWAS locus (11p11 SPI1 region).
+IQCK,other,IQ motif containing K; function poorly characterized; AD GWAS locus with uncertain mechanism.
+ECHDC3,other,Enoyl-CoA hydratase domain containing 3; possible fatty-acid metabolism but mechanism in AD uncertain.
+NME8,other,NME/NM23 family member 8 (thioredoxin domain); axonemal/ciliary role; AD GWAS locus with uncertain mechanism.
