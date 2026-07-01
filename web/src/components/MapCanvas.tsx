@@ -274,17 +274,31 @@ export default function MapCanvas({
     }
   };
 
-  const onWheel = (e: React.WheelEvent) => {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
-    const factor = Math.exp(-e.deltaY * 0.0015);
-    setTransform((t) => {
-      const scale = Math.max(0.15, Math.min(20, t.scale * factor));
-      const k = scale / t.scale;
-      return { scale, tx: px - (px - t.tx) * k, ty: py - (py - t.ty) * k };
-    });
-  };
+  // --- wheel zoom -----------------------------------------------------------
+  // Registered natively with { passive: false } so preventDefault() actually
+  // stops the page from scrolling / zooming. React's onWheel is passive, so it
+  // can't do this — on macOS the whole page zooms (pinch fires ctrlKey wheel
+  // events) unless we intercept here.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      // macOS trackpad pinch sends larger deltas with ctrlKey; damp it a touch.
+      const intensity = e.ctrlKey ? 0.01 : 0.0015;
+      const factor = Math.exp(-e.deltaY * intensity);
+      setTransform((t) => {
+        const scale = Math.max(0.15, Math.min(20, t.scale * factor));
+        const k = scale / t.scale;
+        return { scale, tx: px - (px - t.tx) * k, ty: py - (py - t.ty) * k };
+      });
+    };
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, []);
 
   const resetView = () =>
     setTransform(fitTransform(papers, size.w, size.h));
@@ -297,7 +311,6 @@ export default function MapCanvas({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onWheel={onWheel}
       />
       <button className="reset-view" onClick={resetView} title="Reset view">
         Reset view
