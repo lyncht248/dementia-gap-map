@@ -2,14 +2,21 @@
 
 Goal: pushing to `main` publishes a production deployment to your Vercel URL.
 
-This is done with **Vercel's native Git integration** — you connect the GitHub
-repo to a Vercel project once, and Vercel deploys every push to `main`
+This is done with **Vercel's native Git integration** — the GitHub repo is
+connected to a Vercel project once, and Vercel deploys every push to `main`
 automatically. No GitHub Actions workflow or webhook is required.
 
-> Why this can't be fully automated for you: connecting the repo creates a
-> project **on your Vercel account**, which requires an authenticated Vercel
-> session (`vercel login`, an interactive email/browser flow). Run the steps
-> below on your own machine, where you can log in.
+## Status: connected ✅
+
+This is already set up:
+
+- **Vercel project:** `dementia-gap-map` (scope: `lyncht248's projects`)
+- **GitHub repo:** `lyncht248/dementia-gap-map`
+- **Production branch:** `main`
+
+Every `git push origin main` now produces a **Production** deployment; other
+branches / PRs produce **Preview** deployments. The script and steps below are
+kept for reference / re-linking on a fresh machine.
 
 ## Quick start (scripted)
 

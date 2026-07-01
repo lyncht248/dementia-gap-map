@@ -29,3 +29,5 @@ data/exports/**
 # Logs and temporary outputs
 *.log
 tmp/
+.vercel
+.env*
