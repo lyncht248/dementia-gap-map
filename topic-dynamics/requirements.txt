@@ -1,0 +1,5 @@
+# Track A (topic-dynamics) pipeline dependencies.
+# Intentionally minimal: both are pure-Python / no compiled toolchain needed.
+requests>=2.31
+networkx>=3.0
+jsonschema>=4.0   # validate.py only
