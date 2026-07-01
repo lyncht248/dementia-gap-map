@@ -70,10 +70,11 @@ mean_rcr}`.
 - **Query:** dementia (the `Dementia` MeSH tree + Alzheimer/FTD/Lewy/vascular/
   cognitive-impairment synonyms) **AND** mentions GWAS. Full definition in
   `topics/config.py::SEARCH_TERM`.
-- **When / what's live now:** an **enriched interim dataset of 2,507 papers**
-  (the first ~53% of the field) is committed to `data/processed/topic-dynamics/`
-  now — with abstracts (98%), MeSH (70%), references (72%), 17 topic clusters
-  (78% of papers assigned), and ~105k coupling+co-citation edges. The remaining
-  ~2,300 papers are backfilling in the background; Track A will re-export the
-  full ~4,780-paper dataset and notify when it lands. **The schema/contract is
-  final — build against the interim data now; only row counts grow.**
+- **What's live now:** the **full-field dataset of 4,780 papers** is committed
+  to `data/processed/topic-dynamics/` — abstracts 98%, MeSH 79%, references 70%,
+  86% of papers assigned to a topic, ~287k coupling+co-citation edges. **The
+  schema/contract is final — build the bridge against this data.**
+- **Known follow-ups (don't block Track B):** clustering is currently coarse
+  (10 broad topics; the two largest are near-duplicate AD clusters) — a
+  resolution-tuning issue to be refined (e.g. Leiden). `paper_edges.jsonl` is
+  large (~45 MB); Track B does not need it (use `papers.references`).
