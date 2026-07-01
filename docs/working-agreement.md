@@ -6,14 +6,14 @@ This repository is split so Track A and Track B can move independently and integ
 
 Track A owns:
 
-- `tracks/topic-dynamics/**`
+- `topic-dynamics/**`
 - `data/raw/topic-dynamics/**`
 - `data/interim/topic-dynamics/**`
 - `data/processed/topic-dynamics/**`
 
 Track B owns:
 
-- `tracks/translational-evidence/**`
+- `translational-evidence/**`
 - `data/raw/translational-evidence/**`
 - `data/interim/translational-evidence/**`
 - `data/processed/translational-evidence/**`

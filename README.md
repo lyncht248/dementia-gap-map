@@ -2,7 +2,7 @@
 
 A map of papers discussing dementia, Alzheimer disease, GWAS loci, genes, pathways, drugs/interventions, and clinical trials, grouped by citation/co-citation similarity.
 
-The project is split into two independent data tracks so two people can work without touching the same files most of the time:
+The project is split into two independent work areas so two people can work without touching the same files most of the time:
 
 - **Track A: Topic dynamics layer** - papers, citation/co-citation links, topic clusters, and topic trajectories.
 - **Track B: Translational evidence layer** - GWAS/eQTL evidence, genes, pathways, drugs/interventions, and clinical trials.
@@ -12,9 +12,8 @@ The visual layer will be added after both tracks have stable processed outputs.
 ## Repository Layout
 
 ```text
-tracks/
-  topic-dynamics/             # Track A owned workspace
-  translational-evidence/     # Track B owned workspace
+topic-dynamics/               # Track A owned workspace
+translational-evidence/       # Track B owned workspace
 
 shared/
   schemas/                    # Shared data contracts between tracks
@@ -32,6 +31,6 @@ docs/
 
 ## Working Rule
 
-Track-specific work should stay inside its own `tracks/*` folder and matching `data/*/{track}` folder. Cross-track files should only be added under `shared/` or `data/processed/shared` when both tracks need them.
+Track-specific work should stay inside either `topic-dynamics/` or `translational-evidence/` and the matching `data/*/{topic-dynamics,translational-evidence}` folder. Cross-track files should only be added under `shared/` or `data/processed/shared` when both tracks need them.
 
 See [PROTOTYPE_BUILD_SPEC.md](PROTOTYPE_BUILD_SPEC.md) for the full data-source and prototype handoff notes.
