@@ -41,3 +41,43 @@ Use these shared schemas when publishing stable outputs:
 - `shared/schemas/topic_trajectory.schema.json`
 
 Do not make the visual layer depend on notebook outputs. Promote useful notebook results into scripts or exports first.
+
+## Pipeline
+
+The `topics/` package implements the end-to-end pipeline (the workspace folder
+name `topic-dynamics` has a hyphen and cannot be a Python package, so the
+importable code lives in `topics/` and `run.py` is the entry point).
+
+```text
+topics/
+  config.py            # paths, corpus caps, network + scoring parameters
+  ingest/              # PubMed (esearch/esummary/elink) + iCite, disk-cached
+  normalize/           # esummary + iCite -> paper.schema.json records
+  network/             # bibliographic-coupling + co-citation edges
+  cluster/             # greedy-modularity communities + TF-IDF labels
+  score/               # yearly trajectories + explainable emergence scores
+  exports/             # writers for the four handoff files
+run.py                 # entry point
+validate.py            # checks outputs against shared/schemas
+```
+
+### Run
+
+```bash
+pip install -r requirements.txt
+cd topic-dynamics
+python run.py --max-papers 300      # manual + Track B seeds, PubMed esearch expansion
+python run.py --no-search           # manual/Track-B seeds only (offline-friendly, fast)
+python validate.py                  # schema-check the outputs
+```
+
+Seeds come from `topics/ingest/seeds.py` (hand-curated backbone papers) and, when
+present, `data/processed/translational-evidence/gwas_associations.jsonl` from
+Track B. Every API response is cached under `data/raw/topic-dynamics/cache/`, so
+re-runs are fast and offline.
+
+### Outputs
+
+Written to `data/processed/topic-dynamics/` (git-ignored; regenerate with the
+pipeline): `papers.jsonl`, `paper_edges.jsonl`, `topic_clusters.jsonl`,
+`topic_trajectories.jsonl` — all validated against `shared/schemas`.
