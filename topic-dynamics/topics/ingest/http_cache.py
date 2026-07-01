@@ -48,20 +48,45 @@ def get_json(
 
     ``label`` is only used to make cache filenames human-readable.
     """
+    text = _cached_get(url, params, min_interval, timeout, label, ext="json")
+    return json.loads(text)
+
+
+def get_text(
+    url: str,
+    params: dict[str, Any] | None = None,
+    *,
+    min_interval: float = 0.0,
+    timeout: int = 60,
+    label: str = "",
+    ext: str = "xml",
+) -> str:
+    """GET ``url`` and return the raw response body, caching on disk.
+
+    Used for endpoints that return XML (e.g. PubMed efetch) rather than JSON.
+    """
+    return _cached_get(url, params, min_interval, timeout, label, ext=ext)
+
+
+def _cached_get(
+    url: str,
+    params: dict[str, Any] | None,
+    min_interval: float,
+    timeout: int,
+    label: str,
+    ext: str,
+) -> str:
     config.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     key = _cache_key(url, params)
     prefix = f"{label}_" if label else ""
-    cache_path = config.CACHE_DIR / f"{prefix}{key}.json"
+    cache_path = config.CACHE_DIR / f"{prefix}{key}.{ext}"
 
     if cache_path.exists():
-        with cache_path.open() as fh:
-            return json.load(fh)
+        return cache_path.read_text()
 
-    data = _get_with_retry(url, params, timeout, min_interval)
-
-    with cache_path.open("w") as fh:
-        json.dump(data, fh)
-    return data
+    text = _get_with_retry(url, params, timeout, min_interval)
+    cache_path.write_text(text)
+    return text
 
 
 def _get_with_retry(
@@ -70,22 +95,21 @@ def _get_with_retry(
     timeout: int,
     min_interval: float,
     attempts: int = 5,
-) -> Any:
+) -> str:
     """GET with exponential backoff over transient network/SSL/5xx errors.
 
     Long field runs make thousands of calls, so an occasional dropped
-    connection is expected and must not abort the pipeline.
+    connection is expected and must not abort the pipeline. Returns the raw
+    response text; callers parse JSON or XML as needed.
     """
     last_exc: Exception | None = None
     for attempt in range(attempts):
         _throttle(min_interval)
         try:
             resp = requests.get(url, params=params, timeout=timeout)
-            if resp.status_code in (429, 500, 502, 503, 504):
-                resp.raise_for_status()
             resp.raise_for_status()
-            return resp.json()
-        except (requests.exceptions.RequestException, ValueError) as exc:
+            return resp.text
+        except requests.exceptions.RequestException as exc:
             last_exc = exc
             if attempt < attempts - 1:
                 time.sleep(2**attempt)  # 1, 2, 4, 8, 16s

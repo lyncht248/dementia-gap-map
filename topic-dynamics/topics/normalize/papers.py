@@ -32,19 +32,28 @@ def build_paper_record(
     pmid: str,
     summary: dict[str, Any] | None,
     metrics: dict[str, Any] | None,
+    details: dict[str, Any] | None = None,
+    references: list[str] | None = None,
 ) -> dict[str, Any]:
     summary = summary or {}
     metrics = metrics or {}
+    details = details or {}
     year = _year(summary) or (int(metrics["year"]) if metrics.get("year") else None)
     return {
         "paper_id": f"pmid:{pmid}",
         "pmid": pmid,
         "doi": _doi(summary),
         "title": summary.get("title") or metrics.get("title") or "",
-        "abstract": None,  # esummary has no abstract; efetch left for later
+        "abstract": details.get("abstract"),  # from efetch
         "year": year if year is not None else 0,
         "journal": summary.get("fulljournalname") or summary.get("source"),
         "authors": _authors(summary),
+        # Extra fields (schema allows additionalProperties) that Track B uses to
+        # link diseases / chemicals / genes to topics and run its own coupling.
+        "mesh": details.get("mesh", []),
+        "chemicals": details.get("chemicals", []),
+        "keywords": details.get("keywords", []),
+        "references": references or [],
         "metrics": {
             "citation_count": metrics.get("citation_count"),
             "relative_citation_ratio": metrics.get("relative_citation_ratio"),

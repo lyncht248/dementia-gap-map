@@ -20,7 +20,7 @@ from . import config
 from .cluster import topics as cluster_topics
 from .exports import write_outputs
 from .ingest import corpus as corpus_ingest
-from .ingest import icite
+from .ingest import efetch, icite
 from .network import edges as network_edges
 from .normalize import papers as normalize_papers
 from .score import trajectories as score_trajectories
@@ -34,9 +34,16 @@ def run(max_papers: int, log=print) -> None:
     log("[metrics] fetching iCite metrics")
     metrics = icite.get_metrics(corpus)
 
+    log("[details] fetching abstracts + MeSH via efetch")
+    details = efetch.get_details(corpus, log=log)
+
     papers = {
         pmid: normalize_papers.build_paper_record(
-            pmid, bundle["summaries"].get(pmid), metrics.get(pmid)
+            pmid,
+            bundle["summaries"].get(pmid),
+            metrics.get(pmid),
+            details.get(pmid),
+            bundle["refs"].get(pmid),
         )
         for pmid in corpus
     }
