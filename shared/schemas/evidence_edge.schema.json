@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/evidence_edge.schema.json",
+  "title": "Evidence Edge",
+  "description": "One directed edge in the Track B translational evidence graph, connecting two evidence nodes along the variant -> gene -> pathway -> drug -> trial chain (plus disease and topic side links). Endpoints always reference existing evidence_node node_ids; dangling edges are dropped at build time.",
+  "type": "object",
+  "required": ["edge_id", "source_id", "target_id", "edge_type"],
+  "properties": {
+    "edge_id": {
+      "type": "string",
+      "description": "Stable, unique edge identifier."
+    },
+    "source_id": {
+      "type": "string",
+      "description": "node_id of the source node."
+    },
+    "target_id": {
+      "type": "string",
+      "description": "node_id of the target node."
+    },
+    "edge_type": {
+      "type": "string",
+      "enum": ["variant_gene", "gene_pathway", "gene_disease", "drug_pathway", "trial_drug", "trial_pathway", "topic_gene", "topic_pathway", "topic_disease"]
+    },
+    "score": {
+      "type": ["number", "null"],
+      "description": "Edge weight/confidence where applicable (e.g. normalised -log10(p) or L2G score); may be null."
+    },
+    "evidence": {
+      "type": ["string", "null"],
+      "description": "Short human-readable evidence label for the edge, e.g. 'gwas', 'l2g', 'gene_pathway_map', 'intervention_mechanism_map'."
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Supporting facts for the edge (source record ids, raw values, mechanism crosswalk, etc.)."
+    }
+  },
+  "additionalProperties": true
+}

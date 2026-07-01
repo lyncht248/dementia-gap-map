@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/entity_metric.schema.json",
+  "title": "EntityMetric",
+  "description": "A transparent, machine-readable METRICS record for a single entity (gene, variant, or pathway) in the translational-evidence track. Metrics are numeric/boolean/null signals under dotted <group>.<name> keys, each carrying a short 'source' provenance note. No opinionated verdicts are baked in; downstream agents compose those from these metrics and may add their own metric keys (additionalProperties is allowed).",
+  "type": "object",
+  "required": ["entity_type", "entity_id"],
+  "properties": {
+    "entity_type": {
+      "type": "string",
+      "enum": ["gene", "variant", "pathway"]
+    },
+    "entity_id": {
+      "type": "string",
+      "description": "Stable id: gene_id for genes, 'variant:'+rsid for variants, pathway_id for pathways."
+    },
+    "label": {
+      "type": ["string", "null"],
+      "description": "Human-readable label: gene symbol, rsid, or pathway label."
+    },
+    "pathway_group": {
+      "type": ["string", "null"],
+      "description": "Mechanism/pathway group this entity belongs to, or null."
+    },
+    "disease_groups": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Controlled disease dimensions this entity spans."
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Dotted metric keys ('<group>.<name>') mapping to {value, source}. additionalProperties allowed so agents can attach their own metric keys.",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

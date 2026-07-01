@@ -34,6 +34,10 @@
         "rna_expression": { "type": ["number", "null"] }
       },
       "additionalProperties": true
+    },
+    "disease_group": {
+      "type": ["string", "null"],
+      "description": "Controlled disease dimension derived from the disease label. One of: alzheimer, vascular_dementia, frontotemporal_dementia, lewy_body_dementia, mixed_dementia, dementia_unspecified, other."
     }
   },
   "additionalProperties": true

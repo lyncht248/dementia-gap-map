@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/evidence_node.schema.json",
+  "title": "Evidence Node",
+  "description": "One node in the Track B translational evidence graph. Nodes are variants, genes, pathways, drugs, trials, diseases and Track A topics. Deterministic x/y layout coordinates are carried so the explorer needs no in-browser layout.",
+  "type": "object",
+  "required": ["node_id", "node_type", "label"],
+  "properties": {
+    "node_id": {
+      "type": "string",
+      "description": "Stable, unique node identifier, e.g. 'gene:ENSG00000130203', 'variant:rs429358', 'pathway:amyloid', 'drug:lecanemab', 'trial:NCT02094729', 'disease:alzheimer', 'topic:002'."
+    },
+    "node_type": {
+      "type": "string",
+      "enum": ["variant", "gene", "pathway", "drug", "trial", "disease", "topic"]
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable display label."
+    },
+    "score": {
+      "type": ["number", "null"],
+      "description": "Primary headline score for the node (interpretation depends on node_type), used for sizing/sorting; may be null."
+    },
+    "x": {
+      "type": ["number", "null"],
+      "description": "Deterministic layout x coordinate, normalised to roughly 0..1000."
+    },
+    "y": {
+      "type": ["number", "null"],
+      "description": "Deterministic layout y coordinate, normalised to roughly 0..1000."
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Bag of secondary scores carried for explainability (e.g. genetic_support, functional_support, translation_gap)."
+    },
+    "disease_groups": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Controlled disease dimensions this node spans (alzheimer, vascular_dementia, frontotemporal_dementia, lewy_body_dementia, mixed_dementia, dementia_unspecified, other)."
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Where this node came from and any supporting facts (source ids, counts, best p_value, statuses, etc.)."
+    }
+  },
+  "additionalProperties": true
+}
