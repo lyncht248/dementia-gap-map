@@ -236,9 +236,12 @@ provenance, and Alzheimer stays recoverable downstream as the subset
   1. `pmid_join` (high) — topic member **PMIDs** ∩ GWAS association PMIDs →
      `topic → gwas_association` (`paper_overlap`) + `topic → gene` for each
      reported gene. Join key: `pmid`.
-  2. `mesh_ui_join` (high) — member-paper **MeSH UIs** looked up in the curated
-     `map/mesh_disease.csv` → `topic → disease` (`mesh_annotation`), tallied per
-     `disease_group`. Join key: `mesh_ui`.
+  2. `mesh_ui_join` (high) — member-paper **MeSH UIs** classified via the
+     **API-derived** MeSH tree (`map/mesh_tree.py`; MeSH SPARQL, Dementia branch
+     `C10.228.140.380` + `F03.615.400`) → `topic → disease` (`mesh_annotation`),
+     tallied per `disease_group`. Join key: `mesh_ui`; provenance also records
+     the deciding `tree_number` and `classifier`. Zero hand definition — the
+     disease buckets are read live from the MeSH ontology.
   3. `chemical_ui_crosswalk` (high) — member-paper **chemical/substance UIs** in
      the curated `map/chemical_gene.csv` (a gene-product descriptor points at its
      gene) → `topic → gene` (`chemical_annotation`). Join key: `chemical_ui`.
@@ -261,9 +264,13 @@ provenance, and Alzheimer stays recoverable downstream as the subset
 
   | CSV | columns | rows | feeds |
   | --- | --- | --- | --- |
-  | `mesh_disease.csv` | `mesh_ui, mesh_term, disease_group, notes` | 13 | `mesh_ui_join` |
   | `chemical_gene.csv` | `chemical_ui, chemical_term, gene_symbol, notes` | 46 | `chemical_ui_crosswalk` |
   | `gene_pathway.csv` | `gene_symbol, pathway_group, notes` | 41 | `gene_pathway_curated` |
+
+  `mesh_ui_join` no longer uses a hand CSV: `mesh_disease.csv` was **deleted** and
+  replaced by `map/mesh_tree.py`, which reads the Dementia subtree live from the
+  MeSH SPARQL endpoint and buckets descriptors by tree position (only five anchor
+  sub-branch prefixes are hand-set; every descriptor in each bucket is API-read).
 
   **Outputs** (all under `data/processed/shared/`, all gitignored):
   - `topic_evidence_links.jsonl` — one explainable record per
@@ -279,10 +286,15 @@ provenance, and Alzheimer stays recoverable downstream as the subset
   No counts are hardcoded in the script — they are read from the inputs, so a
   re-run against a refreshed corpus just works.
 
-  **BridgeV2 counts (`track_a_snapshot`: 2,507 papers / 17 clusters):** 6,902
+  **BridgeV2 counts (`track_a_snapshot`: 2,507 papers / 17 clusters):** 6,901
   links total — by method: `pmid_join` 6,607, `regex_symbol_match` 164,
-  `chemical_ui_crosswalk` 69, `mesh_ui_join` 33, `gene_pathway_curated` 29; by
-  confidence: high 6,709, low 164, medium 29.
+  `chemical_ui_crosswalk` 69, `mesh_ui_join` 32, `gene_pathway_curated` 29; by
+  confidence: high 6,708, low 164, medium 29. (`mesh_ui_join` moved 33→32 when it
+  switched from the hand CSV to the API-derived MeSH tree: the tree correctly
+  excludes three pre-dementia headings — Cognitive Dysfunction/MCI, Cognition
+  Disorders, Neurocognitive Disorders — that sit *above* the Dementia branch,
+  while newly catching genuine Dementia-branch descriptors like Huntington
+  Disease, Multi-Infarct Dementia and Mixed Dementias.)
 
 #### Refresh when Track A publishes a new snapshot
 
@@ -395,10 +407,11 @@ enriched Track A snapshot (**2,507 papers / 17 clusters**):
 | `topic_evidence_links.jsonl` | `topic_evidence_link.schema.json` | 6,902 |
 | `topic_evidence_rollup.jsonl` | `topic_evidence_rollup.schema.json` | 17 |
 
-The 6,902 links break down (by **method** / structured-first) as `pmid_join`
+The 6,901 links break down (by **method** / structured-first) as `pmid_join`
 6,607 (`paper_overlap`), `regex_symbol_match` 164 (`gene_mention`, low-confidence
-fallback), `chemical_ui_crosswalk` 69 (`chemical_annotation`), `mesh_ui_join` 33
-(`mesh_annotation` → topic↔disease), and `gene_pathway_curated` 29
+fallback), `chemical_ui_crosswalk` 69 (`chemical_annotation`), `mesh_ui_join` 32
+(`mesh_annotation` → topic↔disease, API-derived MeSH tree), and
+`gene_pathway_curated` 29
 (`pathway_mapping`). By **confidence**: high 6,709, low 164, medium 29. Every
 link carries `method` / `confidence` / `provenance` / `notes` — see
 `exports/LINK_METHODS.md`.
@@ -637,15 +650,16 @@ Counts are the real numbers from
 | `topic_gene` | 316 | topic → gene (bridge; carries method/confidence) |
 | `drug_pathway` | 174 | drug → pathway (via mechanism) |
 | `gene_pathway` | 36 | gene → pathway group |
-| `topic_disease` | 33 | **NEW** topic → disease group (bridge; `mesh_ui_join`) |
+| `topic_disease` | 32 | **NEW** topic → disease group (bridge; `mesh_ui_join`, API-derived MeSH tree) |
 | `topic_pathway` | 29 | topic → pathway (bridge; carries method/confidence) |
 | **total** | **11,018** | |
 
-The **378** topic bridge edges (`topic_gene` + `topic_pathway` +
+The **377** topic bridge edges (`topic_gene` + `topic_pathway` +
 `topic_disease`) each carry `method` + `confidence`. By method: `regex_symbol_match`
-164, `pmid_join` 83, `chemical_ui_crosswalk` 69, `mesh_ui_join` 33,
-`gene_pathway_curated` 29. By confidence: high 185, low 164, medium 29. (These are
-also in the manifest under `edges.topic_bridge`.) `paper_overlap` links to GWAS
+164, `pmid_join` 83, `chemical_ui_crosswalk` 69, `mesh_ui_join` 32,
+`gene_pathway_curated` 29. By confidence: high 184, low 164, medium 29. (These are
+also in the manifest under `edges.topic_bridge`; regenerated by
+`build_evidence_graph.py`.) `paper_overlap` links to GWAS
 associations are **not** edges — a GWAS association is not a graph node, so those
 topic→association links would dangle; the reported genes already appear as
 high-confidence `topic_gene` (`pmid_join`) edges.
@@ -873,13 +887,14 @@ A `topic_disease` bridge edge (`data/exports/graph/edges.jsonl`) — carries the
     "join_key": "mesh_ui",
     "link_provenance": {
       "disease_group": "alzheimer",
-      "mesh_uis": [{"mesh_term": "Alzheimer Disease", "mesh_ui": "D000544", "n_papers": 2}],
+      "classifier": "mesh_tree (MeSH SPARQL, branch C10.228.140.380)",
+      "mesh_uis": [{"mesh_term": "Alzheimer Disease", "mesh_ui": "D000544", "tree_number": "C10.228.140.380.100", "n_papers": 2}],
       "n_major": 2, "n_papers": 2
     },
     "link_type": "mesh_annotation",
     "method": "mesh_ui_join", "confidence": "high",
     "source": "topic_evidence_links", "topic_id": "topic:013",
-    "notes": "disease group 'alzheimer' via curated MeSH-UI crosswalk in 2/3 member papers (2 major)"
+    "notes": "disease group 'alzheimer' via API-derived MeSH tree (mesh_tree, branch C10.228.140.380) in 2/3 member papers (2 major)"
   },
   "score": 0.6667,
   "source_id": "topic:013",

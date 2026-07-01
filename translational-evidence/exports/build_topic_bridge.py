@@ -31,9 +31,11 @@ LINK METHODS, in PRIORITY order (structured joins first, regex demoted last):
       Structured ID join on PMID; unambiguous.
 
   (2) mesh_ui_join         link_type=mesh_annotation      confidence=high
-      Member papers' MeSH UIs looked up in the curated mesh_disease crosswalk
+      Member papers' MeSH UIs classified via the API-DERIVED MeSH tree
+      (mesh_tree.classify_mesh_ui; MeSH SPARQL, Dementia branch C10.228.140.380)
       -> topic->disease links (evidence_type="disease"), tallied per
-      disease_group. Structured controlled-vocabulary UI join.
+      disease_group. Structured controlled-vocabulary UI join with ZERO hand
+      definition: the disease buckets are read live from the MeSH tree.
 
   (3) chemical_ui_crosswalk link_type=chemical_annotation confidence=high
       Member papers' chemical UIs looked up in the curated chemical_gene
@@ -73,6 +75,11 @@ from collections import defaultdict
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import common  # noqa: E402  (import after sys.path bootstrap)
 
+# API-derived MeSH -> disease_group classifier (replaces the hand-curated
+# map/mesh_disease.csv). Import from the map/ package one level down.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "map"))
+import mesh_tree  # noqa: E402  (import after sys.path bootstrap)
+
 
 # ---------------------------------------------------------------------------
 # Inputs / outputs
@@ -88,9 +95,10 @@ PATHWAYS = common.PROCESSED_DIR / "pathways.jsonl"
 TRIALS = common.PROCESSED_DIR / "trials.jsonl"
 
 # Curated crosswalks (authoritative, structured join tables).
+# NOTE: mesh_ui -> disease_group is NO LONGER a hand CSV. It is derived live from
+# the MeSH tree via translational-evidence/map/mesh_tree.py (imported above).
 MAP_DIR = common.TE_DIR / "map"
 GENE_PATHWAY_CSV = MAP_DIR / "gene_pathway.csv"      # gene_symbol -> pathway_group
-MESH_DISEASE_CSV = MAP_DIR / "mesh_disease.csv"      # mesh_ui -> disease_group
 CHEMICAL_GENE_CSV = MAP_DIR / "chemical_gene.csv"    # chemical_ui -> gene_symbol
 
 LINKS_OUT = common.SHARED_PROCESSED_DIR / "topic_evidence_links.jsonl"
@@ -140,18 +148,6 @@ def load_gene_pathway_map(csv_path):
         group = (row.get("pathway_group") or "").strip()
         if symbol and group:
             mapping[symbol] = group
-    return mapping
-
-
-def load_mesh_disease_map(csv_path):
-    """Return {mesh_ui: {"disease_group":..., "mesh_term":...}} crosswalk."""
-    mapping = {}
-    for row in _read_csv_rows(csv_path):
-        ui = (row.get("mesh_ui") or "").strip()
-        group = (row.get("disease_group") or "").strip()
-        term = (row.get("mesh_term") or "").strip()
-        if ui and group:
-            mapping[ui] = {"disease_group": group, "mesh_term": term}
     return mapping
 
 
@@ -280,7 +276,7 @@ def build_topic(cluster, ctx):
     gwas_pmids = ctx["gwas_pmids"]
     pmid_to_assocs = ctx["pmid_to_assocs"]
     sym_to_group = ctx["sym_to_group"]
-    mesh_disease = ctx["mesh_disease"]
+    classify_mesh_ui = ctx["classify_mesh_ui"]
     chemical_gene = ctx["chemical_gene"]
     group_to_pathway = ctx["group_to_pathway"]
 
@@ -423,21 +419,29 @@ def build_topic(cluster, ctx):
     # =====================================================================
     # (2) mesh_ui_join  ->  disease (mesh_annotation, high)
     # =====================================================================
-    # Tally member papers per disease_group via the curated MeSH-UI crosswalk.
+    # Tally member papers per disease_group by classifying each MeSH UI against
+    # the API-DERIVED MeSH tree (mesh_tree.classify_mesh_ui; MeSH SPARQL,
+    # Dementia branch C10.228.140.380). No hand crosswalk is consulted.
     disease_papers = defaultdict(set)      # disease_group -> {pmid}
     disease_major = defaultdict(int)       # disease_group -> n major mentions
     disease_uis = defaultdict(lambda: defaultdict(int))  # dg -> {ui: n_papers}
-    disease_ui_terms = {}                  # ui -> term
+    disease_ui_meta = {}                    # ui -> {term, tree_number}
     for pid in member_paper_ids:
         detail = pid_to_detail.get(pid) or {}
         pmid = pid_to_pmid.get(pid)
         seen_ui_this_paper = set()
         for m in detail.get("mesh", []):
             ui = m.get("ui")
-            if not ui or ui not in mesh_disease:
+            if not ui:
                 continue
-            dg = mesh_disease[ui]["disease_group"]
-            disease_ui_terms[ui] = mesh_disease[ui]["mesh_term"] or m.get("term")
+            hit = classify_mesh_ui(ui)
+            if hit is None:
+                continue   # UI is not under a Dementia branch of the MeSH tree
+            dg = hit["disease_group"]
+            disease_ui_meta[ui] = {
+                "mesh_term": hit.get("label") or m.get("term"),
+                "tree_number": hit.get("tree_number"),
+            }
             if pmid:
                 disease_papers[dg].add(pmid)
             if ui not in seen_ui_this_paper:
@@ -450,11 +454,13 @@ def build_topic(cluster, ctx):
     for dg in sorted(disease_papers, key=lambda d: (-len(disease_papers[d]), d)):
         pmids = sorted(disease_papers[dg])
         n_papers = len(pmids)
-        # Per-UI breakdown (which MeSH descriptors contributed, and how often).
+        # Per-UI breakdown (which MeSH descriptors contributed, tree number, and
+        # how often) -- records HOW+WHY each UI classified into this group.
         ui_breakdown = [
             {
                 "mesh_ui": ui,
-                "mesh_term": disease_ui_terms.get(ui),
+                "mesh_term": disease_ui_meta.get(ui, {}).get("mesh_term"),
+                "tree_number": disease_ui_meta.get(ui, {}).get("tree_number"),
                 "n_papers": cnt,
             }
             for ui, cnt in sorted(disease_uis[dg].items(),
@@ -475,9 +481,12 @@ def build_topic(cluster, ctx):
                 "n_papers": n_papers,
                 "n_major": disease_major[dg],
                 "mesh_uis": ui_breakdown,
+                "classifier": ("mesh_tree (MeSH SPARQL, branch "
+                               "C10.228.140.380)"),
             },
-            "notes": ("disease group '%s' via curated MeSH-UI crosswalk in "
-                      "%d/%d member papers (%d major)"
+            "notes": ("disease group '%s' via API-derived MeSH tree "
+                      "(mesh_tree, branch C10.228.140.380) in %d/%d member "
+                      "papers (%d major)"
                       % (dg, n_papers, n_members, disease_major[dg])),
         })
         disease_rollup.append({
@@ -853,11 +862,13 @@ def main():
     group_to_pathway = index_pathways(pathways)
     trials_by_mech = index_trials_by_mechanism(trials)
     sym_to_group = load_gene_pathway_map(GENE_PATHWAY_CSV)
-    mesh_disease = load_mesh_disease_map(MESH_DISEASE_CSV)
     chemical_gene = load_chemical_gene_map(CHEMICAL_GENE_CSV)
-    common.log("crosswalks: gene->pathway=%d, mesh->disease=%d, "
-               "chemical->gene=%d"
-               % (len(sym_to_group), len(mesh_disease), len(chemical_gene)))
+    # API-derived MeSH -> disease_group map (built on import of mesh_tree).
+    mesh_disease = mesh_tree.DERIVED_MESH_DISEASE
+    common.log("crosswalks: gene->pathway=%d, chemical->gene=%d; "
+               "mesh->disease=%d (API-derived via mesh_tree, path=%s)"
+               % (len(sym_to_group), len(chemical_gene), len(mesh_disease),
+                  mesh_tree.FETCH_PATH))
 
     # Precompile a case-sensitive whole-word regex per eligible symbol
     # (regex_symbol_match fallback only).
@@ -891,7 +902,7 @@ def main():
         "gwas_pmids": gwas_pmids,
         "pmid_to_assocs": pmid_to_assocs,
         "sym_to_group": sym_to_group,
-        "mesh_disease": mesh_disease,
+        "classify_mesh_ui": mesh_tree.classify_mesh_ui,
         "chemical_gene": chemical_gene,
         "group_to_pathway": group_to_pathway,
         "trials_by_mech": trials_by_mech,
@@ -922,8 +933,13 @@ def main():
         "n_rollups": n_rollups,
         "crosswalks": {
             "gene_pathway": len(sym_to_group),
-            "mesh_disease": len(mesh_disease),
             "chemical_gene": len(chemical_gene),
+            "mesh_disease": {
+                "n_uis": len(mesh_disease),
+                "source": "mesh_tree (API-derived, MeSH SPARQL "
+                          "branch C10.228.140.380 + F03.615.400)",
+                "path": mesh_tree.FETCH_PATH,
+            },
         },
         "link_methods": _count_by(all_links, "method"),
         "link_types": _count_by(all_links, "link_type"),

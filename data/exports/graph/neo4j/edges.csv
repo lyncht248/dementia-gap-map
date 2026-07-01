@@ -10642,8 +10642,8 @@ e:dp:zagotenemab:tau,drug:zagotenemab,pathway:tau,drug_pathway,,intervention_mec
 e:tds:topic:013:disease:alzheimer:mesh_annotation,topic:013,disease:alzheimer,topic_disease,0.6667,mesh_annotation,mesh_ui_join,high
 e:tg:topic:013:gene:ENSG00000095970:gene_mention,topic:013,gene:ENSG00000095970,topic_gene,0.3333,gene_mention,regex_symbol_match,low
 e:tg:topic:013:gene:ENSG00000106460:gene_mention,topic:013,gene:ENSG00000106460,topic_gene,0.3333,gene_mention,regex_symbol_match,low
+e:tds:topic:004:disease:dementia_unspecified:mesh_annotation,topic:004,disease:dementia_unspecified,topic_disease,0.6,mesh_annotation,mesh_ui_join,high
 e:tds:topic:004:disease:alzheimer:mesh_annotation,topic:004,disease:alzheimer,topic_disease,0.0286,mesh_annotation,mesh_ui_join,high
-e:tds:topic:004:disease:dementia_unspecified:mesh_annotation,topic:004,disease:dementia_unspecified,topic_disease,0.0286,mesh_annotation,mesh_ui_join,high
 e:tds:topic:004:disease:frontotemporal_dementia:mesh_annotation,topic:004,disease:frontotemporal_dementia,topic_disease,0.0286,mesh_annotation,mesh_ui_join,high
 e:tg:topic:004:gene:ENSG00000130203:chemical_annotation,topic:004,gene:ENSG00000130203,topic_gene,0.0286,chemical_annotation,chemical_ui_crosswalk,high
 e:tg:topic:004:gene:ENSG00000186868:chemical_annotation,topic:004,gene:ENSG00000186868,topic_gene,0.0571,chemical_annotation,chemical_ui_crosswalk,high
@@ -10738,7 +10738,7 @@ e:tg:topic:000:gene:ENSG00000124602:paper_overlap,topic:000,gene:ENSG00000124602
 e:tg:topic:000:gene:ENSG00000078487:paper_overlap,topic:000,gene:ENSG00000078487,topic_gene,0.0012,paper_overlap,pmid_join,high
 e:tg:topic:000:gene:snoZ6:paper_overlap,topic:000,gene:snoZ6,topic_gene,0.0012,paper_overlap,pmid_join,high
 e:tds:topic:000:disease:alzheimer:mesh_annotation,topic:000,disease:alzheimer,topic_disease,0.6109,mesh_annotation,mesh_ui_join,high
-e:tds:topic:000:disease:dementia_unspecified:mesh_annotation,topic:000,disease:dementia_unspecified,topic_disease,0.0778,mesh_annotation,mesh_ui_join,high
+e:tds:topic:000:disease:dementia_unspecified:mesh_annotation,topic:000,disease:dementia_unspecified,topic_disease,0.0337,mesh_annotation,mesh_ui_join,high
 e:tds:topic:000:disease:frontotemporal_dementia:mesh_annotation,topic:000,disease:frontotemporal_dementia,topic_disease,0.0116,mesh_annotation,mesh_ui_join,high
 e:tds:topic:000:disease:vascular_dementia:mesh_annotation,topic:000,disease:vascular_dementia,topic_disease,0.0035,mesh_annotation,mesh_ui_join,high
 e:tds:topic:000:disease:lewy_body_dementia:mesh_annotation,topic:000,disease:lewy_body_dementia,topic_disease,0.0023,mesh_annotation,mesh_ui_join,high
@@ -10854,8 +10854,8 @@ e:tg:topic:000:gene:ENSG00000111961:gene_mention,topic:000,gene:ENSG00000111961,
 e:tg:topic:000:gene:ENSG00000169862:gene_mention,topic:000,gene:ENSG00000169862,topic_gene,0.0012,gene_mention,regex_symbol_match,low
 e:tds:topic:006:disease:alzheimer:mesh_annotation,topic:006,disease:alzheimer,topic_disease,0.2857,mesh_annotation,mesh_ui_join,high
 e:tds:topic:002:disease:alzheimer:mesh_annotation,topic:002,disease:alzheimer,topic_disease,0.1944,mesh_annotation,mesh_ui_join,high
-e:tds:topic:002:disease:dementia_unspecified:mesh_annotation,topic:002,disease:dementia_unspecified,topic_disease,0.0516,mesh_annotation,mesh_ui_join,high
 e:tds:topic:002:disease:lewy_body_dementia:mesh_annotation,topic:002,disease:lewy_body_dementia,topic_disease,0.0476,mesh_annotation,mesh_ui_join,high
+e:tds:topic:002:disease:dementia_unspecified:mesh_annotation,topic:002,disease:dementia_unspecified,topic_disease,0.0159,mesh_annotation,mesh_ui_join,high
 e:tds:topic:002:disease:frontotemporal_dementia:mesh_annotation,topic:002,disease:frontotemporal_dementia,topic_disease,0.0159,mesh_annotation,mesh_ui_join,high
 e:tg:topic:002:gene:ENSG00000130203:chemical_annotation,topic:002,gene:ENSG00000130203,topic_gene,0.0397,chemical_annotation,chemical_ui_crosswalk,high
 e:tg:topic:002:gene:ENSG00000142192:chemical_annotation,topic:002,gene:ENSG00000142192,topic_gene,0.0238,chemical_annotation,chemical_ui_crosswalk,high
@@ -10904,7 +10904,7 @@ e:tg:topic:002:gene:ENSG00000108379:gene_mention,topic:002,gene:ENSG00000108379,
 e:tg:topic:002:gene:ENSG00000160179:gene_mention,topic:002,gene:ENSG00000160179,topic_gene,0.004,gene_mention,regex_symbol_match,low
 e:tg:topic:002:gene:ENSG00000130477:gene_mention,topic:002,gene:ENSG00000130477,topic_gene,0.0079,gene_mention,regex_symbol_match,low
 e:tds:topic:001:disease:alzheimer:mesh_annotation,topic:001,disease:alzheimer,topic_disease,0.3914,mesh_annotation,mesh_ui_join,high
-e:tds:topic:001:disease:dementia_unspecified:mesh_annotation,topic:001,disease:dementia_unspecified,topic_disease,0.1058,mesh_annotation,mesh_ui_join,high
+e:tds:topic:001:disease:dementia_unspecified:mesh_annotation,topic:001,disease:dementia_unspecified,topic_disease,0.0669,mesh_annotation,mesh_ui_join,high
 e:tds:topic:001:disease:vascular_dementia:mesh_annotation,topic:001,disease:vascular_dementia,topic_disease,0.0362,mesh_annotation,mesh_ui_join,high
 e:tds:topic:001:disease:lewy_body_dementia:mesh_annotation,topic:001,disease:lewy_body_dementia,topic_disease,0.0209,mesh_annotation,mesh_ui_join,high
 e:tds:topic:001:disease:frontotemporal_dementia:mesh_annotation,topic:001,disease:frontotemporal_dementia,topic_disease,0.0195,mesh_annotation,mesh_ui_join,high
@@ -10976,7 +10976,7 @@ e:tg:topic:005:gene:ENSG00000095970:chemical_annotation,topic:005,gene:ENSG00000
 e:tpw:topic:005:pathway:microglia_immune:pathway_mapping,topic:005,pathway:microglia_immune,topic_pathway,0.7035,pathway_mapping,gene_pathway_curated,medium
 e:tpw:topic:005:pathway:amyloid:pathway_mapping,topic:005,pathway:amyloid,topic_pathway,0.2965,pathway_mapping,gene_pathway_curated,medium
 e:tds:topic:003:disease:alzheimer:mesh_annotation,topic:003,disease:alzheimer,topic_disease,0.3,mesh_annotation,mesh_ui_join,high
-e:tds:topic:003:disease:dementia_unspecified:mesh_annotation,topic:003,disease:dementia_unspecified,topic_disease,0.05,mesh_annotation,mesh_ui_join,high
+e:tds:topic:003:disease:dementia_unspecified:mesh_annotation,topic:003,disease:dementia_unspecified,topic_disease,0.025,mesh_annotation,mesh_ui_join,high
 e:tg:topic:003:gene:ENSG00000130203:gene_mention,topic:003,gene:ENSG00000130203,topic_gene,0.075,gene_mention,regex_symbol_match,low
 e:tg:topic:003:gene:ENSG00000130208:gene_mention,topic:003,gene:ENSG00000130208,topic_gene,0.025,gene_mention,regex_symbol_match,low
 e:tg:topic:003:gene:ENSG00000134575:gene_mention,topic:003,gene:ENSG00000134575,topic_gene,0.025,gene_mention,regex_symbol_match,low
@@ -10991,12 +10991,12 @@ e:tg:topic:003:gene:ENSG00000110536:gene_mention,topic:003,gene:ENSG00000110536,
 e:tg:topic:003:gene:ENSG00000066336:gene_mention,topic:003,gene:ENSG00000066336,topic_gene,0.05,gene_mention,regex_symbol_match,low
 e:tg:topic:003:gene:ENSG00000102290:gene_mention,topic:003,gene:ENSG00000102290,topic_gene,0.025,gene_mention,regex_symbol_match,low
 e:tds:topic:007:disease:alzheimer:mesh_annotation,topic:007,disease:alzheimer,topic_disease,0.4286,mesh_annotation,mesh_ui_join,high
+e:tds:topic:007:disease:dementia_unspecified:mesh_annotation,topic:007,disease:dementia_unspecified,topic_disease,0.1429,mesh_annotation,mesh_ui_join,high
 e:tg:topic:007:gene:ENSG00000142192:chemical_annotation,topic:007,gene:ENSG00000142192,topic_gene,0.1429,chemical_annotation,chemical_ui_crosswalk,high
 e:tg:topic:007:gene:ENSG00000186868:chemical_annotation,topic:007,gene:ENSG00000186868,topic_gene,0.1429,chemical_annotation,chemical_ui_crosswalk,high
 e:tpw:topic:007:pathway:amyloid:pathway_mapping,topic:007,pathway:amyloid,topic_pathway,0.5833,pathway_mapping,gene_pathway_curated,medium
 e:tpw:topic:007:pathway:tau:pathway_mapping,topic:007,pathway:tau,topic_pathway,0.4167,pathway_mapping,gene_pathway_curated,medium
 e:tds:topic:009:disease:alzheimer:mesh_annotation,topic:009,disease:alzheimer,topic_disease,0.8,mesh_annotation,mesh_ui_join,high
-e:tds:topic:009:disease:dementia_unspecified:mesh_annotation,topic:009,disease:dementia_unspecified,topic_disease,0.2,mesh_annotation,mesh_ui_join,high
 e:tg:topic:009:gene:ENSG00000142192:chemical_annotation,topic:009,gene:ENSG00000142192,topic_gene,0.4,chemical_annotation,chemical_ui_crosswalk,high
 e:tpw:topic:009:pathway:amyloid:pathway_mapping,topic:009,pathway:amyloid,topic_pathway,1.0,pathway_mapping,gene_pathway_curated,medium
 e:tds:topic:010:disease:alzheimer:mesh_annotation,topic:010,disease:alzheimer,topic_disease,0.4,mesh_annotation,mesh_ui_join,high
@@ -11004,7 +11004,6 @@ e:tg:topic:010:gene:ENSG00000142192:chemical_annotation,topic:010,gene:ENSG00000
 e:tg:topic:010:gene:ENSG00000069966:chemical_annotation,topic:010,gene:ENSG00000069966,topic_gene,0.2,chemical_annotation,chemical_ui_crosswalk,high
 e:tpw:topic:010:pathway:amyloid:pathway_mapping,topic:010,pathway:amyloid,topic_pathway,1.0,pathway_mapping,gene_pathway_curated,medium
 e:tds:topic:011:disease:alzheimer:mesh_annotation,topic:011,disease:alzheimer,topic_disease,0.4,mesh_annotation,mesh_ui_join,high
-e:tds:topic:011:disease:dementia_unspecified:mesh_annotation,topic:011,disease:dementia_unspecified,topic_disease,0.2,mesh_annotation,mesh_ui_join,high
 e:tds:topic:011:disease:vascular_dementia:mesh_annotation,topic:011,disease:vascular_dementia,topic_disease,0.2,mesh_annotation,mesh_ui_join,high
 e:tg:topic:011:gene:ENSG00000186868:chemical_annotation,topic:011,gene:ENSG00000186868,topic_gene,0.2,chemical_annotation,chemical_ui_crosswalk,high
 e:tpw:topic:011:pathway:tau:pathway_mapping,topic:011,pathway:tau,topic_pathway,1.0,pathway_mapping,gene_pathway_curated,medium

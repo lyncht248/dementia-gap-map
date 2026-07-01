@@ -4,7 +4,7 @@
       "drug_pathway": 174,
       "gene_disease": 535,
       "gene_pathway": 36,
-      "topic_disease": 33,
+      "topic_disease": 32,
       "topic_gene": 316,
       "topic_pathway": 29,
       "trial_drug": 3350,
@@ -24,7 +24,7 @@
       "confidence"
     ],
     "path": "data/exports/graph/neo4j/edges.csv",
-    "rows": 11018
+    "rows": 11017
   },
   "generated_by": "translational-evidence/exports/build_neo4j_export.py",
   "generated_on": "2026-07-01",

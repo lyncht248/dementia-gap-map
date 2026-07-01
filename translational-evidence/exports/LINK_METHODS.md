@@ -61,20 +61,32 @@ lost.
   because a GWAS association is not a standalone graph node (the reported genes
   already carry the signal).
 
-### 2. `mesh_ui_join` — curated MeSH-UI disease join (confidence: **high**)
+### 2. `mesh_ui_join` — API-derived MeSH-tree disease join (confidence: **high**)
 
 - **Link type:** `mesh_annotation` (topic→disease).
-- **How it works:** each member paper's **MeSH descriptor UIs** are looked up in
-  the curated crosswalk `translational-evidence/map/mesh_disease.csv`
-  (`mesh_ui → disease_group`). Papers are tallied per `disease_group`; one
-  `topic → disease` link is emitted per group, scored by the fraction of member
-  papers carrying a matching descriptor.
+- **How it works:** each member paper's **MeSH descriptor UIs** are classified
+  by `translational-evidence/map/mesh_tree.py`, which reads the entire Dementia
+  subtree live from the **NLM MeSH SPARQL endpoint** (branches
+  `C10.228.140.380` + `F03.615.400`) and buckets each descriptor into a
+  `disease_group` purely from its **tree number** (its sub-branch position).
+  Papers are tallied per `disease_group`; one `topic → disease` link is emitted
+  per group, scored by the fraction of member papers carrying a matching
+  descriptor.
+- **Zero hand definition:** the *only* hand input is five anchor sub-branch
+  prefixes (`…100`=alzheimer, `…230`=vascular, `…266`/`…132`=frontotemporal,
+  `…422`=lewy_body, `…711`=mixed); every descriptor in each bucket is read from
+  the API, so new/retired MeSH descriptors are picked up on a re-run with no CSV
+  edit. The hand-curated `mesh_disease.csv` has been **deleted**.
 - **Why high:** MeSH is a controlled vocabulary; a descriptor UID (e.g.
-  `D000544` = *Alzheimer Disease*) is an exact, curated pointer to a disease
-  group — no free-text guessing.
+  `D000544` = *Alzheimer Disease*, tree `C10.228.140.380.100`) is an exact
+  pointer whose disease group is determined by the authoritative ontology — no
+  free-text guessing and no hand list to drift.
 - **Provenance join key:** `mesh_ui` (plus `disease_group`, `n_papers`,
-  `n_major` major-topic mentions, and a per-UI `mesh_uis[]` breakdown with
-  `mesh_term` + `n_papers`).
+  `n_major` major-topic mentions, `classifier`, and a per-UI `mesh_uis[]`
+  breakdown with `mesh_term` + `tree_number` + `n_papers`).
+- **Fallback:** if SPARQL is unavailable, `mesh_tree.py` fetches per-UI
+  descriptor JSON (`https://id.nlm.nih.gov/mesh/{UI}.json`) for the corpus's
+  distinct MeSH UIs and classifies by tree-number prefix (cached; path logged).
 - **Graph:** surfaces as the **`topic_disease`** edge — the new edge type this
   bridge adds.
 
@@ -141,7 +153,7 @@ lost.
 | method | link_type | evidence_type | graph edge | confidence | join key |
 | --- | --- | --- | --- | --- | --- |
 | `pmid_join` | `paper_overlap` | gwas_association, gene | `topic_gene` (gene half only) | high | `pmid` |
-| `mesh_ui_join` | `mesh_annotation` | disease | `topic_disease` | high | `mesh_ui` |
+| `mesh_ui_join` | `mesh_annotation` | disease | `topic_disease` | high | `mesh_ui` (+ `tree_number`, API-derived) |
 | `chemical_ui_crosswalk` | `chemical_annotation` | gene | `topic_gene` | high | `chemical_ui` |
 | `gene_pathway_curated` | `pathway_mapping` | pathway | `topic_pathway` | medium | `gene_symbol->pathway_group` |
 | `regex_symbol_match` | `gene_mention` | gene | `topic_gene` | low | `case_sensitive_whole_word_symbol` |
@@ -153,32 +165,36 @@ methods possible. Extend a method by adding rows here — no code change needed.
 
 | CSV | columns | rows | feeds |
 | --- | --- | --- | --- |
-| `translational-evidence/map/mesh_disease.csv` | `mesh_ui, mesh_term, disease_group, notes` | 13 | `mesh_ui_join` |
 | `translational-evidence/map/chemical_gene.csv` | `chemical_ui, chemical_term, gene_symbol, notes` | 46 | `chemical_ui_crosswalk` |
 | `translational-evidence/map/gene_pathway.csv` | `gene_symbol, pathway_group, notes` | 41 | `gene_pathway_curated` |
 
+`mesh_ui_join` is **not** table-driven any more: `mesh_disease.csv` was deleted
+and replaced by `translational-evidence/map/mesh_tree.py`, which derives the
+`mesh_ui → disease_group` mapping live from the MeSH tree (SPARQL). Extend it by
+editing the five anchor sub-branch prefixes in `mesh_tree.py`, not a CSV.
+
 ## Current link + edge counts (`track_a_snapshot`: 2,507 papers / 17 clusters)
 
-Links (`topic_evidence_links.jsonl`, total **6,902**):
+Links (`topic_evidence_links.jsonl`, total **6,901**):
 
 | method | links | | link_type | links | | confidence | links |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `pmid_join` | 6,607 | | `paper_overlap` | 6,607 | | high | 6,709 |
+| `pmid_join` | 6,607 | | `paper_overlap` | 6,607 | | high | 6,708 |
 | `regex_symbol_match` | 164 | | `gene_mention` | 164 | | medium | 29 |
 | `chemical_ui_crosswalk` | 69 | | `chemical_annotation` | 69 | | low | 164 |
 | `gene_pathway_curated` | 29 | | `pathway_mapping` | 29 | | | |
-| `mesh_ui_join` | 33 | | `mesh_annotation` | 33 | | | |
+| `mesh_ui_join` | 32 | | `mesh_annotation` | 32 | | | |
 
-Graph bridge edges (`edges.jsonl`, total **378** — `paper_overlap` gwas_association
+Graph bridge edges (`edges.jsonl`, total **377** — `paper_overlap` gwas_association
 links are not edges; the gene half is):
 
 | edge_type | edges | dominant methods |
 | --- | --- | --- |
 | `topic_gene` | 316 | `pmid_join` (83), `chemical_ui_crosswalk` (69), `regex_symbol_match` (164) |
-| `topic_disease` | 33 | `mesh_ui_join` (33) |
+| `topic_disease` | 32 | `mesh_ui_join` (32) |
 | `topic_pathway` | 29 | `gene_pathway_curated` (29) |
 
-Bridge edges by confidence: **high** 185, **low** 164, **medium** 29.
+Bridge edges by confidence: **high** 184, **low** 164, **medium** 29.
 
 > Counts are read from the inputs at build time (nothing hardcoded), so a re-run
 > against a refreshed snapshot just re-derives them. See
