@@ -16,6 +16,7 @@ interface Props {
   isActive: (p: Paper) => boolean;
   selectedIds: Set<string>;
   onSelect: (ids: string[]) => void;
+  onReset?: () => void;
 }
 
 const NEUTRAL = "#c8c8cc";
@@ -28,6 +29,7 @@ export default function MapCanvas({
   isActive,
   selectedIds,
   onSelect,
+  onReset,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -300,8 +302,10 @@ export default function MapCanvas({
     return () => canvas.removeEventListener("wheel", handleWheel);
   }, []);
 
-  const resetView = () =>
+  const resetView = () => {
     setTransform(fitTransform(papers, size.w, size.h));
+    onReset?.();
+  };
 
   return (
     <div ref={wrapRef} className="map-wrap">
