@@ -42,12 +42,18 @@ FILE_TO_SCHEMA = {
     common.PROCESSED_DIR / "functional_links.jsonl": "functional_link",
 }
 
+# Generated evidence-graph exports (under data/exports/graph). These are
+# gitignored build products, so they are validated only when present.
+GRAPH_EXPORT_DIR = common.REPO_ROOT / "data" / "exports" / "graph"
+
 # Optional shared cross-track output (only validated if it exists).
 OPTIONAL_FILE_TO_SCHEMA = {
     common.SHARED_PROCESSED_DIR / "topic_evidence_links.jsonl":
         "topic_evidence_link",
     common.SHARED_PROCESSED_DIR / "topic_evidence_rollup.jsonl":
         "topic_evidence_rollup",
+    GRAPH_EXPORT_DIR / "nodes.jsonl": "evidence_node",
+    GRAPH_EXPORT_DIR / "edges.jsonl": "evidence_edge",
 }
 
 MAX_EXAMPLE_ERRORS = 5

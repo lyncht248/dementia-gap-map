@@ -34,6 +34,16 @@ Outputs:
 - `data/processed/translational-evidence/target_evidence.jsonl`
 - `data/processed/translational-evidence/functional_links.jsonl`
 
+Evidence-graph explorer exports (standalone Track B, separate from Track A's
+`web/` app; generated under the gitignored `data/exports/graph/` — see the
+["Evidence graph explorer"](RUNBOOK.md#9-evidence-graph-explorer-standalone-track-b)
+section of the RUNBOOK):
+
+- `data/exports/graph/nodes.jsonl` — 15,286 evidence nodes (`evidence_node.schema.json`)
+- `data/exports/graph/edges.jsonl` — 10,732 evidence edges (`evidence_edge.schema.json`)
+- `data/exports/graph/evidence_graph.html` — zero-install sigma.js graph explorer (`open` it; loads CDN libs, so needs internet; trials toggled off by default)
+- `data/exports/graph/neo4j/` — Neo4j-ready `nodes.csv` / `edges.csv` + `load.cypher` + `README.md` for full Cypher filtering (needs Docker / a running DB)
+
 ## Disease dimension
 
 Because the track now spans ADRD, every processed record carries a controlled

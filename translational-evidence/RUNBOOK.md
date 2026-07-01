@@ -505,7 +505,189 @@ refreshed.
 
 ---
 
-## 9. Data sources
+## 9. Evidence graph explorer (standalone Track B)
+
+A **standalone** Track B evidence-graph explorer that lets you check/explore
+*everything* with filters. It is **separate from Track A's `web/` app** (it does
+not touch `web/**` or `topic-dynamics/**`); it is built entirely from Track B's
+own processed evidence plus the shared topic bridge. The graph carries the
+**full** un-capped set of nodes and edges — no aggressive caps — so **filtering
+does the legibility work**. Every node carries `provenance` + scores and every
+edge carries a `score` + `evidence` label, so anything you filter to stays
+explainable. Nothing is fabricated.
+
+> The topic overlay (`topic` nodes + `topic_gene` / `topic_pathway` edges) is
+> joined from the shared bridge, which currently reflects the Track A **SUBSET**
+> snapshot (the `2026-07-01` build: 410 papers / 9 clusters). It refreshes for
+> free when Track A's full run lands and the bridge is rebuilt (see §3 →
+> "Refresh when Track A full run lands").
+
+### Node & edge types + full counts (`2026-07-01` build)
+
+Counts are the real numbers from
+`data/exports/graph/graph_manifest.json`.
+
+**Nodes — 15,286 total:**
+
+| node type | count | source |
+| --- | --- | --- |
+| `trial` | 6,841 | `trials.jsonl` |
+| `variant` | 5,786 | `gwas_associations.jsonl` (rsID / locus) |
+| `drug` | 2,111 | trial `interventions[]` |
+| `gene` | 523 | `genes.jsonl` |
+| `pathway` | 9 | `pathways.jsonl` |
+| `topic` | 9 | `topic_evidence_rollup.jsonl` (Track A subset overlay) |
+| `disease` | 7 | `disease_group` vocabulary |
+| **total** | **15,286** | |
+
+**Edges — 10,732 total:**
+
+| edge type | count | meaning |
+| --- | --- | --- |
+| `trial_pathway` | 5,271 | trial → mechanism/pathway group |
+| `trial_drug` | 3,350 | trial → intervention/drug |
+| `variant_gene` | 1,274 | GWAS variant → reported gene |
+| `gene_disease` | 535 | gene → dementia disease group |
+| `drug_pathway` | 174 | drug → pathway (via mechanism) |
+| `topic_gene` | 78 | topic → gene (bridge) |
+| `gene_pathway` | 36 | gene → pathway group |
+| `topic_pathway` | 14 | topic → pathway (bridge) |
+| **total** | **10,732** | |
+
+(The builder dropped **1,949** dangling edges whose endpoints were not present as
+nodes — reported as `edges.dangling_dropped` in the manifest — so every retained
+edge resolves to two real nodes.)
+
+Graph inputs (from the manifest): `genes` 523, `gwas_associations` 7,351,
+`pathways` 9, `trials` 6,841, `target_evidence` 1,499, `functional_links` 3,372,
+`topic_links` 1,099, `topic_rollup` 9.
+
+### How to regenerate
+
+Run after the pipeline (and after the topic bridge, so the topic overlay is
+current):
+
+```bash
+# 1. Build the full graph (nodes.jsonl + edges.jsonl + graph_manifest.json)
+python3 translational-evidence/exports/build_evidence_graph.py
+
+# 2a. Build the zero-install browser viz (graph_data.js + evidence_graph.html)
+python3 translational-evidence/viz/build_graph_viz.py
+
+# 2b. Build the Neo4j-ready CSVs + loader (neo4j/{nodes,edges}.csv, load.cypher, README)
+python3 translational-evidence/exports/build_neo4j_export.py
+```
+
+The builder **scripts** live under `translational-evidence/exports/` and
+`translational-evidence/viz/` (source-controlled); all **generated** artifacts
+land under `data/exports/graph/` (gitignored). No counts are hardcoded — the
+scripts read the inputs, so a re-run against the full corpus just works.
+
+### Two ways to explore EVERYTHING with filters
+
+**(A) Zero-install browser (no Docker, no DB).** Open the self-contained HTML
+page — it loads `graph_data.js` via a plain `<script>` tag so it works under
+`file://`:
+
+```bash
+open data/exports/graph/evidence_graph.html
+```
+
+- **Internet caveat:** the page pulls sigma.js + graphology from a **CDN**
+  (jsDelivr), so it needs internet for those two libraries to render; the graph
+  *data* is fully local in `graph_data.js`. If offline, use option (B).
+- **Trials are toggled OFF by default** (`default_on_types` =
+  `variant, gene, pathway, drug, disease, topic`) so the 6,841 trial nodes do
+  not swamp the first paint — tick the **Trial** type to bring them in. Filter
+  by node type, score threshold, trial phase, and search to focus on any slice
+  of the full graph.
+
+**(B) Neo4j — full Cypher filtering (the user asked about this).** Load the
+entire un-capped graph into Neo4j and filter with Cypher. This is the most
+powerful way to slice everything, but it **needs Docker (or a running Neo4j DB)**
+— it is not zero-install. Full instructions, ready-to-run `load.cypher`, and
+eight worked filter queries are in:
+
+```
+data/exports/graph/neo4j/README.md
+```
+
+That README covers: starting `neo4j:5` with the export dir mounted, loading via
+`cypher-shell` or the Neo4j Browser, and Cypher recipes (under-translated
+pathways, microglia genes with strong genetic support, the full
+variant→gene→pathway→drug chain, pleiotropic genes across disease groups, trials
+by phase for a mechanism, highest-confidence Alzheimer variant→gene links, …).
+Expect **15,286** nodes and **10,732** relationships loaded. `disease_groups` is
+loaded as a Neo4j list (`'alzheimer' IN n.disease_groups`); `provenance` is a
+JSON string (filter with `CONTAINS`, or parse it in your app). APOC is **not**
+required.
+
+### Graph export files (all under `data/exports/graph/`, gitignored)
+
+| file | what it is |
+| --- | --- |
+| `nodes.jsonl` | 15,286 evidence nodes (`evidence_node.schema.json`) |
+| `edges.jsonl` | 10,732 evidence edges (`evidence_edge.schema.json`) |
+| `graph_manifest.json` | node/edge counts by type, inputs, layout, dangling-drop count |
+| `graph_data.js` | the same graph as `window.GRAPH` for the browser viz |
+| `evidence_graph.html` | zero-install sigma.js explorer (option A) |
+| `neo4j/nodes.csv`, `neo4j/edges.csv` | Neo4j `LOAD CSV` inputs |
+| `neo4j/load.cypher` | constraint + typed-label loader (no APOC) |
+| `neo4j/README.md`, `neo4j/neo4j_manifest.json` | load instructions + export manifest |
+
+`nodes.jsonl` and `edges.jsonl` are schema-validated by
+`translational-evidence/validate.py` (see §4) whenever they are present.
+
+### Sample node & edge (`2026-07-01` build)
+
+A `gene` node (`data/exports/graph/nodes.jsonl`):
+
+```json
+{
+  "disease_groups": ["alzheimer", "lewy_body_dementia", "mixed_dementia"],
+  "group": "lipid_metabolism",
+  "label": "APOE",
+  "node_id": "gene:ENSG00000130203",
+  "node_type": "gene",
+  "provenance": {
+    "gene_id": "ENSG00000130203",
+    "gwas_association_count": null,
+    "pathway_group": "lipid_metabolism",
+    "source": "genes",
+    "symbol": "APOE"
+  },
+  "score": 0.9668,
+  "scores": {"functional_support": 0.9516, "genetic_support": 0.9668},
+  "x": 400.0,
+  "y": 0.0
+}
+```
+
+A `variant_gene` edge (`data/exports/graph/edges.jsonl`):
+
+```json
+{
+  "edge_id": "e:vg:gwas:variant:APOE:gene:ENSG00000130203",
+  "edge_type": "variant_gene",
+  "evidence": "gwas",
+  "provenance": {
+    "association_id": "GCST001372:APOE:APOE#1",
+    "neglog10p": 15.154901959985743,
+    "p_value": 6.999999999999999e-16,
+    "pmid": "22245343",
+    "reported_symbol": "APOE",
+    "source": "gwas_associations.reported_genes",
+    "study_accession": "GCST001372"
+  },
+  "score": 0.5051633986661914,
+  "source_id": "variant:APOE",
+  "target_id": "gene:ENSG00000130203"
+}
+```
+
+---
+
+## 10. Data sources
 
 | Source | Endpoint | Used for |
 | --- | --- | --- |
