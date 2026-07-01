@@ -57,11 +57,36 @@ def get_json(
         with cache_path.open() as fh:
             return json.load(fh)
 
-    _throttle(min_interval)
-    resp = requests.get(url, params=params, timeout=timeout)
-    resp.raise_for_status()
-    data = resp.json()
+    data = _get_with_retry(url, params, timeout, min_interval)
 
     with cache_path.open("w") as fh:
         json.dump(data, fh)
     return data
+
+
+def _get_with_retry(
+    url: str,
+    params: dict[str, Any] | None,
+    timeout: int,
+    min_interval: float,
+    attempts: int = 5,
+) -> Any:
+    """GET with exponential backoff over transient network/SSL/5xx errors.
+
+    Long field runs make thousands of calls, so an occasional dropped
+    connection is expected and must not abort the pipeline.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        _throttle(min_interval)
+        try:
+            resp = requests.get(url, params=params, timeout=timeout)
+            if resp.status_code in (429, 500, 502, 503, 504):
+                resp.raise_for_status()
+            resp.raise_for_status()
+            return resp.json()
+        except (requests.exceptions.RequestException, ValueError) as exc:
+            last_exc = exc
+            if attempt < attempts - 1:
+                time.sleep(2**attempt)  # 1, 2, 4, 8, 16s
+    raise RuntimeError(f"GET failed after {attempts} attempts: {url}") from last_exc

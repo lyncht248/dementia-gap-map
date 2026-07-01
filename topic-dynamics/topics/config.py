@@ -30,27 +30,36 @@ NCBI_MIN_INTERVAL = 0.12 if NCBI_API_KEY else 0.34
 EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 ICITE_BASE = "https://icite.od.nih.gov/api"
 
-# --- Corpus construction caps ----------------------------------------------
-# Broad literature seed query. Kept close to the PROTOTYPE_BUILD_SPEC example.
+# --- Corpus definition ------------------------------------------------------
+# The corpus IS the field: every PubMed paper about dementia (broadly) that
+# also mentions GWAS. Dementia is covered by the MeSH tree (which subsumes
+# Alzheimer, Lewy body, frontotemporal, vascular, etc.) plus title/abstract
+# synonyms; the GWAS clause requires the paper to actually mention it.
 SEARCH_TERM = (
-    "(Alzheimer Disease[MeSH Terms] OR Alzheimer*[Title/Abstract] "
-    "OR dementia[Title/Abstract]) AND (GWAS OR genome-wide association "
-    "OR eQTL OR genetics[Title/Abstract])"
+    "("
+    "Dementia[MeSH Terms] OR dementia[Title/Abstract] "
+    "OR Alzheimer*[Title/Abstract] OR \"Alzheimer Disease\"[MeSH Terms] "
+    "OR frontotemporal[Title/Abstract] OR \"Lewy body\"[Title/Abstract] "
+    "OR \"cognitive impairment\"[Title/Abstract] OR neurodegenerat*[Title/Abstract]"
+    ") AND ("
+    "GWAS[Title/Abstract] OR \"genome-wide association\"[Title/Abstract] "
+    "OR \"genome wide association\"[Title/Abstract] "
+    "OR \"Genome-Wide Association Study\"[MeSH Terms]"
+    ")"
 )
-SEARCH_RETMAX = 120          # PMIDs pulled from the broad esearch seed
-MAX_PAPERS = 400             # hard cap on total corpus size
-MAX_CITERS_PER_PAPER = 200   # keep the co-citation fan-in bounded
-MAX_REFS_PER_PAPER = 300     # keep the coupling fan-out bounded
-
-# Keywords an expansion paper's title must touch to stay in-scope.
-TOPIC_KEYWORDS = (
-    "alzheimer", "dementia", "gwas", "genome-wide", "genome wide",
-    "genetic", "eqtl", "variant", "locus", "loci", "microglia", "tau",
-    "amyloid", "apoe", "trem2", "single-cell", "single cell", "snrna",
-    "neurodegenerat", "frontotemporal", "lewy", "polygenic", "heritability",
-)
+# 0 = no cap (ingest the whole field). Set a positive value for quick test runs.
+MAX_PAPERS = 0
+ESEARCH_PAGE = 500           # UIDs pulled per esummary history page
+# Cited-by lists for hub papers (e.g. APOE) can run to tens of thousands; cap
+# the fan-in so co-citation stays tractable. Cosine normalization handles the
+# rest.
+MAX_CITERS_PER_PAPER = 2000
 
 # --- Network parameters -----------------------------------------------------
+# References shared by more than this fraction of the corpus are field-defining
+# "hub" papers (e.g. APOE); they link everything to everything and only add
+# noise + cost, so they are ignored when building edges.
+MAX_NEIGHBOR_DF_FRACTION = 0.25
 MIN_COUPLING_WEIGHT = 0.05    # drop weak bibliographic-coupling edges
 MIN_COCITATION_WEIGHT = 0.05  # drop weak co-citation edges
 # Blend used when both edge types exist between a pair (see network/edges.py).

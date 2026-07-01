@@ -1,12 +1,12 @@
-"""Manual seed papers.
+"""Guaranteed backbone papers.
 
-Track A ultimately takes its seed PMIDs from Track B's GWAS/eQTL publications
-(see ``docs/working-agreement.md``). Until that handoff file exists, we
-bootstrap from a small hand-curated set of backbone dementia-genetics papers so
-the pipeline runs end-to-end on its own.
+The corpus is defined by the field query (see ``config.SEARCH_TERM``); these
+PMIDs are simply *unioned in* so a handful of well-known dementia-genetics
+papers are guaranteed present even if the query phrasing misses one. They do not
+drive corpus construction.
 
-If ``data/processed/translational-evidence/gwas_associations.jsonl`` exists,
-its ``publication.pmid`` values are merged in automatically.
+If ``data/processed/translational-evidence/gwas_associations.jsonl`` exists (the
+Track B handoff), its ``publication.pmid`` values are merged in the same way.
 """
 
 from __future__ import annotations

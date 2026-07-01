@@ -1,4 +1,9 @@
-"""PubMed E-utilities client: esearch, esummary, and elink (refs / cited-by)."""
+"""PubMed E-utilities client: esearch (with history), esummary, and elink refs.
+
+The corpus is the full result set of a broad field query, so retrieval uses the
+Entrez history server (WebEnv / query_key) and pages through every hit rather
+than capping at a retmax.
+"""
 
 from __future__ import annotations
 
@@ -19,21 +24,64 @@ def _common_params() -> dict[str, Any]:
     return params
 
 
-def esearch(term: str, retmax: int) -> list[str]:
-    """Return PMIDs matching ``term``."""
+def esearch_history(term: str) -> dict[str, Any]:
+    """Run the corpus query and park the results on the history server.
+
+    Returns ``{count, webenv, query_key}``.
+    """
     params = _common_params()
-    params.update({"db": "pubmed", "term": term, "retmax": retmax})
+    params.update({"db": "pubmed", "term": term, "usehistory": "y", "retmax": 0})
     data = get_json(
         f"{config.EUTILS_BASE}/esearch.fcgi",
         params=params,
         min_interval=config.NCBI_MIN_INTERVAL,
-        label="esearch",
+        label="esearch_hist",
     )
-    return data.get("esearchresult", {}).get("idlist", [])
+    res = data.get("esearchresult", {})
+    return {
+        "count": int(res.get("count", 0)),
+        "webenv": res.get("webenv"),
+        "query_key": res.get("querykey"),
+    }
+
+
+def esummary_history(
+    webenv: str,
+    query_key: str,
+    count: int,
+    page: int,
+    limit: int = 0,
+    log=print,
+) -> dict[str, dict[str, Any]]:
+    """Page through the parked result set, returning esummary records by PMID."""
+    out: dict[str, dict[str, Any]] = {}
+    target = min(count, limit) if limit else count
+    for start in range(0, target, page):
+        params = _common_params()
+        params.update(
+            {
+                "db": "pubmed",
+                "WebEnv": webenv,
+                "query_key": query_key,
+                "retstart": start,
+                "retmax": min(page, target - start),
+            }
+        )
+        data = get_json(
+            f"{config.EUTILS_BASE}/esummary.fcgi",
+            params=params,
+            min_interval=config.NCBI_MIN_INTERVAL,
+            label="esummary",
+        )
+        result = data.get("result", {})
+        for uid in result.get("uids", []):
+            out[uid] = result[uid]
+        log(f"[pubmed] esummary {min(start + page, target)}/{target}")
+    return out
 
 
 def esummary(pmids: list[str]) -> dict[str, dict[str, Any]]:
-    """Return raw esummary records keyed by PMID, batching in groups of 200."""
+    """Fetch esummary records for an explicit PMID list (used for extra seeds)."""
     out: dict[str, dict[str, Any]] = {}
     for i in range(0, len(pmids), 200):
         batch = pmids[i : i + 200]
@@ -72,13 +120,15 @@ def _elink(pmid: str, linkname: str, label: str) -> list[str]:
 
 
 def get_references(pmid: str) -> list[str]:
-    """PMIDs this paper cites (bibliographic coupling input)."""
-    refs = _elink(pmid, "pubmed_pubmed_refs", "elink_refs")
-    return refs[: config.MAX_REFS_PER_PAPER]
+    """PMIDs this paper cites (drives bibliographic coupling)."""
+    return _elink(pmid, "pubmed_pubmed_refs", "elink_refs")
 
 
 def get_citations(pmid: str) -> list[str]:
-    """PMIDs that cite this paper (co-citation input)."""
+    """PMIDs that cite this paper (drives co-citation).
+
+    Capped at ``MAX_CITERS_PER_PAPER``, keeping the most recent (elink returns
+    citing PMIDs in ascending, ~chronological order).
+    """
     citers = _elink(pmid, "pubmed_pubmed_citedin", "elink_citedin")
-    # Keep the most recent (elink returns ascending PMID ~ chronological).
     return citers[-config.MAX_CITERS_PER_PAPER :]

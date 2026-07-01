@@ -42,6 +42,22 @@ Use these shared schemas when publishing stable outputs:
 
 Do not make the visual layer depend on notebook outputs. Promote useful notebook results into scripts or exports first.
 
+## Corpus definition
+
+The corpus **is** the field: every PubMed paper about dementia (broadly, via the
+`Dementia` MeSH tree plus Alzheimer / frontotemporal / Lewy-body / vascular /
+cognitive-impairment synonyms) that **also mentions GWAS**. This is a full-field
+subset, not a seed-and-expand sample — the query in `config.SEARCH_TERM` defines
+membership, and every match is ingested (no size cap by default).
+
+For each paper we pull its **title/metadata, reference list, and cited-by list**
+— no abstracts or full text. References drive bibliographic coupling; cited-by
+drives the co-citation network.
+
+Hand-curated backbone papers (`topics/ingest/seeds.py`) and any Track B GWAS
+PMIDs are unioned in so they are guaranteed present, but they do not drive corpus
+construction.
+
 ## Pipeline
 
 The `topics/` package implements the end-to-end pipeline (the workspace folder
@@ -50,10 +66,10 @@ importable code lives in `topics/` and `run.py` is the entry point).
 
 ```text
 topics/
-  config.py            # paths, corpus caps, network + scoring parameters
-  ingest/              # PubMed (esearch/esummary/elink) + iCite, disk-cached
+  config.py            # query, corpus/network/scoring parameters
+  ingest/              # PubMed (esearch history/esummary/elink refs) + iCite, cached
   normalize/           # esummary + iCite -> paper.schema.json records
-  network/             # bibliographic-coupling + co-citation edges
+  network/             # coupling + co-citation edges, both derived from references
   cluster/             # greedy-modularity communities + TF-IDF labels
   score/               # yearly trajectories + explainable emergence scores
   exports/             # writers for the four handoff files
@@ -61,20 +77,24 @@ run.py                 # entry point
 validate.py            # checks outputs against shared/schemas
 ```
 
+**Bibliographic coupling** links papers that share references; **co-citation**
+links papers that are cited together by later papers (from cited-by lists).
+Shared references/citers touching more than `MAX_NEIGHBOR_DF_FRACTION` of the
+corpus are dropped as uninformative hubs.
+
 ### Run
 
 ```bash
 pip install -r requirements.txt
 cd topic-dynamics
-python run.py --max-papers 300      # manual + Track B seeds, PubMed esearch expansion
-python run.py --no-search           # manual/Track-B seeds only (offline-friendly, fast)
+python run.py                       # ingest the whole dementia+GWAS field
+python run.py --max-papers 500      # cap the corpus for a quick test run
 python validate.py                  # schema-check the outputs
 ```
 
-Seeds come from `topics/ingest/seeds.py` (hand-curated backbone papers) and, when
-present, `data/processed/translational-evidence/gwas_associations.jsonl` from
-Track B. Every API response is cached under `data/raw/topic-dynamics/cache/`, so
-re-runs are fast and offline.
+Every API response is cached under `data/raw/topic-dynamics/cache/`, so re-runs
+are fast and offline. A full-field run makes one `elink` call per paper
+(throttled to NCBI's rate limit); set `NCBI_API_KEY` to go faster.
 
 ### Outputs
 

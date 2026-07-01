@@ -1,9 +1,16 @@
-"""Bibliographic-coupling and co-citation edges over the corpus.
+"""Bibliographic-coupling and co-citation edges.
 
-Bibliographic coupling: two papers are linked when they cite the same earlier
-papers (known at publication time -> leakage-safe).
-Co-citation: two papers are linked when later papers cite both of them
-(current-state view of how the field relates them).
+- Bibliographic coupling: papers A and B are linked when they *share
+  references* (they cite the same earlier work). Input: each corpus paper's
+  reference list.
+
+- Co-citation: papers X and Y are linked when later papers *cite both of them*.
+  Input: each corpus paper's cited-by list (all citing papers, not just those
+  in the corpus), giving the full co-citation signal.
+
+Shared items (a reference, or a citing paper) touching more than
+``MAX_NEIGHBOR_DF_FRACTION`` of the corpus are dropped as uninformative hubs
+that would otherwise connect everything to everything.
 """
 
 from __future__ import annotations
@@ -19,29 +26,27 @@ Pair = tuple[str, str]
 
 
 def _similarity_edges(
-    adjacency: dict[str, list[str]],
-    corpus: set[str],
+    node_neighbours: dict[str, list[str]],
+    sizes: dict[str, int],
     min_weight: float,
+    max_df: int,
 ) -> dict[Pair, dict[str, float]]:
-    """Cosine-normalized overlap edges from a paper -> neighbour-set mapping."""
-    sizes = {p: len(set(adjacency.get(p, []))) for p in corpus}
+    """Cosine-normalized overlap edges from a node -> shared-neighbour mapping.
 
-    # Invert: neighbour -> corpus papers that touch it.
-    neighbour_to_papers: dict[str, set[str]] = defaultdict(set)
-    for paper in corpus:
-        for neighbour in set(adjacency.get(paper, [])):
-            neighbour_to_papers[neighbour].add(paper)
-
+    ``node_neighbours`` maps each shared item (a reference, or a citing paper)
+    to the nodes that touch it; ``sizes`` is each node's total neighbour count
+    used for cosine normalization.
+    """
     shared: dict[Pair, int] = defaultdict(int)
-    for papers in neighbour_to_papers.values():
-        if len(papers) < 2:
+    for nodes in node_neighbours.values():
+        if len(nodes) < 2 or len(nodes) > max_df:
             continue
-        for a, b in combinations(sorted(papers), 2):
+        for a, b in combinations(sorted(nodes), 2):
             shared[(a, b)] += 1
 
     edges: dict[Pair, dict[str, float]] = {}
     for (a, b), count in shared.items():
-        denom = sqrt(sizes[a] * sizes[b])
+        denom = sqrt(sizes.get(a, 0) * sizes.get(b, 0))
         if not denom:
             continue
         weight = count / denom
@@ -56,11 +61,29 @@ def build_edges(
     citers: dict[str, list[str]],
 ) -> dict[str, Any]:
     """Return coupling edges, co-citation edges, and blended graph weights."""
-    corpus_set = set(corpus)
-    coupling = _similarity_edges(refs, corpus_set, config.MIN_COUPLING_WEIGHT)
-    cocitation = _similarity_edges(citers, corpus_set, config.MIN_COCITATION_WEIGHT)
+    max_df = max(2, int(config.MAX_NEIGHBOR_DF_FRACTION * len(corpus)))
 
-    # Blend the two edge types into a single weight for clustering.
+    # Bibliographic coupling: invert paper -> references into reference -> papers.
+    ref_sizes = {p: len(set(refs.get(p, []))) for p in corpus}
+    ref_to_papers: dict[str, list[str]] = defaultdict(list)
+    for paper in corpus:
+        for ref in set(refs.get(paper, [])):
+            ref_to_papers[ref].append(paper)
+    coupling = _similarity_edges(
+        ref_to_papers, ref_sizes, config.MIN_COUPLING_WEIGHT, max_df
+    )
+
+    # Co-citation: invert paper -> its citers into citing-paper -> corpus papers
+    # it cites, so each citing paper contributes co-citation pairs.
+    citer_sizes = {p: len(set(citers.get(p, []))) for p in corpus}
+    citing_to_papers: dict[str, list[str]] = defaultdict(list)
+    for paper in corpus:
+        for citer in set(citers.get(paper, [])):
+            citing_to_papers[citer].append(paper)
+    cocitation = _similarity_edges(
+        citing_to_papers, citer_sizes, config.MIN_COCITATION_WEIGHT, max_df
+    )
+
     blended: dict[Pair, float] = defaultdict(float)
     for pair, e in coupling.items():
         blended[pair] += config.COUPLING_BLEND * e["weight"]
@@ -73,7 +96,10 @@ def build_edges(
 def to_export_records(edges: dict[str, Any]) -> list[dict[str, Any]]:
     """Flatten coupling + co-citation edges into paper_edge.schema records."""
     records: list[dict[str, Any]] = []
-    for edge_type, key in (("bibliographic_coupling", "coupling"), ("co_citation", "cocitation")):
+    for edge_type, key in (
+        ("bibliographic_coupling", "coupling"),
+        ("co_citation", "cocitation"),
+    ):
         for (a, b), e in edges[key].items():
             records.append(
                 {
