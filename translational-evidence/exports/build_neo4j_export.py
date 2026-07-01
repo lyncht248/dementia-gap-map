@@ -260,6 +260,20 @@ def build_load_cypher(node_types, edge_types):
         lines.append("    r.edge_type = row.edge_type;")
         lines.append("")
 
+    lines.append("// --- 3.5 OPTIONAL: per-type node COLOURS in Neo4j Browser. ---")
+    lines.append("// Neo4j Browser colours nodes by a single label; because every "
+                 "node also carries")
+    lines.append("// the shared :Entity label (used above as the load key/index), "
+                 "the Browser paints")
+    lines.append("// them all one colour. Removing :Entity makes it colour by "
+                 ":Gene/:Pathway/:Drug/etc.")
+    lines.append("// Run this ONCE after your final load (re-running the loader "
+                 "above needs :Entity, so")
+    lines.append("// drop the database first if you want to reload). Uncomment to "
+                 "use:")
+    lines.append("// MATCH (n:Entity) REMOVE n:Entity;")
+    lines.append("")
+
     lines.append("// --- 4. Sanity counts. ---")
     lines.append("MATCH (n) RETURN labels(n) AS labels, count(*) AS n "
                  "ORDER BY n DESC;")
