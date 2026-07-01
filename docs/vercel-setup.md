@@ -10,7 +10,7 @@ automatically. No GitHub Actions workflow or webhook is required.
 
 This is already set up:
 
-- **Vercel project:** `dementia-gap-map` (scope: `lyncht248's projects`)
+- **Vercel project:** `dementia-gap-map` (scope: `et-al` team, id `et-al-746f64e1`)
 - **GitHub repo:** `lyncht248/dementia-gap-map`
 - **Production branch:** `main`
 
