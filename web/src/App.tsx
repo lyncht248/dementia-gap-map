@@ -8,7 +8,6 @@ export default function App() {
   const [data, setData] = useState<MapData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [viewMode, setViewMode] = useState<"clusters" | "all">("clusters");
   const [selectMode, setSelectMode] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -53,6 +52,14 @@ export default function App() {
     [data, selectedIds]
   );
 
+  const resetAll = () => {
+    setSelectedIds(new Set());
+    setActiveGroups(new Set(data?.clusters.map((c) => c.pathway_group)));
+    setYearRange(yearBounds);
+    setSelectMode(false);
+    setFiltersOpen(false);
+  };
+
   const toggleGroup = (g: string) =>
     setActiveGroups((prev) => {
       const next = new Set(prev);
@@ -80,11 +87,6 @@ export default function App() {
           Drag to pan, scroll to zoom, then draw a region to inspect a group of
           papers below.
         </p>
-        {data.generated_note && (
-          <span className="note-badge" title={data.generated_note}>
-            sample data
-          </span>
-        )}
       </header>
 
       <section className="map-panel">
@@ -153,7 +155,7 @@ export default function App() {
         <MapCanvas
           papers={data.papers}
           clusters={data.clusters}
-          viewMode={viewMode}
+          viewMode="clusters"
           selectMode={selectMode}
           isActive={isActive}
           selectedIds={selectedIds}
@@ -161,23 +163,10 @@ export default function App() {
             setSelectedIds(new Set(ids));
             setSelectMode(false);
           }}
+          onReset={resetAll}
         />
 
         <div className="toolbar toolbar-bottom">
-          <div className="segmented">
-            <button
-              className={viewMode === "clusters" ? "seg on" : "seg"}
-              onClick={() => setViewMode("clusters")}
-            >
-              Clusters
-            </button>
-            <button
-              className={viewMode === "all" ? "seg on" : "seg"}
-              onClick={() => setViewMode("all")}
-            >
-              All papers
-            </button>
-          </div>
           <span className="count-note">{data.papers.length} papers</span>
         </div>
       </section>
