@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/pathway.schema.json",
+  "title": "Pathway",
+  "type": "object",
+  "required": ["pathway_id", "label"],
+  "properties": {
+    "pathway_id": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "source": {
+      "type": ["string", "null"]
+    },
+    "gene_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "mechanism_group": {
+      "type": ["string", "null"],
+      "description": "Prototype mechanism grouping such as amyloid, tau, microglia, lipid metabolism, vascular, or biomarker."
+    }
+  },
+  "additionalProperties": true
+}

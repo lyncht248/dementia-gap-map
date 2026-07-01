@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/trial.schema.json",
+  "title": "Clinical Trial",
+  "type": "object",
+  "required": ["nct_id", "brief_title", "overall_status"],
+  "properties": {
+    "nct_id": {
+      "type": "string"
+    },
+    "brief_title": {
+      "type": "string"
+    },
+    "official_title": {
+      "type": ["string", "null"]
+    },
+    "overall_status": {
+      "type": "string"
+    },
+    "study_type": {
+      "type": ["string", "null"]
+    },
+    "phases": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "conditions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "interventions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": ["string", "null"] },
+          "description": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      }
+    },
+    "start_date": {
+      "type": ["string", "null"]
+    },
+    "completion_date": {
+      "type": ["string", "null"]
+    },
+    "trial_category": {
+      "type": ["string", "null"],
+      "enum": ["therapeutic", "diagnostic_biomarker", "imaging", "observational", "lifestyle_care", null]
+    },
+    "mechanism_group": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

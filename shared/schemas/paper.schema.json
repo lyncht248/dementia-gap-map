@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/paper.schema.json",
+  "title": "Paper",
+  "type": "object",
+  "required": ["paper_id", "title", "year", "sources"],
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Stable internal paper identifier, preferably pmid:{PMID} when available."
+    },
+    "pmid": {
+      "type": ["string", "null"]
+    },
+    "doi": {
+      "type": ["string", "null"]
+    },
+    "title": {
+      "type": "string"
+    },
+    "abstract": {
+      "type": ["string", "null"]
+    },
+    "year": {
+      "type": "integer",
+      "minimum": 1800
+    },
+    "journal": {
+      "type": ["string", "null"]
+    },
+    "authors": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "citation_count": { "type": ["number", "null"] },
+        "relative_citation_ratio": { "type": ["number", "null"] },
+        "apt": { "type": ["number", "null"] },
+        "is_clinical": { "type": ["boolean", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "sources": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    }
+  },
+  "additionalProperties": true
+}

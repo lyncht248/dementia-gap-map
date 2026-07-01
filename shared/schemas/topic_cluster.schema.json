@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/topic_cluster.schema.json",
+  "title": "Topic Cluster",
+  "type": "object",
+  "required": ["topic_id", "label", "paper_ids", "year_start", "year_end"],
+  "properties": {
+    "topic_id": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "summary": {
+      "type": ["string", "null"]
+    },
+    "paper_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "top_terms": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "year_start": {
+      "type": "integer"
+    },
+    "year_end": {
+      "type": "integer"
+    },
+    "scores": {
+      "type": "object",
+      "properties": {
+        "emergence": { "type": ["number", "null"] },
+        "growth": { "type": ["number", "null"] },
+        "influence": { "type": ["number", "null"] },
+        "cohesion": { "type": ["number", "null"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

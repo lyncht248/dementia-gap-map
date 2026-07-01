@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/target_evidence.schema.json",
+  "title": "Target Evidence",
+  "type": "object",
+  "required": ["target_id", "target_label", "disease_id"],
+  "properties": {
+    "target_id": {
+      "type": "string"
+    },
+    "target_label": {
+      "type": "string"
+    },
+    "disease_id": {
+      "type": "string"
+    },
+    "disease_label": {
+      "type": ["string", "null"]
+    },
+    "gene_id": {
+      "type": ["string", "null"]
+    },
+    "source": {
+      "type": "string"
+    },
+    "scores": {
+      "type": "object",
+      "properties": {
+        "overall": { "type": ["number", "null"] },
+        "genetic_association": { "type": ["number", "null"] },
+        "literature": { "type": ["number", "null"] },
+        "clinical": { "type": ["number", "null"] },
+        "affected_pathway": { "type": ["number", "null"] },
+        "rna_expression": { "type": ["number", "null"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

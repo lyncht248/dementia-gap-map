@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/gene.schema.json",
+  "title": "Gene",
+  "type": "object",
+  "required": ["gene_id", "symbol"],
+  "properties": {
+    "gene_id": {
+      "type": "string",
+      "description": "Stable gene identifier, preferably Ensembl when available."
+    },
+    "symbol": {
+      "type": "string"
+    },
+    "name": {
+      "type": ["string", "null"]
+    },
+    "entrez_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "aliases": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "evidence_scores": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

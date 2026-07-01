@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/topic_trajectory.schema.json",
+  "title": "Topic Trajectory",
+  "type": "object",
+  "required": ["trajectory_id", "topic_ids", "yearly_counts"],
+  "properties": {
+    "trajectory_id": {
+      "type": "string"
+    },
+    "topic_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "parent_trajectory_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "child_trajectory_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "yearly_counts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["year", "paper_count"],
+        "properties": {
+          "year": { "type": "integer" },
+          "paper_count": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyncht248/dementia-gap-map/shared/schemas/paper_edge.schema.json",
+  "title": "Paper Edge",
+  "type": "object",
+  "required": ["source_paper_id", "target_paper_id", "edge_type"],
+  "properties": {
+    "source_paper_id": {
+      "type": "string"
+    },
+    "target_paper_id": {
+      "type": "string"
+    },
+    "edge_type": {
+      "type": "string",
+      "enum": ["citation", "co_citation", "bibliographic_coupling", "similarity"]
+    },
+    "weight": {
+      "type": "number",
+      "default": 1
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

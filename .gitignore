@@ -1,0 +1,31 @@
+# Local environments
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Python
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Node, if a visual layer is added later
+node_modules/
+dist/
+build/
+
+# Generated data: keep directory placeholders and docs only.
+data/raw/**
+data/interim/**
+data/processed/**
+data/exports/**
+!data/**/
+!data/**/.gitkeep
+!data/README.md
+
+# Logs and temporary outputs
+*.log
+tmp/
