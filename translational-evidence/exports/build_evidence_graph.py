@@ -61,6 +61,8 @@ NODES_PATH = OUT_DIR / "nodes.jsonl"
 EDGES_PATH = OUT_DIR / "edges.jsonl"
 MANIFEST_PATH = OUT_DIR / "graph_manifest.json"
 
+ENTITY_METRICS_PATH = common.PROCESSED_DIR / "entity_metrics.jsonl"
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -831,6 +833,123 @@ def assign_layout(nodes):
 
 
 # ---------------------------------------------------------------------------
+# Per-entity metrics join (from data/processed/.../entity_metrics.jsonl)
+# ---------------------------------------------------------------------------
+#
+# entity_metrics carries a transparent, machine-readable METRICS record per
+# gene / variant / pathway. Each metric is a dotted "<group>.<name>" key mapping
+# to {"value": ..., "source": ...}. We (a) attach the FULL metrics object onto
+# the matching graph node as node['metrics'] (nested, for completeness) and
+# (b) hoist a compact set of FLAT, queryable properties (e.g. stopped_ratio,
+# direction_agreement) onto the node so Neo4j Cypher and the HTML filters can use
+# them directly. Nothing is fabricated: every hoisted value is copied verbatim
+# from the entity_metrics record.
+#
+# Join keys (entity_metrics.entity_id -> graph node_id):
+#   gene    : node_id == "gene:" + entity_id      (entity_id is the bare gene_id)
+#   variant : node_id == entity_id                (both use the "variant:" prefix)
+#   pathway : node_id == "pathway:" + pathway_group (mechanism_group crosswalk)
+
+# node_type -> {flat_node_property: dotted_metric_key}. Only these compact
+# properties are hoisted onto the node top-level; the full metrics object is
+# always attached as node['metrics'] regardless of this map.
+FLAT_METRIC_KEYS = {
+    "gene": {
+        "stopped_ratio": "clinical.stopped_ratio",
+        "direction_agreement": "genetic.direction_agreement",
+        "n_conflicting": "genetic.n_conflicting",
+        "n_trials": "clinical.n_trials",
+        "first_gwas_year": "temporal.first_gwas_year",
+        "latest_gwas_year": "temporal.latest_gwas_year",
+        "n_recent_gwas": "temporal.n_recent_gwas",
+        "has_approval": "clinical.has_approval",
+        "translation_gap": "composite.translation_gap",
+    },
+    "pathway": {
+        "stopped_ratio": "clinical.stopped_ratio",
+        "has_approval": "clinical.has_approval",
+        "n_trials": "clinical.n_trials",
+        "n_drugs": "clinical.n_drugs",
+        "first_trial_year": "temporal.first_trial_year",
+        "latest_trial_year": "temporal.latest_trial_year",
+        "n_recent_trials": "temporal.n_recent_trials",
+        "translation_gap": "composite.translation_gap",
+    },
+    "variant": {
+        "n_associations": "genetic.n_associations",
+        "n_studies": "genetic.n_studies",
+        "first_year": "temporal.first_year",
+        "latest_year": "temporal.latest_year",
+        "n_recent": "temporal.n_recent",
+        "direction_agreement": "genetic.direction_agreement",
+    },
+}
+
+
+def _metric_value(metrics, dotted_key):
+    """Return the scalar 'value' for a dotted metric key, or None if absent."""
+    entry = metrics.get(dotted_key)
+    if isinstance(entry, dict):
+        return entry.get("value")
+    return None
+
+
+def metric_node_id(rec):
+    """Map an entity_metrics record to its expected graph node_id, or None."""
+    etype = rec.get("entity_type")
+    eid = rec.get("entity_id")
+    if not etype or not eid:
+        return None
+    if etype == "gene":
+        return gene_node_id(eid)
+    if etype == "variant":
+        # entity_id already carries the "variant:" prefix (variant:<rsid>).
+        return str(eid) if str(eid).startswith("variant:") else variant_node_id(eid)
+    if etype == "pathway":
+        pg = rec.get("pathway_group")
+        return pathway_node_id(pg) if pg else None
+    return None
+
+
+def load_entity_metrics():
+    """Load entity_metrics.jsonl into {node_id: record}, or {} if absent."""
+    if not ENTITY_METRICS_PATH.exists():
+        common.log("entity_metrics.jsonl not found; skipping metrics join")
+        return {}
+    by_node = {}
+    for rec in common.read_jsonl(ENTITY_METRICS_PATH):
+        nid = metric_node_id(rec)
+        if nid is not None:
+            by_node[nid] = rec
+    return by_node
+
+
+def attach_metrics(nodes, metrics_by_node):
+    """Attach flat metric props + full metrics object onto matching nodes.
+
+    Returns (matched, unmatched_metric_records) counts by node_type for the
+    manifest / report. Mutates nodes in place.
+    """
+    matched = {}
+    matched_ids = set()
+    for n in nodes:
+        rec = metrics_by_node.get(n["node_id"])
+        if rec is None:
+            continue
+        metrics = rec.get("metrics") or {}
+        # Full nested metrics object for completeness.
+        n["metrics"] = metrics
+        # Compact, flat, queryable properties hoisted to the node top-level.
+        flat_map = FLAT_METRIC_KEYS.get(n["node_type"], {})
+        for prop, dotted in flat_map.items():
+            n[prop] = _metric_value(metrics, dotted)
+        matched[n["node_type"]] = matched.get(n["node_type"], 0) + 1
+        matched_ids.add(n["node_id"])
+    unmatched = sorted(set(metrics_by_node) - matched_ids)
+    return matched, unmatched
+
+
+# ---------------------------------------------------------------------------
 # Assembly
 # ---------------------------------------------------------------------------
 
@@ -934,6 +1053,16 @@ def main():
     common.log("assigning deterministic layout")
     assign_layout(nodes)
 
+    common.log("joining per-entity metrics onto nodes")
+    metrics_by_node = load_entity_metrics()
+    metrics_matched, metrics_unmatched = attach_metrics(nodes, metrics_by_node)
+    if metrics_by_node:
+        common.log("attached metrics to %d node(s) by type: %s"
+                   % (sum(metrics_matched.values()), metrics_matched))
+        if metrics_unmatched:
+            common.log("%d entity_metrics record(s) had no matching node"
+                       % len(metrics_unmatched))
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     n_written = common.write_jsonl(NODES_PATH, nodes)
     e_written = common.write_jsonl(EDGES_PATH, edges)
@@ -952,6 +1081,16 @@ def main():
             "total": e_written,
             "by_type": edge_type_counts,
             "dangling_dropped": dropped,
+        },
+        "metrics": {
+            "source": str(ENTITY_METRICS_PATH.relative_to(common.REPO_ROOT))
+            if ENTITY_METRICS_PATH.exists() else None,
+            "records_loaded": len(metrics_by_node),
+            "attached_by_type": metrics_matched,
+            "unmatched_records": len(metrics_unmatched),
+            "flat_keys": FLAT_METRIC_KEYS,
+            "note": ("full metrics object attached as node['metrics']; flat "
+                     "queryable props hoisted per FLAT_METRIC_KEYS"),
         },
         "layout": {
             "columns_x": _COLUMN_X,
@@ -986,6 +1125,13 @@ def main():
     print("Edges: %d total (dangling dropped: %d)" % (e_written, dropped))
     for k, v in edge_type_counts.items():
         print("  %-14s %d" % (k, v))
+    if metrics_by_node:
+        print("Metrics attached: %d node(s)" % sum(metrics_matched.values()))
+        for k, v in sorted(metrics_matched.items()):
+            print("  %-9s %d" % (k, v))
+        if metrics_unmatched:
+            print("  unmatched entity_metrics records: %d"
+                  % len(metrics_unmatched))
 
 
 if __name__ == "__main__":

@@ -45,11 +45,17 @@ Run:
 
 import csv
 import json
+import os
 import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import common  # noqa: E402  (import after sys.path bootstrap)
+
+
+# "Now" for recency example queries. Documented + overridable via TE_CURRENT_YEAR
+# so it matches how entity_metrics.jsonl was computed; NOT datetime.today.
+CURRENT_YEAR = int(os.environ.get("TE_CURRENT_YEAR", "2026"))
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +77,43 @@ MANIFEST_PATH = OUT_DIR / "neo4j_manifest.json"
 # CSV headers (order is contractual: the loader relies on these names)
 # ---------------------------------------------------------------------------
 
+# Flat per-entity metric columns hoisted from entity_metrics (via the JSONL
+# export's top-level node props, written by build_evidence_graph.py). They are a
+# UNION across gene/variant/pathway node types; a column is blank (Cypher null)
+# for node types that do not carry that metric. Kept flat + queryable so Cypher
+# and the HTML filters can use them directly. Split into int-like and float-like
+# so the loader can toInteger()/toFloat() appropriately, plus a boolean.
+METRIC_INT_COLUMNS = [
+    "n_conflicting",       # gene
+    "n_trials",            # gene, pathway
+    "n_drugs",             # pathway
+    "n_associations",      # variant
+    "n_studies",           # variant
+    "first_gwas_year",     # gene
+    "latest_gwas_year",    # gene
+    "n_recent_gwas",       # gene
+    "first_trial_year",    # pathway
+    "latest_trial_year",   # pathway
+    "n_recent_trials",     # pathway
+    "first_year",          # variant
+    "latest_year",         # variant
+    "n_recent",            # variant
+]
+METRIC_FLOAT_COLUMNS = [
+    "stopped_ratio",         # gene, pathway
+    "direction_agreement",   # gene, variant
+    "metrics_translation_gap",  # gene, pathway (renamed to avoid clashing with
+                                # the existing 'translation_gap' score column)
+]
+METRIC_BOOL_COLUMNS = [
+    "has_approval",          # gene, pathway
+]
+# Column name -> the flat property name on the node (differs only where renamed).
+METRIC_COLUMN_TO_NODE_PROP = {
+    "metrics_translation_gap": "translation_gap",
+}
+METRIC_COLUMNS = METRIC_INT_COLUMNS + METRIC_FLOAT_COLUMNS + METRIC_BOOL_COLUMNS
+
 NODE_HEADER = [
     "node_id",
     "node_type",
@@ -81,6 +124,7 @@ NODE_HEADER = [
     "translation_gap",
     "disease_groups",   # pipe-joined
     "pathway_group",
+] + METRIC_COLUMNS + [
     "provenance",       # JSON string
 ]
 
@@ -132,6 +176,16 @@ def _fmt_num(x):
     return str(x)
 
 
+def _fmt_bool(x):
+    """Render a boolean for CSV as 'true'/'false'; None -> '' (Cypher null).
+
+    Neo4j's toBoolean() parses the lowercase strings 'true'/'false'.
+    """
+    if x is None:
+        return ""
+    return "true" if bool(x) else "false"
+
+
 def _pathway_group_for(node):
     """Best single pathway/mechanism group string for a node, or ''.
 
@@ -158,7 +212,7 @@ def node_to_row(node):
     scores = node.get("scores") or {}
     disease_groups = node.get("disease_groups") or []
     provenance = node.get("provenance") or {}
-    return [
+    row = [
         node.get("node_id", ""),
         node.get("node_type", ""),
         node.get("label", ""),
@@ -168,8 +222,17 @@ def node_to_row(node):
         _fmt_num(scores.get("translation_gap")),
         "|".join(str(g) for g in disease_groups if g),
         _pathway_group_for(node),
-        json.dumps(provenance, ensure_ascii=False, sort_keys=True),
     ]
+    # Flat per-entity metric columns (hoisted onto the node top-level by
+    # build_evidence_graph.py). Absent props render as '' -> Cypher null.
+    for col in METRIC_INT_COLUMNS + METRIC_FLOAT_COLUMNS:
+        prop = METRIC_COLUMN_TO_NODE_PROP.get(col, col)
+        row.append(_fmt_num(node.get(prop)))
+    for col in METRIC_BOOL_COLUMNS:
+        prop = METRIC_COLUMN_TO_NODE_PROP.get(col, col)
+        row.append(_fmt_bool(node.get(prop)))
+    row.append(json.dumps(provenance, ensure_ascii=False, sort_keys=True))
+    return row
 
 
 def edge_to_row(edge, edge_id):
@@ -228,7 +291,15 @@ def build_load_cypher(node_types, edge_types):
                  "CASE WHEN row.disease_groups IS NULL OR row.disease_groups = '' "
                  "THEN [] ELSE split(row.disease_groups, '|') END,")
     lines.append("    n.pathway_group      = row.pathway_group,")
-    lines.append("    n.provenance         = row.provenance;")
+    lines.append("    n.provenance         = row.provenance,")
+    lines.append("    // --- flat per-entity metrics (from entity_metrics.jsonl) ---")
+    for col in METRIC_INT_COLUMNS:
+        lines.append("    n.%-20s = toInteger(row.%s)," % (col, col))
+    for col in METRIC_FLOAT_COLUMNS:
+        lines.append("    n.%-20s = toFloat(row.%s)," % (col, col))
+    for i, col in enumerate(METRIC_BOOL_COLUMNS):
+        term = ";" if i == len(METRIC_BOOL_COLUMNS) - 1 else ","
+        lines.append("    n.%-20s = toBoolean(row.%s)%s" % (col, col, term))
     lines.append("")
 
     lines.append("// --- 2. Per-type label passes (APOC-free: one static SET "
@@ -279,6 +350,62 @@ def build_load_cypher(node_types, edge_types):
                  "ORDER BY n DESC;")
     lines.append("MATCH ()-[r]->() RETURN type(r) AS rel, count(*) AS n "
                  "ORDER BY n DESC;")
+    lines.append("")
+
+    # --- 5. Example queries that USE the flat metrics ----------------------
+    recent_from = CURRENT_YEAR - 2
+    lines.append("// --- 5. Example queries USING the per-entity metrics. ---")
+    lines.append("// These are read-only illustrations; the metrics are "
+                 "transparent signals -")
+    lines.append("// compose your own verdicts from them. All are commented out; "
+                 "copy one to run.")
+    lines.append("")
+    lines.append("// 5a. Genetically supported but clinically stalled genes:")
+    lines.append("//     strong genetic support yet a high share of "
+                 "stopped/terminated trials")
+    lines.append("//     in their mechanism. (No verdict baked in - just the "
+                 "metrics side by side.)")
+    lines.append("// MATCH (g:Gene)")
+    lines.append("// WHERE g.genetic_support >= 0.7 AND g.stopped_ratio >= 0.3 "
+                 "AND g.n_trials >= 5")
+    lines.append("// RETURN g.label, g.genetic_support, g.stopped_ratio, "
+                 "g.n_trials, g.metrics_translation_gap")
+    lines.append("// ORDER BY g.stopped_ratio DESC, g.genetic_support DESC "
+                 "LIMIT 25;")
+    lines.append("")
+    lines.append("// 5b. Recently-emerging loci: variants whose latest GWAS is "
+                 "in the last ~3 years")
+    lines.append("//     (latest_year >= %d, i.e. CURRENT_YEAR-2) with a strong "
+                 "association." % recent_from)
+    lines.append("// MATCH (v:Variant)")
+    lines.append("// WHERE v.latest_year >= %d AND v.n_recent >= 1"
+                 % recent_from)
+    lines.append("// RETURN v.label, v.latest_year, v.n_recent, "
+                 "v.n_associations, v.n_studies")
+    lines.append("// ORDER BY v.latest_year DESC, v.n_associations DESC "
+                 "LIMIT 25;")
+    lines.append("")
+    lines.append("// 5c. Under-translated pathways: high genetic/functional "
+                 "translation_gap yet")
+    lines.append("//     never reached approval. Also surface stopped_ratio and "
+                 "the drug count.")
+    lines.append("// MATCH (p:Pathway)")
+    lines.append("// WHERE p.has_approval = false")
+    lines.append("// RETURN p.label, p.translation_gap, p.stopped_ratio, "
+                 "p.n_trials, p.n_drugs, p.n_recent_trials")
+    lines.append("// ORDER BY p.translation_gap DESC LIMIT 25;")
+    lines.append("")
+    lines.append("// 5d. Direction-conflict genes: GWAS effect directions "
+                 "disagree across studies")
+    lines.append("//     (low direction_agreement with real conflicting "
+                 "evidence).")
+    lines.append("// MATCH (g:Gene)")
+    lines.append("// WHERE g.direction_agreement IS NOT NULL AND "
+                 "g.direction_agreement < 0.7 AND g.n_conflicting >= 2")
+    lines.append("// RETURN g.label, g.direction_agreement, g.n_conflicting, "
+                 "g.genetic_support")
+    lines.append("// ORDER BY g.n_conflicting DESC, g.direction_agreement ASC "
+                 "LIMIT 25;")
     lines.append("")
 
     return "\n".join(lines)
@@ -368,6 +495,15 @@ def main():
             "by_type": node_type_counts,
             "duplicate_node_ids": dup_node_ids,
             "header": NODE_HEADER,
+            "metric_columns": {
+                "int": METRIC_INT_COLUMNS,
+                "float": METRIC_FLOAT_COLUMNS,
+                "bool": METRIC_BOOL_COLUMNS,
+                "renamed": METRIC_COLUMN_TO_NODE_PROP,
+                "note": ("flat per-entity metrics hoisted from "
+                         "entity_metrics.jsonl; blank column == Cypher null for "
+                         "node types that do not carry that metric"),
+            },
         },
         "edges_csv": {
             "path": str(EDGES_CSV.relative_to(common.REPO_ROOT)),

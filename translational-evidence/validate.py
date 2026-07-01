@@ -40,6 +40,7 @@ FILE_TO_SCHEMA = {
     common.PROCESSED_DIR / "trials.jsonl": "trial",
     common.PROCESSED_DIR / "target_evidence.jsonl": "target_evidence",
     common.PROCESSED_DIR / "functional_links.jsonl": "functional_link",
+    common.PROCESSED_DIR / "entity_metrics.jsonl": "entity_metric",
 }
 
 # Generated evidence-graph exports (under data/exports/graph). These are

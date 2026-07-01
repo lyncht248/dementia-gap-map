@@ -41,11 +41,41 @@ Run:
 """
 
 import json
+import os
 import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import common  # noqa: E402  (import after sys.path bootstrap)
+
+
+# "Now" for recency filter defaults. Documented + overridable via
+# TE_CURRENT_YEAR so it matches how entity_metrics.jsonl was computed.
+CURRENT_YEAR = int(os.environ.get("TE_CURRENT_YEAR", "2026"))
+
+# Flat, filterable metric props hoisted onto graph nodes by
+# build_evidence_graph.py (union across gene/variant/pathway). Carried through to
+# the browser payload for the side panel + metric filter controls.
+FLAT_METRIC_PROPS = [
+    "stopped_ratio",
+    "direction_agreement",
+    "n_conflicting",
+    "n_trials",
+    "n_drugs",
+    "has_approval",
+    "translation_gap",   # gene/pathway note: also a per-node flat metric
+    "first_gwas_year",
+    "latest_gwas_year",
+    "n_recent_gwas",
+    "first_trial_year",
+    "latest_trial_year",
+    "n_recent_trials",
+    "first_year",
+    "latest_year",
+    "n_recent",
+    "n_associations",
+    "n_studies",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +172,7 @@ def slim_node(rec):
         if gap is not None and float(gap) >= TRANSLATION_GAP_FLAG:
             under_translated = True
 
-    return {
+    slim = {
         "id": rec.get("node_id"),
         "label": rec.get("label") or rec.get("node_id"),
         "type": node_type,
@@ -157,7 +187,19 @@ def slim_node(rec):
         "status": status,
         "translation_gap": gap,
         "under_translated": under_translated,
+        # Full nested per-entity metrics (each {value, source}); rendered in the
+        # side panel and used by the metric filters below. Empty {} if absent.
+        "metrics": rec.get("metrics") or {},
     }
+
+    # Hoist the flat, filterable metric props that build_evidence_graph.py wrote
+    # onto the node top-level so the side panel + metric filters can use them
+    # without walking the nested metrics object.
+    for prop in FLAT_METRIC_PROPS:
+        if prop in rec:
+            slim[prop] = rec.get(prop)
+
+    return slim
 
 
 def slim_edge(rec):
@@ -206,6 +248,10 @@ def build_meta(nodes, manifest):
     ordered_phases = [p for p in phase_order if p in phases]
     ordered_phases += sorted(p for p in phases if p not in phase_order)
 
+    # Does the payload actually carry per-entity metrics? (Drives whether the
+    # metric filter controls render at all.)
+    has_metrics = any(n.get("metrics") for n in nodes)
+
     return {
         "node_colors": NODE_COLORS,
         "node_type_labels": NODE_TYPE_LABELS,
@@ -219,6 +265,9 @@ def build_meta(nodes, manifest):
         "phases": ordered_phases,
         "score_min": 0.0 if score_min is None else round(score_min, 4),
         "score_max": 1.0 if score_max is None else round(score_max, 4),
+        "current_year": CURRENT_YEAR,
+        "recent_year_from": CURRENT_YEAR - 2,
+        "has_metrics": has_metrics,
         "manifest": manifest,
     }
 
@@ -338,6 +387,25 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <p class="note">Hides scored nodes below the threshold. Nodes without a score
       are always kept.</p>
 
+    <div id="metricControls" style="display:none;">
+      <h2>Metrics (gene / variant / pathway)</h2>
+      <p class="note">Filters over the per-entity metrics layer. They only
+        constrain node types that carry the metric; all other nodes pass through.</p>
+
+      <label class="row" style="margin-top:6px;">Min stopped-trial ratio</label>
+      <div class="flexrow">
+        <input type="range" id="stoppedFilter" min="0" max="1" step="0.01" value="0" />
+        <span id="stoppedVal" style="min-width:34px;text-align:right;">0.00</span>
+      </div>
+      <p class="note">Keeps gene/pathway nodes whose <code>stopped_ratio</code>
+        &ge; the threshold (nodes without the metric are kept).</p>
+
+      <label class="row"><input type="checkbox" id="recentOnly" />
+        <span>Recent activity only</span></label>
+      <p class="note" id="recentNote">Keeps gene/variant/pathway nodes with a
+        recent GWAS/trial (year &ge; <span id="recentYear"></span>).</p>
+    </div>
+
     <h2>Search</h2>
     <input type="text" id="searchBox" placeholder="Label contains... (e.g. APOE)" />
     <p class="note">Highlights + zooms matches. Clears highlight when empty.</p>
@@ -446,12 +514,15 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                              .map(function (n) { return n.id; });
 
   // --- Filter state -------------------------------------------------------
+  var RECENT_FROM = META.recent_year_from != null ? META.recent_year_from : 2024;
   var state = {
     types: {},                 // type -> bool
     diseases: new Set(),       // empty = all
     group: "",                 // "" = all
     phase: "",                 // "" = all
     minScore: 0,
+    minStopped: 0,             // 0 = off; gene/pathway stopped_ratio threshold
+    recentOnly: false,         // gene/variant/pathway recent-activity filter
     search: ""
   };
   (META.node_types || Object.keys(COLORS)).forEach(function (t) {
@@ -474,6 +545,19 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       if (!n.phases || n.phases.indexOf(state.phase) === -1) return false;
     }
     if (state.minScore > 0 && n.score != null && n.score < state.minScore) return false;
+    // Metric: min stopped-trial ratio (gene/pathway carry stopped_ratio).
+    if (state.minStopped > 0 && n.stopped_ratio != null &&
+        n.stopped_ratio < state.minStopped) return false;
+    // Metric: recent-activity only. A node passes if it has NO recency metric
+    // (so drugs/trials/etc are unaffected) OR any recent count is >= 1.
+    if (state.recentOnly) {
+      var hasRecency = (n.n_recent_gwas != null) || (n.n_recent_trials != null) ||
+                       (n.n_recent != null);
+      if (hasRecency) {
+        var recent = (n.n_recent_gwas || 0) + (n.n_recent_trials || 0) + (n.n_recent || 0);
+        if (recent < 1) return false;
+      }
+    }
     return true;
   }
 
@@ -607,6 +691,25 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       });
     }
 
+    // Per-entity metrics: each dotted key maps to {value, source}. Render the
+    // value inline; expose the 'source' provenance note via a tooltip (title).
+    function fmtMetricValue(v) {
+      if (v == null) return "-";
+      if (Array.isArray(v)) return v.length ? escapeHtml(v.join(", ")) : "[]";
+      if (typeof v === "boolean") return v ? "true" : "false";
+      if (typeof v === "number") return fmtScore(v);
+      return escapeHtml(String(v));
+    }
+    var metricRows = "";
+    if (n.metrics && Object.keys(n.metrics).length) {
+      Object.keys(n.metrics).sort().forEach(function (k) {
+        var m = n.metrics[k] || {};
+        var src = m.source ? String(m.source) : "";
+        metricRows += '<dt title="' + escapeHtml(src) + '">' + escapeHtml(k) + '</dt>' +
+          '<dd title="' + escapeHtml(src) + '">' + fmtMetricValue(m.value) + '</dd>';
+      });
+    }
+
     var flag = n.under_translated
       ? ' <span class="flag">under-translated (gap ' + fmtScore(n.translation_gap) + ')</span>' : '';
 
@@ -615,6 +718,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     html += '<h1 style="padding-right:18px;">' + escapeHtml(n.label) + flag + '</h1>';
     html += '<dl class="kv">' + rows + '</dl>';
     if (scoreRows) { html += '<h2>Scores</h2><dl class="kv">' + scoreRows + '</dl>'; }
+    if (metricRows) {
+      html += '<h2>Metrics</h2>';
+      html += '<p class="note">Transparent per-entity signals; hover a row for its source. ' +
+        'No verdicts baked in.</p>';
+      html += '<dl class="kv">' + metricRows + '</dl>';
+    }
     html += '<h2>Provenance</h2><pre>' + escapeHtml(JSON.stringify(n.provenance || {}, null, 2)) + '</pre>';
     panelBody.innerHTML = html;
     document.getElementById("panelClose2").onclick = function () { panel.style.display = "none"; };
@@ -684,6 +793,24 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     applyFilters(); applySearch();
   };
 
+  // Metric controls (only shown if the payload carries per-entity metrics).
+  var stoppedSel = document.getElementById("stoppedFilter");
+  var stoppedVal = document.getElementById("stoppedVal");
+  var recentChk = document.getElementById("recentOnly");
+  if (META.has_metrics) {
+    document.getElementById("metricControls").style.display = "block";
+    document.getElementById("recentYear").textContent = String(RECENT_FROM);
+  }
+  stoppedSel.oninput = function () {
+    state.minStopped = parseFloat(stoppedSel.value);
+    stoppedVal.textContent = state.minStopped.toFixed(2);
+    applyFilters(); applySearch();
+  };
+  recentChk.onchange = function () {
+    state.recentOnly = recentChk.checked;
+    applyFilters(); applySearch();
+  };
+
   // Search box (debounced).
   var searchBox = document.getElementById("searchBox");
   var searchTimer = null;
@@ -706,6 +833,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     state.group = ""; gsel.value = "";
     state.phase = ""; psel.value = "";
     state.minScore = 0; ssel.value = "0"; sval.textContent = "0.00";
+    state.minStopped = 0; stoppedSel.value = "0"; stoppedVal.textContent = "0.00";
+    state.recentOnly = false; recentChk.checked = false;
     state.search = ""; searchBox.value = "";
     applyFilters(); applySearch();
     renderer.getCamera().animatedReset();

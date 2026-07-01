@@ -150,15 +150,46 @@ provenance, and Alzheimer stays recoverable downstream as the subset
   it is joined by Ensembl `gene_id` first, then `gene_symbol`, and is `null` when
   a gene has no functional_links. Also (re)writes `score/SCORING.md`. Reads no
   live APIs.
+- **`score/entity_metrics.py`** — builds the **per-entity METRICS layer**: one
+  flat, machine-readable metrics record per **gene / variant / pathway**, written
+  to `data/processed/translational-evidence/entity_metrics.jsonl`
+  (schema `entity_metric.schema.json`). Reads the already-processed Track B files
+  (`genes`, `gwas_associations`, `functional_links`, `trials`, `pathways`) plus
+  `map/gene_pathway.csv`; reads no live APIs. Every metric is a **number /
+  boolean / null** under a dotted `"<group>.<name>"` key wrapped as
+  `{value, source}`, where `source` names the exact input field(s) + formula, so
+  the layer is fully **explainable** and nothing is fabricated. **By design it
+  ships transparent signals only — no baked-in verdicts** ("contradicted",
+  "opportunity", "novel"): downstream agents compose those from the metrics, and
+  because `additionalProperties` is allowed everywhere they can attach their own
+  metric keys. See **`score/METRICS.md`** for the full field reference (every
+  metric, formula, source, per entity_type) and worked verdict-composition
+  examples. **Recency** metrics use `CURRENT_YEAR` (default `2026`, overridable
+  via `TE_CURRENT_YEAR`) as "now" — never `datetime.today()` — with a 3-year
+  recent window, so a given input always yields the same output:
+
+  ```bash
+  python3 translational-evidence/score/entity_metrics.py
+  # override "now" for recency (deterministic), e.g.:
+  TE_CURRENT_YEAR=2024 python3 translational-evidence/score/entity_metrics.py
+  ```
+
+  `2026-07-01` build: **6,318** records — **523 gene**, **5,786 variant**,
+  **9 pathway**.
+
+  > Not yet wired into `run_all.py` (its `score/` step runs only `scores.py`);
+  > run it after `scores.py` — the graph exporters in §9 pick it up automatically.
 
 ### Validate
 - **`validate.py`** — a stdlib JSONL schema-sanity checker (no `jsonschema`
   dependency). Checks required/non-null keys, declared types, and enums against
   the schemas in `shared/schemas/`, reporting per-file record counts and
   `OK`/errors (with line numbers). Missing outputs are reported as `SKIP`. It
-  now also validates the two **shared** bridge outputs
+  validates the per-entity **`entity_metrics.jsonl`** (schema
+  `entity_metric.schema.json`), the two **shared** bridge outputs
   (`data/processed/shared/topic_evidence_links.jsonl` and
-  `.../topic_evidence_rollup.jsonl`) when they exist.
+  `.../topic_evidence_rollup.jsonl`), and the graph exports
+  (`data/exports/graph/{nodes,edges}.jsonl`) — each when it exists.
 
 ### Export (integration bridge: Track A ↔ Track B)
 - **`exports/build_topic_bridge.py`** — builds the Track A ↔ Track B integration
@@ -254,11 +285,21 @@ each conforms to a schema in `shared/schemas/`. Counts below are from the
 | `trials.jsonl` | `trial.schema.json` | 6,841 |
 | `target_evidence.jsonl` | `target_evidence.schema.json` | 1,499 |
 | `functional_links.jsonl` | `functional_link.schema.json` | 3,372 |
+| `entity_metrics.jsonl` | `entity_metric.schema.json` | 6,318 |
 
 (Counts grew from the earlier Alzheimer-only build because the pipeline now
 covers ADRD; `target_evidence` is ~300 targets × 5 disease ids.
 `functional_links.jsonl` is the OT L2G functional layer: 3,372 L2G links + 0
 colocalisation links over 1,710 distinct genes.)
+
+`entity_metrics.jsonl` is the **per-entity METRICS layer** (one flat record per
+gene / variant / pathway = **523 + 5,786 + 9**). Each metric is a
+number/boolean/null under a dotted `"<group>.<name>"` key wrapped as
+`{value, source}` — transparent signals only, no baked-in verdicts, extensible
+via `additionalProperties`. See **`score/METRICS.md`** for every metric's
+definition, formula, source, and worked verdict-composition examples. Built by
+`score/entity_metrics.py`; recency uses `CURRENT_YEAR` (env-overridable via
+`TE_CURRENT_YEAR`, default `2026`).
 
 `genes.jsonl` and `pathways.jsonl` are produced by the normalize/map steps and
 then **rewritten in place** by `score/scores.py` with the scores attached
@@ -582,6 +623,73 @@ The builder **scripts** live under `translational-evidence/exports/` and
 `translational-evidence/viz/` (source-controlled); all **generated** artifacts
 land under `data/exports/graph/` (gitignored). No counts are hardcoded — the
 scripts read the inputs, so a re-run against the full corpus just works.
+
+### Per-entity metrics on graph nodes (Neo4j / HTML)
+
+`build_evidence_graph.py` **joins `entity_metrics.jsonl` onto the graph nodes**
+(so build it first — see the Score step in §3). For every matching gene / variant
+/ pathway node it:
+
+- attaches the **full metrics object** as `node['metrics']` (the complete
+  `{"<group>.<name>": {value, source}}` map, for completeness); and
+- **hoists a compact set of flat, queryable props** onto the node top-level so
+  Cypher and the HTML filters can use them directly. Every hoisted value is
+  copied verbatim from the metrics record (nothing fabricated).
+
+Join keys: `gene` → `gene:<gene_id>`, `variant` → `variant:<rsid>` (the id
+already carries the prefix), `pathway` → `pathway:<mechanism_group>`. The
+`2026-07-01` manifest reports **6,318** metrics records loaded and attached with
+**0 unmatched** (`gene` 523, `variant` 5,786, `pathway` 9) — see
+`graph_manifest.json → metrics.{attached_by_type, flat_keys, unmatched_records}`.
+
+Flat props hoisted per node type (`FLAT_METRIC_KEYS`):
+
+| node type | flat props (→ dotted metric) |
+| --- | --- |
+| `gene` | `stopped_ratio`, `direction_agreement`, `n_conflicting`, `n_trials`, `first_gwas_year`, `latest_gwas_year`, `n_recent_gwas`, `has_approval`, `translation_gap` |
+| `pathway` | `stopped_ratio`, `has_approval`, `n_trials`, `n_drugs`, `first_trial_year`, `latest_trial_year`, `n_recent_trials`, `translation_gap` |
+| `variant` | `n_associations`, `n_studies`, `first_year`, `latest_year`, `n_recent`, `direction_agreement` |
+
+`build_neo4j_export.py` writes these as typed CSV columns and `load.cypher`
+loads them with `toInteger()` / `toFloat()` / `toBoolean()` (a blank column ==
+Cypher `null`). Note: the pathway/gene `translation_gap` metric is loaded as
+`metrics_translation_gap` in Neo4j to avoid clashing with the existing
+`translation_gap` score column. `load.cypher` §5 ships **commented-out example
+queries** (copy one to run) — these are read-only illustrations; **verdicts are
+composed from the metrics, never baked in**:
+
+```cypher
+// Genetically supported but clinically stalled genes
+// (strong genetics + high stopped share; no verdict baked in — just the metrics)
+MATCH (g:Gene)
+WHERE g.genetic_support >= 0.7 AND g.stopped_ratio >= 0.3 AND g.n_trials >= 5
+RETURN g.label, g.genetic_support, g.stopped_ratio, g.n_trials, g.metrics_translation_gap
+ORDER BY g.stopped_ratio DESC, g.genetic_support DESC LIMIT 25;
+
+// Direction-conflict genes: GWAS effect directions disagree across studies
+MATCH (g:Gene)
+WHERE g.direction_agreement IS NOT NULL AND g.direction_agreement < 0.7 AND g.n_conflicting >= 2
+RETURN g.label, g.direction_agreement, g.n_conflicting, g.genetic_support
+ORDER BY g.n_conflicting DESC, g.direction_agreement ASC LIMIT 25;
+
+// Recently-emerging loci: latest GWAS in the last ~3 years (CURRENT_YEAR-2)
+MATCH (v:Variant)
+WHERE v.latest_year >= 2024 AND v.n_recent >= 1
+RETURN v.label, v.latest_year, v.n_recent, v.n_associations, v.n_studies
+ORDER BY v.latest_year DESC, v.n_associations DESC LIMIT 25;
+
+// Under-translated pathways: high translation_gap yet never reached approval
+MATCH (p:Pathway)
+WHERE p.has_approval = false
+RETURN p.label, p.translation_gap, p.stopped_ratio, p.n_trials, p.n_drugs, p.n_recent_trials
+ORDER BY p.translation_gap DESC LIMIT 25;
+```
+
+The recency threshold in these examples (`latest_year >= 2024`, i.e.
+`CURRENT_YEAR - 2`) is rendered from `CURRENT_YEAR` in `build_neo4j_export.py`
+(env-overridable via `TE_CURRENT_YEAR`), matching how `entity_metrics.jsonl` was
+computed. Full field reference + more verdict-composition examples:
+`score/METRICS.md`.
 
 ### Two ways to explore EVERYTHING with filters
 
