@@ -295,23 +295,34 @@ def make_plots(pxy, labels, clusters, papers, model, out_dir, radius, log):
     import matplotlib.patheffects as pe
 
     cmap = {c["cluster"]: _PALETTE[i % len(_PALETTE)] for i, c in enumerate(clusters)}
-    label_of = {c["cluster"]: c["label"] for c in clusters}
     colors = [cmap.get(int(l), "#E6E6E6") for l in labels]
 
     # Draw each paper as a real circle of the packing radius so the rendered
     # bubbles exactly match the zero-overlap geometry (radius slightly < packing
     # target => guaranteed clean tiling, never overlapping).
-    fig, ax = plt.subplots(figsize=(15, 13), dpi=120)
+    fig, ax = plt.subplots(figsize=(16, 14), dpi=130)
     circles = [Circle((pxy[i, 0], pxy[i, 1]), radius=radius) for i in range(len(pxy))]
     ax.add_collection(PatchCollection(circles, facecolor=colors, edgecolor="none"))
-    for cid, lab in label_of.items():
+
+    # Label only the largest clusters (short label) with de-overlapping so the
+    # dense centre stays legible. Greedy: skip a label if it lands too close to
+    # one already placed.
+    placed = []
+    span = max(np.ptp(pxy[:, 0]), np.ptp(pxy[:, 1]))
+    min_gap = span * 0.045
+    for c in clusters[:22]:  # clusters is sorted by size desc
+        cid = c["cluster"]
         pts = pxy[labels == cid]
         if len(pts) == 0:
             continue
-        cx, cy = pts[:, 0].mean(), pts[:, 1].mean()
-        ax.text(cx, cy, lab, fontsize=13, fontweight="bold", ha="center",
-                va="center", color="#1a1a1a",
-                path_effects=[pe.withStroke(linewidth=3, foreground="white")])
+        cx, cy = float(np.median(pts[:, 0])), float(np.median(pts[:, 1]))
+        if any((cx - px) ** 2 + (cy - py) ** 2 < min_gap ** 2 for px, py in placed):
+            continue
+        placed.append((cx, cy))
+        short = " ".join(c["label"].split()[:3])
+        ax.text(cx, cy, short, fontsize=12.5, fontweight="bold", ha="center",
+                va="center", color=cmap[cid], zorder=5,
+                path_effects=[pe.withStroke(linewidth=3.5, foreground="white")])
     m = radius * 3
     ax.set_xlim(pxy[:, 0].min() - m, pxy[:, 0].max() + m)
     ax.set_ylim(pxy[:, 1].min() - m, pxy[:, 1].max() + m)

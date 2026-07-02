@@ -1,0 +1,45 @@
+{
+  "model": "allenai/specter2_base",
+  "model_key": "specter2",
+  "dim": 768,
+  "n_papers": 4780,
+  "n_no_abstract": 86,
+  "n_clusters": 37,
+  "n_noise": 963,
+  "umap": {
+    "plot": {
+      "n_neighbors": 15,
+      "min_dist": 0.1,
+      "n_components": 2
+    },
+    "cluster": {
+      "n_neighbors": 15,
+      "min_dist": 0.0,
+      "n_components": 10
+    },
+    "metric": "cosine",
+    "random_state": 42
+  },
+  "hdbscan": {
+    "min_cluster_size": 25,
+    "min_samples": 5,
+    "metric": "euclidean"
+  },
+  "packing": {
+    "method": "collision-relaxation",
+    "radius": 0.01464
+  },
+  "device": "cpu",
+  "wall_clock_s": 1343.0,
+  "versions": {
+    "torch": "2.12.1+cpu",
+    "transformers": "4.45.2",
+    "adapters": "1.0.1",
+    "sentence-transformers": null,
+    "umap-learn": "0.5.12",
+    "hdbscan": "0.8.44",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "rasterfairy-py3": "1.0.5"
+  }
+}
