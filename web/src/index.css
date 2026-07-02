@@ -326,6 +326,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   padding: 18px 22px;
   border-bottom: 1px solid var(--line);
 }
@@ -337,6 +339,26 @@ body {
   color: var(--muted);
   font-size: 13px;
   margin-top: 3px;
+}
+.feed-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sub-clear {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 6px;
+}
+.sub-clear:hover {
+  text-decoration: underline;
 }
 
 .feed-body {
@@ -368,12 +390,39 @@ body {
   letter-spacing: 0.05em;
   color: var(--muted);
 }
+.chip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .chip-row {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   padding: 2px 0;
+}
+button.chip-row.click {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--ink);
+}
+button.chip-row.click:hover {
+  background: #f2f2f0;
+}
+button.chip-row.on {
+  background: rgba(47, 111, 87, 0.12);
+}
+button.chip-row.on .chip-label {
+  color: var(--accent);
+  font-weight: 600;
 }
 .chip-label {
   flex: 1;
@@ -403,6 +452,31 @@ body {
 .tag.trial {
   background: #e7f1ec;
   color: #24513f;
+}
+button.tag {
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background 0.12s, color 0.12s;
+}
+button.tag:hover {
+  background: #e6e6e2;
+}
+button.tag.trial:hover {
+  background: #d9eadf;
+}
+button.tag.on {
+  background: var(--accent);
+  color: #fff;
+}
+button.tag.on em {
+  color: rgba(255, 255, 255, 0.85);
+}
+button.tag.trial.on {
+  background: #24513f;
+  color: #fff;
 }
 .muted {
   color: var(--muted);
@@ -439,6 +513,56 @@ body {
   font-size: 11.5px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* ranked facet list (genes / pathways / trials view) */
+.rank-list {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-height: 620px;
+  overflow-y: auto;
+}
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.rank-name {
+  flex: 0 0 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rank-track {
+  flex: 1;
+  height: 10px;
+  background: #f0f0ee;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.rank-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.rank-fill.trial {
+  background: #24513f;
+}
+.rank-count {
+  flex: 0 0 auto;
+  min-width: 3.5ch;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.rank-empty {
+  padding: 34px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .feed-list {
