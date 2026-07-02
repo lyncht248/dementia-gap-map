@@ -74,18 +74,19 @@ export default function NewsFeed({ selected, clusters, areas, onClear, onFiltere
   // topic (falling back to per-paper attribution), matching the counts shown.
   const valuesOf = useMemo(() => {
     return (p: Paper, facet: Facet): string[] => {
-      const c = clusterById.get(p.cluster_id);
+      // All facets are strictly per-paper — genes / pathways / trials come from
+      // the paper's own evidence, never rolled up from its topic.
       switch (facet) {
         case "area":
           return [p.area ?? "other"];
         case "topic":
           return [p.cluster_id];
         case "gene":
-          return c && c.top_genes.length ? c.top_genes : p.genes;
+          return p.genes;
         case "pathway":
-          return [p.pathway_group];
+          return p.pathways && p.pathways.length ? p.pathways : p.pathway_group ? [p.pathway_group] : [];
         case "trial":
-          return c ? c.trials ?? p.trials : p.trials;
+          return p.trials;
       }
     };
   }, [clusterById]);

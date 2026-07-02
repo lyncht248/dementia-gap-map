@@ -19,6 +19,8 @@ export interface Paper {
   x: number;
   y: number;
   genes: string[];
+  /** per-paper pathway groups (derived from the paper's own genes) */
+  pathways?: string[];
   pathway_group: string;
   trials: string[];
   metrics: PaperMetrics;
