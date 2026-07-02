@@ -20,7 +20,7 @@ export default function AtlasFeed({
       <section className="feed">
         <strong>No selection yet.</strong>
         <p className="feed-hint">
-          Click <span className="pill">Select region</span>, then drag a box around a group of
+          Click <span className="pill">Select region</span>, then draw a region around a group of
           papers on the map to list them here.
         </p>
       </section>
