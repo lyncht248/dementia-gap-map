@@ -18,6 +18,10 @@ export interface Paper {
   y: number;
   genes: string[];
   pathway_group: string;
+  /** Assigned dementia hypothesis id (null if unclassified). */
+  hypothesis?: string | null;
+  /** Resolved point colour for the hypothesis (or neutral grey if unclassified). */
+  hypothesis_color?: string;
   trials: string[];
   metrics: PaperMetrics;
   url?: string;
@@ -46,6 +50,11 @@ export interface ClusterEmergence {
 export interface Cluster {
   topic_id: string;
   label: string;
+  /** Distinguishing gene / method / mechanism specifics; shown when zoomed in. */
+  sublabel?: string;
+  /** Deterministic TF-IDF term signature the curated label attaches to. */
+  signature?: string;
+  term_hints?: string[];
   color: string;
   pathway_group: string;
   top_genes: string[];
@@ -58,10 +67,23 @@ export interface Cluster {
   emergence?: ClusterEmergence | null;
 }
 
+/** Etiological-hypothesis overlay label, placed at the median position of the
+ * papers matching that hypothesis — independent of the co-citation clusters. */
+export interface Hypothesis {
+  id: string;
+  label: string;
+  color: string;
+  paper_count: number;
+  /** papers that matched this hypothesis directly (before cluster fill) */
+  match_count?: number;
+  centroid: { x: number; y: number };
+}
+
 export interface MapData {
   generated_note?: string;
   disease?: string;
   clusters: Cluster[];
+  hypotheses?: Hypothesis[];
   papers: Paper[];
   /** Pruned coupling edges as [i, j] index pairs into `papers`. */
   edges?: [number, number][];

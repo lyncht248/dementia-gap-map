@@ -1,0 +1,19 @@
+{
+  "_note": "Single-axis cluster labels for the dementia-GWAS co-citation map. Keyed by the deterministic TF-IDF term signature (top-3 terms, sorted) emitted by build-map-data.mjs. `label` = a research area within dementia genetics at one consistent, peer level (shown zoomed out); `sublabel` = the distinguishing gene / method / mechanism specifics (shown zoomed in). Regenerate with `node scripts/label-clusters.mjs`.",
+  "multi-ancestry / single-cell / transcriptome-wide": { "label": "Alzheimer's GWAS Discovery", "sublabel": "Multi-ancestry meta-analyses · TWAS · single-cell" },
+  "microglia / microglial / trem2": { "label": "Microglia & TREM2 Biology", "sublabel": "Innate immunity · CD33 · MS4A" },
+  "bidirectional / causal / covid-19": { "label": "Causal Inference & Mendelian Randomization", "sublabel": "Risk factors · biomarkers · comorbidity" },
+  "clusterin / complement / picalm": { "label": "Classic AD Susceptibility Loci", "sublabel": "CLU · PICALM · CR1 · CD33 · ABCA7" },
+  "ability / imaging / kibra": { "label": "Imaging & Cognitive Genetics", "sublabel": "ADNI MRI · hippocampus · intelligence · education" },
+  "palsy / supranuclear / tmem106b": { "label": "ALS, FTD & Tauopathies", "sublabel": "TDP-43 · C9orf72 · PSP · TMEM106B" },
+  "abca7 / bin1 / picalm": { "label": "Endocytosis & Tau Propagation", "sublabel": "ABCA7 · BIN1 · PICALM · autophagy" },
+  "bodies / lewy / lrrk2": { "label": "Parkinson's & Lewy Body Genetics", "sublabel": "SNCA · GBA · LRRK2" },
+  "forests / pathway-specific / scoring": { "label": "Polygenic Risk Scores", "sublabel": "Heritability · pathway-specific PRS" },
+  "epigenome-wide / methylation / methylomic": { "label": "Epigenomics & Methylation", "sublabel": "EWAS · ANK1 · cortical DNA methylation" },
+  "hyperintensities / vessel / white": { "label": "Cerebral Small-Vessel Disease", "sublabel": "White-matter hyperintensities · MRI" },
+  "fan1 / huntington / repair": { "label": "Huntington's & Repeat Expansions", "sublabel": "CAG · FAN1 · DNA repair" },
+  "dementia / microbiota / migraine": { "label": "All-Cause & Vascular Dementia", "sublabel": "Comorbidity MR · gut microbiota · cardiometabolic" },
+  "copy / number / significantly": { "label": "Brain eQTL & Copy-Number", "sublabel": "Expression GWAS · CNVs · pathway enrichment" },
+  "master / sclerosis / severity": { "label": "Multiple Sclerosis Genetics", "sublabel": "HLA · severity · autoimmunity" },
+  "leukocyte / longevity / microbiota": { "label": "Longevity & Healthy Aging", "sublabel": "Lifespan GWAS · APOE survival" }
+}

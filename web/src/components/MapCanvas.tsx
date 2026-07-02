@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Cluster, Paper } from "../types";
+import type { Cluster, Hypothesis, Paper } from "../types";
 import {
   fitTransform,
   pointInPolygon,
@@ -12,6 +12,7 @@ interface Props {
   papers: Paper[];
   edges?: [number, number][];
   clusters: Cluster[];
+  hypotheses?: Hypothesis[];
   viewMode: "clusters" | "all";
   selectMode: boolean;
   isActive: (p: Paper) => boolean;
@@ -26,6 +27,7 @@ export default function MapCanvas({
   papers,
   edges = [],
   clusters,
+  hypotheses = [],
   viewMode,
   selectMode,
   isActive,
@@ -38,6 +40,7 @@ export default function MapCanvas({
   const [size, setSize] = useState({ w: 800, h: 560 });
   const [transform, setTransform] = useState<Transform>({ scale: 1, tx: 0, ty: 0 });
   const [fitted, setFitted] = useState(false);
+  const fitScaleRef = useRef(1); // scale at the initial fit; "zoomed in" is measured against this
 
   const clusterById = useMemo(() => {
     const m = new Map<string, Cluster>();
@@ -84,7 +87,9 @@ export default function MapCanvas({
   // --- initial fit ----------------------------------------------------------
   useEffect(() => {
     if (fitted || papers.length === 0) return;
-    setTransform(fitTransform(papers, size.w, size.h));
+    const t = fitTransform(papers, size.w, size.h);
+    fitScaleRef.current = t.scale;
+    setTransform(t);
     setFitted(true);
   }, [fitted, papers, size.w, size.h]);
 
@@ -155,17 +160,17 @@ export default function MapCanvas({
       if (s.x < -20 || s.x > size.w + 20 || s.y < -20 || s.y > size.h + 20) return;
       const isOther = p.cluster_id === "other";
       const r = radiusFor(p) * (isOther ? 0.65 : 1);
-      const cluster = clusterById.get(p.cluster_id);
+      const hcolor = p.hypothesis_color ?? NEUTRAL;
       let color = NEUTRAL;
       let alpha = 0.25;
       if (mode === "inactive") {
         color = NEUTRAL;
         alpha = 0.18;
       } else if (viewMode === "clusters") {
-        color = cluster?.color ?? NEUTRAL;
-        alpha = mode === "selected" ? 1 : isOther ? 0.4 : 0.82;
+        color = hcolor;
+        alpha = mode === "selected" ? 1 : p.hypothesis ? 0.82 : 0.4;
       } else {
-        color = mode === "selected" ? (cluster?.color ?? "#333") : "#7a7a80";
+        color = mode === "selected" ? hcolor : "#7a7a80";
         alpha = mode === "selected" ? 1 : 0.5;
       }
       ctx.globalAlpha = alpha;
@@ -192,25 +197,83 @@ export default function MapCanvas({
     for (const p of selected) drawPoint(p, "selected");
     ctx.globalAlpha = 1;
 
-    // cluster labels
+    // Two label layers, both decluttered greedily (a label is skipped if its
+    // pill would overlap one already drawn; higher-priority labels claim space
+    // first):
+    //   1. Hypothesis overlay (primary, always on) — clean single-concept labels
+    //      placed at where each dementia hypothesis's papers concentrate,
+    //      independent of the coloured co-citation clusters.
+    //   2. Per-cluster gene/method specifics (secondary) — fade in on zoom so
+    //      the detail is there when you look closely but never clutters the
+    //      zoomed-out view.
     if (viewMode === "clusters") {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = "600 13px ui-sans-serif, system-ui, -apple-system, sans-serif";
-      for (const c of clusters) {
-        const s = toScreen(c.centroid, transform);
+      const zoom = transform.scale / (fitScaleRef.current || 1);
+      const detailAlpha = Math.max(0, Math.min(1, (zoom - 1.4) / 0.8));
+
+      const drawn: { x0: number; y0: number; x1: number; y1: number }[] = [];
+      const overlaps = (r: { x0: number; y0: number; x1: number; y1: number }) =>
+        drawn.some((d) => r.x0 < d.x1 && r.x1 > d.x0 && r.y0 < d.y1 && r.y1 > d.y0);
+
+      // --- layer 1: hypothesis overlay ---
+      // The core AD hypotheses (amyloid, tau, inflammation) share the same
+      // region of a co-citation layout, so rather than hide a colliding label we
+      // nudge it vertically off its centroid until it clears — every hypothesis
+      // stays visible, stacking where they genuinely overlap.
+      const HYP_FONT = "700 15px ui-sans-serif, system-ui, -apple-system, sans-serif";
+      const hbh = 22;
+      const step = hbh + 4;
+      ctx.font = HYP_FONT;
+      for (const h of [...hypotheses].sort((a, b) => (b.paper_count ?? 0) - (a.paper_count ?? 0))) {
+        const s = toScreen(h.centroid, transform);
         if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) continue;
-        const text = c.label;
-        const tw = ctx.measureText(text).width;
+        const tw = ctx.measureText(h.label).width;
+        const mk = (cx: number, cy: number) => ({ x0: cx - tw / 2 - 10, y0: cy - hbh / 2 - 2, x1: cx + tw / 2 + 10, y1: cy + hbh / 2 + 2 });
+        // search outward (centroid first, then expanding rings in all directions)
+        // so crowded central hypotheses spread apart instead of overlapping
+        let cx = s.x, cy = s.y, placed = false;
+        for (let ring = 0; ring <= 4 && !placed; ring++) {
+          const d = ring * step;
+          const cands: [number, number][] = ring === 0
+            ? [[0, 0]]
+            : [[0, d], [0, -d], [d * 1.7, 0], [-d * 1.7, 0], [d * 1.3, d], [-d * 1.3, d], [d * 1.3, -d], [-d * 1.3, -d]];
+          for (const [dx, dy] of cands) {
+            if (!overlaps(mk(s.x + dx, s.y + dy))) { cx = s.x + dx; cy = s.y + dy; placed = true; break; }
+          }
+        }
+        drawn.push(mk(cx, cy));
         ctx.globalAlpha = 0.9;
-        ctx.fillStyle = "rgba(255,255,255,0.82)";
-        const padX = 6;
-        const bh = 18;
-        roundRect(ctx, s.x - tw / 2 - padX, s.y - bh / 2, tw + padX * 2, bh, 5);
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        roundRect(ctx, cx - tw / 2 - 9, cy - hbh / 2, tw + 18, hbh, 7);
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.fillStyle = "#26262b";
-        ctx.fillText(text, s.x, s.y + 0.5);
+        ctx.fillStyle = darken(h.color);
+        ctx.fillText(h.label, cx, cy + 0.5);
+      }
+
+      // --- layer 2: per-cluster specifics, only once zoomed in ---
+      if (detailAlpha > 0.01) {
+        const DET_FONT = "600 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
+        const dbh = 16;
+        ctx.font = DET_FONT;
+        for (const c of [...clusters]
+          .filter((c) => c.topic_id !== "other" && c.sublabel)
+          .sort((a, b) => (b.paper_count ?? 0) - (a.paper_count ?? 0))) {
+          const s = toScreen(c.centroid, transform);
+          if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) continue;
+          const tw = ctx.measureText(c.sublabel!).width;
+          const rect = { x0: s.x - tw / 2 - 6, y0: s.y - dbh / 2, x1: s.x + tw / 2 + 6, y1: s.y + dbh / 2 };
+          if (overlaps(rect)) continue;
+          drawn.push(rect);
+          ctx.globalAlpha = 0.72 * detailAlpha;
+          ctx.fillStyle = "rgba(255,255,255,0.8)";
+          roundRect(ctx, s.x - tw / 2 - 5, s.y - dbh / 2, tw + 10, dbh, 4);
+          ctx.fill();
+          ctx.globalAlpha = detailAlpha;
+          ctx.fillStyle = "#4a4a52";
+          ctx.fillText(c.sublabel!, s.x, s.y + 0.5);
+        }
       }
     }
 
@@ -220,7 +283,7 @@ export default function MapCanvas({
       const src = papers[hoverIdx];
       if (nbrs && src) {
         const s0 = toScreen(src, transform);
-        const col = clusterById.get(src.cluster_id)?.color ?? "#333";
+        const col = src.hypothesis_color ?? "#333";
         ctx.strokeStyle = col;
         ctx.lineWidth = 1.2;
         ctx.globalAlpha = 0.75;
@@ -268,6 +331,7 @@ export default function MapCanvas({
     indexById,
     adjacency,
     clusters,
+    hypotheses,
     clusterById,
     transform,
     size,
@@ -383,7 +447,9 @@ export default function MapCanvas({
   }, []);
 
   const resetView = () => {
-    setTransform(fitTransform(papers, size.w, size.h));
+    const t = fitTransform(papers, size.w, size.h);
+    fitScaleRef.current = t.scale;
+    setTransform(t);
     onReset?.();
   };
 
@@ -416,6 +482,17 @@ export default function MapCanvas({
       )}
     </div>
   );
+}
+
+// Darken a #rrggbb colour toward black so bold label text reads on a light pill.
+function darken(hex: string, f = 0.62): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return "#1c1c22";
+  const n = parseInt(m[1], 16);
+  const r = Math.round(((n >> 16) & 255) * f);
+  const g = Math.round(((n >> 8) & 255) * f);
+  const b = Math.round((n & 255) * f);
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 function roundRect(
