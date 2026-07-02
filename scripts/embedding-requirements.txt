@@ -1,0 +1,13 @@
+huggingface-hub
+numpy
+scipy
+scikit-learn
+umap-learn
+hdbscan
+matplotlib
+pandas
+plotly
+torch
+transformers>=4.51.0
+sentence-transformers>=3.0
+adapters

@@ -1,0 +1,56 @@
+{
+  "batch_size": 128,
+  "device": "cuda",
+  "embedding_dimension": 768,
+  "git_commit": "4f19d3c4d1983386b00dadb6db15dae691dd94ef",
+  "max_seq_length": 512,
+  "model": "specter2",
+  "model_id": "allenai/specter2",
+  "n_clusters": 36,
+  "n_no_abstract": 86,
+  "n_noise": 1035,
+  "n_papers": 4780,
+  "package_versions": {
+    "adapters": "1.3.0",
+    "hdbscan": "0.8.44",
+    "matplotlib": "3.11.0",
+    "numpy": "2.4.6",
+    "pandas": "3.0.3",
+    "plotly": "6.8.0",
+    "python": "3.12.3",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.18.0",
+    "sentence-transformers": "5.6.0",
+    "torch": "2.12.1",
+    "transformers": "4.57.6",
+    "umap-learn": "0.5.12"
+  },
+  "packing": {
+    "method": "anchored_collision_relaxation",
+    "min_center_distance": 0.03066039760844497,
+    "radius": 0.014956291516314621,
+    "seed": 42
+  },
+  "params": {
+    "cluster_umap": {
+      "metric": "cosine",
+      "min_dist": 0.0,
+      "n_components": 10,
+      "n_neighbors": 15,
+      "random_state": 42
+    },
+    "hdbscan": {
+      "metric": "euclidean",
+      "min_cluster_size": 25,
+      "min_samples": 5
+    },
+    "projection_umap": {
+      "metric": "cosine",
+      "min_dist": 0.1,
+      "n_components": 2,
+      "n_neighbors": 15,
+      "random_state": 42
+    }
+  },
+  "wall_clock_seconds": 62.189
+}
