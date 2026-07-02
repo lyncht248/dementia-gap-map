@@ -161,6 +161,32 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   let selecting = false;
   let lasso: Pt[] = [];
   let selSet = new Set<number>();
+  let selAnchor = -1; // the clicked paper (draws citation lines), -1 for lasso
+
+  const rowFor = (i: number): SelectedPaper => ({
+    i, paper_id: DATA.ids[i], title: DATA.titles[i], year: P[i][3],
+    minor: minorLabel[P[i][2]], major: majorLabel[minorMajor[P[i][2]]], degree: ADJ[i].length,
+  });
+  function pickAt(x: number, y: number): number {
+    const rr = Math.max(2.5, dotR * view.s) + 2;
+    let best = -1, bd = rr * rr;
+    for (let i = 0; i < P.length; i++) {
+      if (!visible(i)) continue;
+      const p = P[i];
+      const dx = wx(p[0]) - x, dy = wy(p[1]) - y, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
+  // Click a paper -> select it AND everything it cites / is cited by.
+  function clickSelect(i: number) {
+    selAnchor = i;
+    const nbrs = ADJ[i].filter(visible);
+    selSet = new Set<number>([i, ...nbrs]);
+    const ordered = nbrs.slice().sort((a, b) => ADJ[b].length - ADJ[a].length);
+    opts.onSelect?.([rowFor(i), ...ordered.map(rowFor)]);
+    draw();
+  }
 
   // ---- view ----
   const view = { s: 1, tx: 0, ty: 0 };
@@ -211,24 +237,26 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     }
     ctx.globalAlpha = 1;
 
-    // citation links from the hovered paper
-    if (hoverOn) {
-      const hX = wx(P[hoverIdx][0]), hY = wy(P[hoverIdx][1]);
+    // citation links — from the hovered paper, or (when not hovering) the paper
+    // clicked to build the current selection.
+    const lineAnchor = hoverOn ? hoverIdx : (selAnchor >= 0 && visible(selAnchor) ? selAnchor : -1);
+    if (lineAnchor >= 0) {
+      const hX = wx(P[lineAnchor][0]), hY = wy(P[lineAnchor][1]);
       ctx.strokeStyle = "rgba(28,28,38,.5)";
       ctx.lineWidth = Math.min(1.5, 0.7 * zoom);
       ctx.beginPath();
-      for (const j of ADJ[hoverIdx]) {
+      for (const j of ADJ[lineAnchor]) {
         if (!visible(j)) continue;
         ctx.moveTo(hX, hY); ctx.lineTo(wx(P[j][0]), wy(P[j][1]));
       }
       ctx.stroke();
-      for (const j of ADJ[hoverIdx]) {
+      for (const j of ADJ[lineAnchor]) {
         if (!visible(j)) continue;
         ctx.beginPath(); ctx.arc(wx(P[j][0]), wy(P[j][1]), r, 0, 6.2832);
         ctx.fillStyle = PC[j]; ctx.fill();
       }
       ctx.beginPath(); ctx.arc(hX, hY, r + 2, 0, 6.2832);
-      ctx.fillStyle = PC[hoverIdx]; ctx.fill();
+      ctx.fillStyle = PC[lineAnchor]; ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = "#1b1b1f"; ctx.stroke();
     }
 
@@ -278,16 +306,27 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   // ---- interaction ----
   const rel = (e: MouseEvent): Pt => { const b = cv.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
   let drag: { x: number; y: number; tx: number; ty: number } | null = null;
+  let dragMoved = false;
 
   const onDown = (e: MouseEvent) => {
     const m = rel(e);
     if (selecting) { lasso = [m]; hideTip(); return; }
-    drag = { x: m.x, y: m.y, tx: view.tx, ty: view.ty }; cv.classList.add("drag");
+    drag = { x: m.x, y: m.y, tx: view.tx, ty: view.ty }; dragMoved = false; cv.classList.add("drag");
   };
   const onUp = () => {
     if (selecting && lasso.length > 2) { finishSelection(); return; }
     if (selecting) { lasso = []; draw(); return; }
-    drag = null; cv.classList.remove("drag");
+    if (drag) {
+      cv.classList.remove("drag");
+      if (!dragMoved) {
+        // a click (not a pan): select the paper under the cursor + its citations,
+        // or clear the selection if the click landed on empty space.
+        const i = pickAt(drag.x, drag.y);
+        if (i >= 0) clickSelect(i);
+        else if (selSet.size) { selSet = new Set(); selAnchor = -1; opts.onSelect?.([]); draw(); }
+      }
+      drag = null;
+    }
   };
   const onLeave = () => { if (hoverIdx >= 0) { hoverIdx = -1; draw(); } hideTip(); };
   const onMove = (e: MouseEvent) => {
@@ -297,6 +336,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     }
     if (drag) {
       const m = rel(e);
+      if (Math.abs(m.x - drag.x) + Math.abs(m.y - drag.y) > 4) dragMoved = true;
       if (hoverIdx >= 0) hoverIdx = -1;
       view.tx = drag.tx + (m.x - drag.x); view.ty = drag.ty - (m.y - drag.y);
       draw(); hideTip(); return;
@@ -325,6 +365,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     lasso = [];
     const rows: SelectedPaper[] = [];
     selSet = new Set();
+    selAnchor = -1;
     for (let i = 0; i < P.length; i++) {
       if (!visible(i)) continue;
       const p = P[i];
@@ -399,7 +440,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       hideTip();
       draw();
     },
-    clearSelection() { selSet = new Set(); draw(); },
+    clearSelection() { selSet = new Set(); selAnchor = -1; draw(); },
     resetView() { fit(); baseS = view.s; draw(); },
     setFilter(hm: string[], yr: [number, number]) {
       hiddenMajors.clear();
