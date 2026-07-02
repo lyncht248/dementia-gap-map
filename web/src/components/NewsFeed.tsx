@@ -38,7 +38,14 @@ export default function NewsFeed({ selected, clusters, onClear }: Props) {
     const years = selected.map((p) => p.year).sort((a, b) => a - b);
     const yearRange = years.length ? `${years[0]}–${years[years.length - 1]}` : "—";
     const clinical = selected.filter((p) => p.metrics.is_clinical).length;
-    return { genes, clusterCounts, trials, pathways, yearRange, clinical };
+    // Emerging topics: the selection's clusters, ranked by their topic-level
+    // emergence score (burst + growth + influence, computed over the whole topic).
+    const emerging = [...new Set(selected.map((p) => p.cluster_id))]
+      .map((id) => clusterById.get(id))
+      .filter((c): c is Cluster => !!c && c.topic_id !== "other" && !!c.emergence)
+      .sort((a, b) => (b.emergence!.score) - (a.emergence!.score))
+      .slice(0, 5);
+    return { genes, clusterCounts, trials, pathways, yearRange, clinical, emerging };
   }, [selected, clusterById]);
 
   const sorted = useMemo(
@@ -81,6 +88,30 @@ export default function NewsFeed({ selected, clusters, onClear }: Props) {
 
       <div className="feed-body">
         <aside className="feed-aside">
+          <Section title="Emerging topics">
+            {agg.emerging.length ? (
+              agg.emerging.map((c) => {
+                const e = c.emergence!;
+                return (
+                  <div key={c.topic_id} className="emerge-row">
+                    <div className="emerge-head">
+                      <span className="dot" style={{ background: c.color }} />
+                      <span className="chip-label">{c.label}</span>
+                      <span className="emerge-score">{Math.round(e.score * 100)}</span>
+                    </div>
+                    <div className="emerge-bar">
+                      <span style={{ width: `${Math.round(e.score * 100)}%` }} />
+                    </div>
+                    <div className="emerge-meta">
+                      {Math.round(e.pct_new * 100)}% recent · {e.growth}× growth · RCR {e.mean_rcr}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <span className="muted">no emerging topics in selection</span>
+            )}
+          </Section>
           <Section title="Topics">
             {agg.clusterCounts.map(([id, n]) => {
               const c = clusterById.get(id);

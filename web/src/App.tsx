@@ -179,7 +179,8 @@ export default function App() {
       />
 
       <footer className="foot">
-        Prototype MVP · synthetic placeholder data · see PROTOTYPE_BUILD_SPEC.md
+        Co-citation map of dementia &amp; GWAS literature · data from PubMed / NIH
+        iCite, GWAS Catalog, Open Targets &amp; ClinicalTrials.gov
       </footer>
     </div>
   );

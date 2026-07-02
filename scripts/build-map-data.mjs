@@ -17,13 +17,14 @@ import { fileURLToPath } from "node:url";
 import Graph from "graphology";
 import louvain from "graphology-communities-louvain";
 import forceAtlas2 from "graphology-layout-forceatlas2";
+import { computeEmergence } from "./emergence.mjs";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const P = (...p) => path.join(ROOT, ...p);
 
 // --- tunables ---------------------------------------------------------------
 const RESOLUTION = Number(process.env.RESOLUTION ?? 1.2); // higher => more communities
-const EDGE_MIN_WEIGHT = Number(process.env.EDGE_MIN_WEIGHT ?? 0.12); // drop weak coupling edges (hairball) before clustering/layout
+const COSINE_MIN = Number(process.env.COSINE_MIN ?? 0.25); // keep co-citation edges with cosine >= this
 const MIN_COMMUNITY = 30; // communities smaller than this are merged into neighbours / "other"
 const FA2_ITERATIONS = 600;
 const EDGES_PER_NODE = 3; // strongest neighbours kept per node for drawing
@@ -59,7 +60,14 @@ const STOP = new Set((
   "associations risk role effect effects human cell cells clinical use used novel new via " +
   "case cases control controls cohort data model models level levels high low increased " +
   "expression protein proteins function functional related evidence potential findings " +
-  "identify identified identification investigate investigated assessment analyses"
+  "identify identified identification investigate investigated assessment analyses " +
+  // generic study/method/stats vocabulary — not topics
+  "genome-wide wide polygenic variant variants loci locus trait traits phenotype phenotypes " +
+  "score scores two-sample sample samples sparse multivariate bayesian epistasis summary " +
+  "statistics statistical quantitative prediction predicted regression machine learning " +
+  "cross-ethnic multicenter meta meta-analysis proteome proteomes large-scale genomewide " +
+  "significant significance approach approaches datasets dataset population populations " +
+  "sequencing whole-genome whole-exome exome heritability estimation estimates"
 ).split(" "));
 
 function tokenize(title) {
@@ -72,8 +80,17 @@ function tokenize(title) {
 // --- load Track A -----------------------------------------------------------
 console.log("reading Track A…");
 const papers = readJsonl("data/processed/topic-dynamics/papers.jsonl");
-const edgesRaw = readJsonl("data/processed/topic-dynamics/paper_edges.jsonl");
-console.log(`  ${papers.length} papers, ${edgesRaw.length} edges`);
+// Primary network: cosine-similarity co-citation edges (the paper's weighting).
+// Fallback: bibliographic coupling, used only to place papers co-citation can't
+// reach yet (recent/frontier papers not co-cited by later work).
+const COCITE_FILE = "data/interim/topic-dynamics/paper_edges_cocite_cosine.jsonl";
+const cociteRaw = fs.existsSync(P(COCITE_FILE)) ? readJsonl(COCITE_FILE) : [];
+const couplingRaw = readJsonl("data/processed/topic-dynamics/paper_edges.jsonl").filter((e) => e.edge_type === "bibliographic_coupling");
+console.log(`  ${papers.length} papers, ${cociteRaw.length} cosine co-citation + ${couplingRaw.length} coupling edges`);
+// iCite metrics (RCR / is_clinical / citation_count) — Track A's were null
+const icite = new Map();
+if (fs.existsSync(P("data/interim/topic-dynamics/icite_citedby.jsonl")))
+  for (const r of readJsonl("data/interim/topic-dynamics/icite_citedby.jsonl")) icite.set(String(r.pmid), r);
 
 // --- load Track B -----------------------------------------------------------
 console.log("reading Track B…");
@@ -125,31 +142,38 @@ papers.forEach((p, i) => {
   const r = 10 * Math.sqrt(i + 1);
   graph.addNode(p.paper_id, { x: r * Math.cos(a), y: r * Math.sin(a) });
 });
-let added = 0;
-const bestEdge = new Map(); // node -> [weight, other] strongest incident edge across ALL edges
+// strongest coupling edge per node (for the fallback / anchoring)
+const bestEdge = new Map();
 const noteBest = (a, b, w) => { const cur = bestEdge.get(a); if (!cur || w > cur[0]) bestEdge.set(a, [w, b]); };
-for (const e of edgesRaw) {
+for (const e of couplingRaw) {
   const s = e.source_paper_id, t = e.target_paper_id, w = e.weight || 0;
   if (s === t || !graph.hasNode(s) || !graph.hasNode(t)) continue;
   noteBest(s, t, w); noteBest(t, s, w);
-  if (w < EDGE_MIN_WEIGHT || graph.hasEdge(s, t)) continue;
-  graph.addEdge(s, t, { weight: w, w0: w }); // w0 = true weight (kept for pruning); weight is tuned for layout
+}
+// primary edges: cosine co-citation (>= COSINE_MIN)
+let added = 0;
+for (const e of cociteRaw) {
+  const s = e.source_paper_id, t = e.target_paper_id, w = e.weight || 0;
+  if (w < COSINE_MIN || s === t || !graph.hasNode(s) || !graph.hasNode(t) || graph.hasEdge(s, t)) continue;
+  graph.addEdge(s, t, { weight: w, w0: w });
   added++;
 }
-// anchor edgeless papers to their single strongest link so nothing is orphaned
-let anchored = 0;
+// fallback: attach papers co-citation didn't reach via their strongest coupling edge
+let fb = 0;
 graph.forEachNode((n) => {
   if (graph.degree(n) > 0) return;
   const b = bestEdge.get(n);
-  if (b && !graph.hasEdge(n, b[1])) { graph.addEdge(n, b[1], { weight: b[0], w0: b[0] }); anchored++; }
+  if (b && !graph.hasEdge(n, b[1])) { graph.addEdge(n, b[1], { weight: b[0], w0: b[0] }); fb++; }
 });
 let isolated = 0;
 graph.forEachNode((n) => { if (graph.degree(n) === 0) isolated++; });
-console.log(`  graph: ${graph.order} nodes, ${added} strong + ${anchored} anchor edges, ${isolated} still isolated`);
+console.log(`  graph: ${graph.order} nodes, ${added} co-citation + ${fb} coupling-fallback edges, ${isolated} isolated`);
 
 // --- communities (Louvain on the coupling graph) ----------------------------
 console.log(`detecting communities (resolution=${RESOLUTION})…`);
-louvain.assign(graph, { resolution: RESOLUTION, getEdgeWeight: "weight" });
+// seeded RNG so communities (and therefore labels/colours) are stable across runs
+const mulberry32 = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+louvain.assign(graph, { resolution: RESOLUTION, getEdgeWeight: "weight", rng: mulberry32(1234) });
 
 // merge sub-threshold communities into neighbour-majority large community; else "other"
 function communitySizes() {
@@ -285,17 +309,51 @@ for (const c of members.keys()) {
 const nComm = [...members.keys()].filter((c) => c !== "other").length || 1;
 const geneIdf = (s) => Math.log((nComm + 1) / ((geneCommDf.get(s) || 0) + 1)) + 1;
 
+// --- one distinctive single-word label per community (unique across all) -----
+// Rank each community's title terms by tf-idf where idf counts how many
+// communities use the term, so cross-cutting words ("alzheimer") don't win
+// everywhere. Then assign greedily: the community with the strongest claim on a
+// term takes it; the rest fall through to their next-best unused term. Result:
+// one word per cluster, no repeats.
+const geneSyms = new Set([...genePathway.keys(), ...geneScore.keys()].map((s) => s.toLowerCase()));
+const ACRONYMS = new Set(["qtls", "qtl", "gwas", "snp", "snps", "dna", "rna", "mri", "csf", "ftd", "als", "ad"]);
+const prettyLabel = (t) => {
+  const low = t.toLowerCase();
+  if (geneSyms.has(low) || ACRONYMS.has(low) || /\d/.test(t)) return t.toUpperCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+const realComms = ordered.filter((c) => c !== "other");
+const commTf = new Map();      // comm -> Map(term -> count)
+const termCommDf = new Map();  // term -> number of communities containing it
+for (const c of realComms) {
+  const tf = new Map();
+  for (const i of members.get(c)) for (const tok of paperTokens[i]) tf.set(tok, (tf.get(tok) || 0) + 1);
+  commTf.set(c, tf);
+  for (const tok of tf.keys()) termCommDf.set(tok, (termCommDf.get(tok) || 0) + 1);
+}
+const rankedTerms = new Map(realComms.map((c) => {
+  const tf = commTf.get(c), n = members.get(c).length || 1;
+  const ranked = [...tf.entries()]
+    .filter(([, f]) => f >= 2) // ignore one-off terms
+    .map(([t, f]) => [t, (f / n) * Math.log((realComms.length + 1) / ((termCommDf.get(t) || 0) + 1))])
+    .sort((a, b) => b[1] - a[1]);
+  return [c, ranked];
+}));
+const labelFor = new Map();
+const taken = new Set();
+for (const c of [...realComms].sort((a, b) => (rankedTerms.get(b)[0]?.[1] || 0) - (rankedTerms.get(a)[0]?.[1] || 0))) {
+  const pick = rankedTerms.get(c).find(([t]) => !taken.has(t));
+  const term = pick ? pick[0] : (rankedTerms.get(c)[0]?.[0] || c);
+  taken.add(term);
+  labelFor.set(c, prettyLabel(term));
+}
+labelFor.set("other", "Other");
+
 const communityMeta = new Map(); // community -> {cluster_id, label, color, pathway_group, ...}
 ordered.forEach((c, idx) => {
   const idxs = members.get(c);
   const isOther = c === "other";
-
-  // tf-idf label from member titles
-  const tf = new Map();
-  for (const i of idxs) for (const tok of paperTokens[i]) tf.set(tok, (tf.get(tok) || 0) + 1);
-  const label = isOther ? "other / unclustered" : ([...tf.entries()]
-    .map(([tok, f]) => [tok, f * Math.log(N / (df.get(tok) || 1))])
-    .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([tok]) => tok).join(" / ") || `topic ${idx}`);
+  const label = labelFor.get(c);
 
   // genes: aggregate per-paper gene attribution across members
   const geneCount = new Map();
@@ -340,6 +398,7 @@ const outPapers = papers.map((p, i) => {
   const meta = communityMeta.get(c);
   idToIndex.set(p.paper_id, i);
   const m = p.metrics || {};
+  const im = icite.get(String(p.pmid)) || {};
   return {
     paper_id: p.paper_id,
     pmid: p.pmid ?? null,
@@ -355,10 +414,10 @@ const outPapers = papers.map((p, i) => {
     pathway_group: meta.pathway_group,
     trials: [],
     metrics: {
-      citation_count: m.citation_count ?? null,
-      relative_citation_ratio: m.relative_citation_ratio ?? null,
+      citation_count: im.citation_count ?? m.citation_count ?? null,
+      relative_citation_ratio: im.rcr ?? m.relative_citation_ratio ?? null,
       apt: m.apt ?? null,
-      is_clinical: m.is_clinical ?? null,
+      is_clinical: im.is_clinical ?? m.is_clinical ?? null,
     },
     url: p.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/` : null,
   };
@@ -399,13 +458,15 @@ graph.forEachNode((node) => {
 const outEdges = [...keep].map((k) => k.split("|").map(Number));
 console.log(`  ${outEdges.length} edges kept for drawing`);
 
+computeEmergence(outPapers, outClusters); // per-cluster burst/growth/RCR emergence score
+
 const nGeneP = outPapers.filter((p) => p.genes.length).length;
 const data = {
-  generated_note: `Real coupling-graph map: ForceAtlas2 layout + Louvain communities over ${added} edges. ` +
+  generated_note: `Co-citation map (cosine-weighted, per Davis et al. 2025): ForceAtlas2 layout + Louvain communities over ${added} co-citation edges (coupling fallback for uncited-yet papers). ` +
     `${outPapers.length} papers, ${outClusters.filter((c) => c.topic_id !== "other").length} communities; ` +
     `${nGeneP} papers with gene links. Built by scripts/build-map-data.mjs from Track A + Track B.`,
   disease: "Alzheimer disease / dementia (ADRD)",
-  coordinate_space: "ForceAtlas2 layout of the bibliographic-coupling graph (auto-fit by the app)",
+  coordinate_space: "ForceAtlas2 layout of the cosine-weighted co-citation graph (auto-fit by the app)",
   clusters: outClusters,
   papers: outPapers,
   edges: outEdges,

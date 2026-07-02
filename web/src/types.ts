@@ -32,6 +32,17 @@ export interface ClusterScores {
   [k: string]: number | undefined;
 }
 
+export interface ClusterEmergence {
+  /** composite 0–1 emergence score (burst + growth + influence) */
+  score: number;
+  /** fraction of the topic's papers from the last 3 years */
+  pct_new: number;
+  /** recent vs. preceding 3-year publication ratio */
+  growth: number;
+  /** mean Relative Citation Ratio of the topic's papers */
+  mean_rcr: number;
+}
+
 export interface Cluster {
   topic_id: string;
   label: string;
@@ -44,6 +55,7 @@ export interface Cluster {
   year_start: number;
   year_end: number;
   scores: ClusterScores;
+  emergence?: ClusterEmergence | null;
 }
 
 export interface MapData {
