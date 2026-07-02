@@ -46,6 +46,11 @@ export interface ClusterEmergence {
 export interface Cluster {
   topic_id: string;
   label: string;
+  /** Distinguishing gene / method / mechanism specifics; shown when zoomed in. */
+  sublabel?: string;
+  /** Deterministic TF-IDF term signature the curated label attaches to. */
+  signature?: string;
+  term_hints?: string[];
   color: string;
   pathway_group: string;
   top_genes: string[];

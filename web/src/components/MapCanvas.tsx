@@ -38,6 +38,7 @@ export default function MapCanvas({
   const [size, setSize] = useState({ w: 800, h: 560 });
   const [transform, setTransform] = useState<Transform>({ scale: 1, tx: 0, ty: 0 });
   const [fitted, setFitted] = useState(false);
+  const fitScaleRef = useRef(1); // scale at the initial fit; "zoomed in" is measured against this
 
   const clusterById = useMemo(() => {
     const m = new Map<string, Cluster>();
@@ -84,7 +85,9 @@ export default function MapCanvas({
   // --- initial fit ----------------------------------------------------------
   useEffect(() => {
     if (fitted || papers.length === 0) return;
-    setTransform(fitTransform(papers, size.w, size.h));
+    const t = fitTransform(papers, size.w, size.h);
+    fitScaleRef.current = t.scale;
+    setTransform(t);
     setFitted(true);
   }, [fitted, papers, size.w, size.h]);
 
@@ -192,25 +195,68 @@ export default function MapCanvas({
     for (const p of selected) drawPoint(p, "selected");
     ctx.globalAlpha = 1;
 
-    // cluster labels
+    // cluster labels — primary label always; sublabel fades in when zoomed in.
+    // Labels are decluttered greedily: larger clusters get priority, and a
+    // label is skipped if its pill would overlap one already drawn. As zoom
+    // spreads the centroids apart, more of the smaller labels reappear — so the
+    // zoomed-out view stays clean and detail emerges on zoom in.
     if (viewMode === "clusters") {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = "600 13px ui-sans-serif, system-ui, -apple-system, sans-serif";
-      for (const c of clusters) {
+      // zoom ratio relative to the initial fit; sublabels ramp in from 1.4x–2.2x
+      const zoom = transform.scale / (fitScaleRef.current || 1);
+      const subAlpha = Math.max(0, Math.min(1, (zoom - 1.4) / 0.8));
+      const LABEL_FONT = "600 13px ui-sans-serif, system-ui, -apple-system, sans-serif";
+      const SUB_FONT = "500 10.5px ui-sans-serif, system-ui, -apple-system, sans-serif";
+      const padX = 6;
+      const bh = 18;
+      const drawn: { x0: number; y0: number; x1: number; y1: number }[] = [];
+      const overlaps = (r: { x0: number; y0: number; x1: number; y1: number }) =>
+        drawn.some((d) => r.x0 < d.x1 && r.x1 > d.x0 && r.y0 < d.y1 && r.y1 > d.y0);
+      // largest clusters first so they win the space; "other" never labels
+      const ordered = [...clusters]
+        .filter((c) => c.topic_id !== "other")
+        .sort((a, b) => (b.paper_count ?? 0) - (a.paper_count ?? 0));
+      for (const c of ordered) {
         const s = toScreen(c.centroid, transform);
         if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) continue;
-        const text = c.label;
-        const tw = ctx.measureText(text).width;
+        const hasSub = subAlpha > 0.01 && !!c.sublabel;
+
+        ctx.font = LABEL_FONT;
+        const tw = ctx.measureText(c.label).width;
+        ctx.font = SUB_FONT;
+        const stw = hasSub ? ctx.measureText(c.sublabel!).width : 0;
+
+        // combined footprint of label (+ sublabel) with a small margin
+        const halfW = Math.max(tw / 2 + padX, stw / 2 + 5) + 3;
+        const top = s.y - bh / 2 - 3;
+        const bot = hasSub ? s.y + bh / 2 + 8 + 8 + 3 : s.y + bh / 2 + 3;
+        const rect = { x0: s.x - halfW, y0: top, x1: s.x + halfW, y1: bot };
+        if (overlaps(rect)) continue;
+        drawn.push(rect);
+
+        // primary label pill
+        ctx.font = LABEL_FONT;
         ctx.globalAlpha = 0.9;
         ctx.fillStyle = "rgba(255,255,255,0.82)";
-        const padX = 6;
-        const bh = 18;
         roundRect(ctx, s.x - tw / 2 - padX, s.y - bh / 2, tw + padX * 2, bh, 5);
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.fillStyle = "#26262b";
-        ctx.fillText(text, s.x, s.y + 0.5);
+        ctx.fillText(c.label, s.x, s.y + 0.5);
+
+        // sublabel — smaller, beneath, only once zoomed in
+        if (hasSub) {
+          ctx.font = SUB_FONT;
+          const sy = s.y + bh / 2 + 8;
+          ctx.globalAlpha = 0.7 * subAlpha;
+          ctx.fillStyle = "rgba(255,255,255,0.72)";
+          roundRect(ctx, s.x - stw / 2 - 5, sy - 8, stw + 10, 15, 4);
+          ctx.fill();
+          ctx.globalAlpha = subAlpha;
+          ctx.fillStyle = "#55555c";
+          ctx.fillText(c.sublabel!, s.x, sy);
+        }
       }
     }
 
@@ -383,7 +429,9 @@ export default function MapCanvas({
   }, []);
 
   const resetView = () => {
-    setTransform(fitTransform(papers, size.w, size.h));
+    const t = fitTransform(papers, size.w, size.h);
+    fitScaleRef.current = t.scale;
+    setTransform(t);
     onReset?.();
   };
 
