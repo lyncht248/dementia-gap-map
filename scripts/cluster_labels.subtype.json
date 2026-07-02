@@ -1,0 +1,32 @@
+{
+  "id": "subtype",
+  "name": "Dementia Subtype → Mechanism",
+  "_lens": "disease subtype (coarse) -> gene-anchored mechanism (fine)",
+  "_prompt": "Name each dementia-genetics cluster. Every COARSE label is a dementia/disease subtype (peers: 'Alzheimer Disease', 'Vascular Dementia', ...). Every FINE label is a specific gene-anchored mechanism or phenotype, a peer of the others. Labels within a tier must be mutually exclusive. Note: the co-citation geometry does not separate cleanly by subtype, so a few clusters (TREM2, cross-trait) sit under an inflammatory subtype rather than a classic clinical one.",
+  "coarse": [
+    { "coarse_id": "ad",       "label": "Alzheimer Disease",         "members": ["c0", "c3", "c5", "c8", "c9", "c12"] },
+    { "coarse_id": "inflam",   "label": "Neuroinflammatory",         "members": ["c1", "c4", "c14"] },
+    { "coarse_id": "lewy",     "label": "Lewy Body & Parkinson",     "members": ["c7"] },
+    { "coarse_id": "ftd",      "label": "Frontotemporal & ALS",      "members": ["c6"] },
+    { "coarse_id": "vascular", "label": "Vascular Dementia",         "members": ["c11", "c13"] },
+    { "coarse_id": "other",    "label": "Other Neurodegeneration",   "members": ["c2", "c10", "c15"] }
+  ],
+  "fine": {
+    "c0":  "AD Risk Loci",
+    "c1":  "TREM2 Microglia",
+    "c2":  "Causal Risk Factors",
+    "c3":  "Complement (CLU/CR1)",
+    "c4":  "Cross-Trait Genomics",
+    "c5":  "ABCA7 / BIN1",
+    "c6":  "ALS–FTD Spectrum",
+    "c7":  "Lewy Body & PD",
+    "c8":  "Polygenic Prediction",
+    "c9":  "DNA Methylation",
+    "c10": "Huntington Modifiers",
+    "c11": "Vascular Risk",
+    "c12": "eQTL & Copy Number",
+    "c13": "Small-Vessel Disease",
+    "c14": "Multiple Sclerosis",
+    "c15": "Longevity & Aging"
+  }
+}

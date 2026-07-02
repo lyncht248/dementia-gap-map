@@ -1,0 +1,33 @@
+{
+  "id": "theme",
+  "name": "Theme → Mechanism",
+  "_note": "LLM-named cluster labels under a peer-level, mutually-exclusive constraint. Two tiers: coarse (always visible) and fine (revealed on zoom). Keyed by the cluster_id that scripts/build-map-data.mjs assigns (stable given fixed clustering params). Regenerate this file with a single batched LLM call whenever clustering params change. Applied by scripts/label-clusters.mjs.",
+  "_lens": "hypothesis/theme (coarse) -> gene-anchored mechanism (fine)",
+  "_prompt": "Name each of these dementia-genetics clusters with a 1-3 word label. Every COARSE label must be a research theme at the same level of abstraction (peers, the way 'Neuroinflammation' and 'Cerebrovascular' are peers). Every FINE label must be a specific gene-anchored mechanism or phenotype, a peer of the others in its tier. Labels within a tier must be mutually exclusive. Ground each name in the cluster's top genes, title terms, and exemplar titles.",
+  "coarse": [
+    { "coarse_id": "genomics",       "label": "Alzheimer Genomics",        "members": ["c0", "c8", "c12", "c9"] },
+    { "coarse_id": "neuroinflam",    "label": "Neuroinflammation",         "members": ["c1", "c4", "c14"] },
+    { "coarse_id": "lipid",          "label": "Lipid & Trafficking",       "members": ["c3", "c5"] },
+    { "coarse_id": "neurodegen",     "label": "Related Neurodegeneration", "members": ["c6", "c7", "c10"] },
+    { "coarse_id": "vascular",       "label": "Cerebrovascular",           "members": ["c11", "c13"] },
+    { "coarse_id": "epidemiology",   "label": "Causal Risk Factors",       "members": ["c2", "c15"] }
+  ],
+  "fine": {
+    "c0":  "AD Risk Loci",
+    "c1":  "TREM2 Microglia",
+    "c2":  "Causal Risk Factors",
+    "c3":  "Complement (CLU/CR1)",
+    "c4":  "Cross-Trait Genomics",
+    "c5":  "ABCA7 / BIN1",
+    "c6":  "ALS–FTD Spectrum",
+    "c7":  "Lewy Body & PD",
+    "c8":  "Polygenic Prediction",
+    "c9":  "DNA Methylation",
+    "c10": "Huntington Modifiers",
+    "c11": "Vascular Risk",
+    "c12": "eQTL & Copy Number",
+    "c13": "Small-Vessel Disease",
+    "c14": "Multiple Sclerosis",
+    "c15": "Longevity & Aging"
+  }
+}
