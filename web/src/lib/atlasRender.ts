@@ -59,6 +59,8 @@ export interface AtlasHandle {
   clearSelection: () => void;
   resetView: () => void;
   setFilter: (hiddenMajors: string[], yearRange: [number, number]) => void;
+  /** highlight a subset of papers on the map (the NewsFeed's active facet filter) */
+  setHighlight: (paperIds: string[] | null) => void;
 }
 
 type Pt = { x: number; y: number };
@@ -162,6 +164,10 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   let lasso: Pt[] = [];
   let selSet = new Set<number>();
   let selAnchor = -1; // the clicked paper (draws citation lines), -1 for lasso
+  // refineSet: an external highlight (the NewsFeed's active facet filter, e.g.
+  // "papers mentioning APOE"). When set it narrows the highlight within selSet.
+  let refineSet: Set<number> | null = null;
+  const idToIndex = new Map<string, number>(DATA.ids.map((id, i) => [id, i]));
 
   const rowFor = (i: number): SelectedPaper => ({
     i, paper_id: DATA.ids[i], title: DATA.titles[i], year: P[i][3],
@@ -216,7 +222,11 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     const r = Math.min(Math.max(1.0, dotR * view.s), 9);
     const hoverOn = hoverIdx >= 0 && visible(hoverIdx);
     const nb = hoverOn ? new Set(ADJ[hoverIdx]) : null;
-    const selOn = !hoverOn && selSet.size > 0;
+    // What to emphasise: an active facet filter (refineSet) narrows the highlight;
+    // otherwise the whole selection (selSet).
+    const dimSet = refineSet && refineSet.size ? refineSet : selSet;
+    const dimOn = !hoverOn && dimSet.size > 0;
+    const dimAlpha = refineSet && refineSet.size ? 0.14 : 0.3;
 
     for (let i = 0; i < P.length; i++) {
       const p = P[i];
@@ -230,16 +240,18 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       }
       let a = 1;
       if (hoverOn && i !== hoverIdx && !nb!.has(i)) a = 0.55;
-      else if (selOn && !selSet.has(i)) a = 0.3;
+      else if (dimOn && !dimSet.has(i)) a = dimAlpha;
       ctx.globalAlpha = a;
       ctx.beginPath(); ctx.arc(X, Y, r, 0, 6.2832);
       ctx.fillStyle = PC[i]; ctx.fill();
     }
     ctx.globalAlpha = 1;
 
-    // citation links — from the hovered paper, or (when not hovering) the paper
-    // clicked to build the current selection.
-    const lineAnchor = hoverOn ? hoverIdx : (selAnchor >= 0 && visible(selAnchor) ? selAnchor : -1);
+    // citation links — from the hovered paper, or (when not hovering / not facet-
+    // filtering) the paper clicked to build the current selection.
+    const lineAnchor = hoverOn
+      ? hoverIdx
+      : (!refineSet && selAnchor >= 0 && visible(selAnchor) ? selAnchor : -1);
     if (lineAnchor >= 0) {
       const hX = wx(P[lineAnchor][0]), hY = wy(P[lineAnchor][1]);
       ctx.strokeStyle = "rgba(28,28,38,.5)";
@@ -440,7 +452,15 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       hideTip();
       draw();
     },
-    clearSelection() { selSet = new Set(); selAnchor = -1; draw(); },
+    clearSelection() { selSet = new Set(); selAnchor = -1; refineSet = null; draw(); },
+    setHighlight(ids: string[] | null) {
+      if (!ids || !ids.length) { refineSet = null; }
+      else {
+        refineSet = new Set<number>();
+        for (const id of ids) { const j = idToIndex.get(id); if (j != null) refineSet.add(j); }
+      }
+      draw();
+    },
     resetView() { fit(); baseS = view.s; draw(); },
     setFilter(hm: string[], yr: [number, number]) {
       hiddenMajors.clear();

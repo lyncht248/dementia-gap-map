@@ -10,6 +10,7 @@ import {
 export interface AtlasMapHandle {
   clearSelection: () => void;
   resetView: () => void;
+  setHighlight: (paperIds: string[] | null) => void;
 }
 interface Props {
   selectMode: boolean;
@@ -63,6 +64,7 @@ const AtlasMap = forwardRef<AtlasMapHandle, Props>(function AtlasMap(
   useImperativeHandle(ref, () => ({
     clearSelection: () => handleRef.current?.clearSelection(),
     resetView: () => handleRef.current?.resetView(),
+    setHighlight: (ids: string[] | null) => handleRef.current?.setHighlight(ids),
   }), []);
 
   if (error) return <div className="atlas-loading"><p>Could not load the map.</p><pre>{error}</pre></div>;
