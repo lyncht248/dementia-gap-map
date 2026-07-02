@@ -14,8 +14,13 @@ Inputs (build products of build_evidence_graph.py; read, never modified):
 Outputs (gitignored build products under data/exports/graph/neo4j/):
   nodes.csv     columns: node_id,node_type,label,score,genetic_support,
                 functional_support,translation_gap,disease_groups,
-                pathway_group,provenance
-                (disease_groups is pipe-joined; provenance is a JSON string)
+                pathway_group,<flat metric columns>,provenance
+                (disease_groups is pipe-joined; provenance is a JSON string.
+                genetic_support/functional_support/translation_gap are the
+                LEGACY Track A map-contract scores carried on the node's
+                'scores' dict; the flat metric columns are the transparent
+                count/ratio primitives hoisted from entity_metrics.jsonl -
+                the weighted composites were removed from the metrics layer.)
   edges.csv     columns: edge_id,source_id,target_id,edge_type,score,evidence,
                 method,confidence
                 (method/confidence are the Track A<->B bridge join metadata,
@@ -90,6 +95,7 @@ METRIC_INT_COLUMNS = [
     "n_conflicting",       # gene
     "n_trials",            # gene, pathway
     "n_drugs",             # pathway
+    "n_papers",            # gene, pathway
     "n_associations",      # variant
     "n_studies",           # variant
     "first_gwas_year",     # gene
@@ -105,16 +111,21 @@ METRIC_INT_COLUMNS = [
 METRIC_FLOAT_COLUMNS = [
     "stopped_ratio",         # gene, pathway
     "direction_agreement",   # gene, variant
-    "metrics_translation_gap",  # gene, pathway (renamed to avoid clashing with
-                                # the existing 'translation_gap' score column)
+    # The weighted 'translation_gap' composite was REMOVED from the metrics
+    # layer; its raw count/ratio components are hoisted instead so an agent /
+    # Cypher query can form its own genetics-vs-clinical gap. No 0-1 verdict
+    # column is exported.
+    "best_neglog10p",        # gene (raw -log10 p)
+    "max_l2g",               # gene (raw OT Locus-to-Gene score)
+    "mean_best_neglog10p",   # pathway (mean member-gene best_neglog10p)
+    "trials_per_gene",       # pathway (ratio n_trials/n_genes)
 ]
 METRIC_BOOL_COLUMNS = [
     "has_approval",          # gene, pathway
 ]
-# Column name -> the flat property name on the node (differs only where renamed).
-METRIC_COLUMN_TO_NODE_PROP = {
-    "metrics_translation_gap": "translation_gap",
-}
+# Column name -> the flat property name on the node (identity now; kept for
+# forward-compat if a column ever needs a different node property name).
+METRIC_COLUMN_TO_NODE_PROP = {}
 METRIC_COLUMNS = METRIC_INT_COLUMNS + METRIC_FLOAT_COLUMNS + METRIC_BOOL_COLUMNS
 
 NODE_HEADER = [
@@ -377,17 +388,19 @@ def build_load_cypher(node_types, edge_types):
     lines.append("// compose your own verdicts from them. All are commented out; "
                  "copy one to run.")
     lines.append("")
-    lines.append("// 5a. Genetically supported but clinically stalled genes:")
-    lines.append("//     strong genetic support yet a high share of "
-                 "stopped/terminated trials")
-    lines.append("//     in their mechanism. (No verdict baked in - just the "
-                 "metrics side by side.)")
+    lines.append("// 5a. Strong genetics but clinically stalled genes: high raw")
+    lines.append("//     genetic signal (best_neglog10p) yet a high share of "
+                 "stopped/terminated")
+    lines.append("//     trials in their mechanism. (No verdict baked in - the "
+                 "raw metrics side")
+    lines.append("//     by side; the old 0-1 translation_gap composite was "
+                 "removed.)")
     lines.append("// MATCH (g:Gene)")
-    lines.append("// WHERE g.genetic_support >= 0.7 AND g.stopped_ratio >= 0.3 "
+    lines.append("// WHERE g.best_neglog10p >= 20 AND g.stopped_ratio >= 0.3 "
                  "AND g.n_trials >= 5")
-    lines.append("// RETURN g.label, g.genetic_support, g.stopped_ratio, "
-                 "g.n_trials, g.metrics_translation_gap")
-    lines.append("// ORDER BY g.stopped_ratio DESC, g.genetic_support DESC "
+    lines.append("// RETURN g.label, g.best_neglog10p, g.stopped_ratio, "
+                 "g.n_trials, g.n_papers")
+    lines.append("// ORDER BY g.stopped_ratio DESC, g.best_neglog10p DESC "
                  "LIMIT 25;")
     lines.append("")
     lines.append("// 5b. Recently-emerging loci: variants whose latest GWAS is "
@@ -402,15 +415,19 @@ def build_load_cypher(node_types, edge_types):
     lines.append("// ORDER BY v.latest_year DESC, v.n_associations DESC "
                  "LIMIT 25;")
     lines.append("")
-    lines.append("// 5c. Under-translated pathways: high genetic/functional "
-                 "translation_gap yet")
-    lines.append("//     never reached approval. Also surface stopped_ratio and "
-                 "the drug count.")
+    lines.append("// 5c. Under-translated pathways (agent-composed): strong "
+                 "member-gene genetics")
+    lines.append("//     (mean_best_neglog10p) + broad literature (n_papers) but "
+                 "few/no trials")
+    lines.append("//     (trials_per_gene low) and no approval. No shipped 0-1 "
+                 "gap score - compose")
+    lines.append("//     the verdict from these raw counts/ratios yourself.")
     lines.append("// MATCH (p:Pathway)")
-    lines.append("// WHERE p.has_approval = false")
-    lines.append("// RETURN p.label, p.translation_gap, p.stopped_ratio, "
-                 "p.n_trials, p.n_drugs, p.n_recent_trials")
-    lines.append("// ORDER BY p.translation_gap DESC LIMIT 25;")
+    lines.append("// WHERE p.has_approval = false AND p.n_trials = 0 "
+                 "AND p.mean_best_neglog10p >= 15")
+    lines.append("// RETURN p.label, p.mean_best_neglog10p, p.n_papers, "
+                 "p.trials_per_gene, p.n_trials, p.n_drugs, p.n_recent_trials")
+    lines.append("// ORDER BY p.mean_best_neglog10p DESC LIMIT 25;")
     lines.append("")
     lines.append("// 5d. Direction-conflict genes: GWAS effect directions "
                  "disagree across studies")
@@ -420,7 +437,7 @@ def build_load_cypher(node_types, edge_types):
     lines.append("// WHERE g.direction_agreement IS NOT NULL AND "
                  "g.direction_agreement < 0.7 AND g.n_conflicting >= 2")
     lines.append("// RETURN g.label, g.direction_agreement, g.n_conflicting, "
-                 "g.genetic_support")
+                 "g.best_neglog10p")
     lines.append("// ORDER BY g.n_conflicting DESC, g.direction_agreement ASC "
                  "LIMIT 25;")
     lines.append("")

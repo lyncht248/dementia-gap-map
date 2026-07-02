@@ -62,28 +62,32 @@
     },
     "flat_keys": {
       "gene": {
-        "direction_agreement": "genetic.direction_agreement",
+        "best_neglog10p": "genetic.best_neglog10p",
+        "direction_agreement": "genetic.direction_agreement_ratio",
         "first_gwas_year": "temporal.first_gwas_year",
         "has_approval": "clinical.has_approval",
         "latest_gwas_year": "temporal.latest_gwas_year",
+        "max_l2g": "functional.max_l2g",
         "n_conflicting": "genetic.n_conflicting",
+        "n_papers": "literature.n_papers",
         "n_recent_gwas": "temporal.n_recent_gwas",
         "n_trials": "clinical.n_trials",
-        "stopped_ratio": "clinical.stopped_ratio",
-        "translation_gap": "composite.translation_gap"
+        "stopped_ratio": "clinical.stopped_ratio"
       },
       "pathway": {
         "first_trial_year": "temporal.first_trial_year",
         "has_approval": "clinical.has_approval",
         "latest_trial_year": "temporal.latest_trial_year",
+        "mean_best_neglog10p": "support.mean_best_neglog10p",
         "n_drugs": "clinical.n_drugs",
+        "n_papers": "literature.n_papers",
         "n_recent_trials": "temporal.n_recent_trials",
         "n_trials": "clinical.n_trials",
         "stopped_ratio": "clinical.stopped_ratio",
-        "translation_gap": "composite.translation_gap"
+        "trials_per_gene": "ratios.trials_per_gene"
       },
       "variant": {
-        "direction_agreement": "genetic.direction_agreement",
+        "direction_agreement": "genetic.direction_agreement_ratio",
         "first_year": "temporal.first_year",
         "latest_year": "temporal.latest_year",
         "n_associations": "genetic.n_associations",

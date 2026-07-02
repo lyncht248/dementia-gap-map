@@ -23,7 +23,10 @@ DATASETS = [
     ("data/processed/translational-evidence/genes.jsonl", "gene.schema.json",
      "gene_id",
      "One record per gene/target. Carries evidence_scores (genetic_support, "
-     "functional_support, translation_gap, Open Targets scores) + disease_groups.",
+     "functional_support, Open Targets scores) + disease_groups. NOTE: the "
+     "0-1 evidence_scores are LEGACY weighted scores kept for the current "
+     "Track A map contract; the authoritative agent layer is the transparent "
+     "count/ratio primitives in entity_metrics.jsonl (composites removed there).",
      {"gene_id": "Ensembl gene id (stable)", "symbol": "HGNC symbol"}),
     ("data/processed/translational-evidence/gwas_associations.jsonl",
      "gwas_association.schema.json", "association_id",
@@ -43,7 +46,10 @@ DATASETS = [
     ("data/processed/translational-evidence/pathways.jsonl", "pathway.schema.json",
      "pathway_id",
      "One record per mechanism/pathway group (curated vocabulary). gene_ids[] "
-     "(symbols), scores{clinical_translation, clinical_saturation, translation_gap}.",
+     "(symbols), scores{clinical_translation, clinical_saturation, translation_gap}. "
+     "NOTE: those 0-1 scores are LEGACY weighted scores for the Track A map "
+     "contract; use entity_metrics.jsonl (entity_type='pathway') for the "
+     "transparent count/ratio primitives (weighted composites removed there).",
      {"pathway_id": "curated:<mechanism_group>", "mechanism_group": "bucket name"}),
     ("data/processed/translational-evidence/functional_links.jsonl",
      "functional_link.schema.json", "link_id",
@@ -122,11 +128,22 @@ JOINS = [
 ]
 
 EXAMPLES = [
-    {"question": "Genes genetically supported but clinically stalled",
-     "approach": "genes.jsonl (evidence_scores.genetic_support) + entity_metrics.jsonl "
-                 "(clinical.stopped_ratio, clinical.has_approval)"},
+    {"question": "Genes with strong genetics but clinically stalled",
+     "approach": "entity_metrics.jsonl (entity_type='gene'): high genetic.best_neglog10p "
+                 "AND high clinical.stopped_ratio AND clinical.has_approval=false. "
+                 "No shipped 0-1 verdict - compose from these primitives."},
+    {"question": "Under-researched gene (strong genetics, thin literature)",
+     "approach": "entity_metrics.jsonl: high genetic.best_neglog10p AND low "
+                 "literature.n_papers (low ratios.papers_per_study)"},
+    {"question": "Under-translated gene (strong biology, no trials)",
+     "approach": "entity_metrics.jsonl: high genetic.best_neglog10p AND low "
+                 "clinical.n_trials / clinical.max_phase (high ratios.studies_per_trial)"},
     {"question": "Under-translated mechanisms (opportunity)",
-     "approach": "pathways.jsonl -> scores.translation_gap desc"},
+     "approach": "entity_metrics.jsonl (entity_type='pathway'): high "
+                 "support.mean_best_neglog10p + high literature.n_papers + "
+                 "clinical.n_trials==0 (ratios.trials_per_gene==0). Agent-composed "
+                 "from primitives; the legacy pathways.jsonl scores.translation_gap "
+                 "0-1 score remains only for the Track A map contract."},
     {"question": "Everything connected to a gene (variant->gene->pathway->drug, topics, disease)",
      "approach": "traverse edges.jsonl from nodes.jsonl node 'gene:<ENSG>' (or Cypher in Neo4j)"},
     {"question": "Dementia-vs-Alzheimer filter",
@@ -195,9 +212,20 @@ def main():
         ],
         "example_questions": EXAMPLES,
         "notes": "disease_group / disease_groups is a controlled vocabulary present "
-                 "on most records for dementia-vs-AD filtering. Scores carry their "
-                 "component inputs (no black-box); verdicts (contradiction/opportunity/"
-                 "novelty) are for agents to compose from entity_metrics.jsonl.",
+                 "on most records for dementia-vs-AD filtering. entity_metrics.jsonl "
+                 "is the AUTHORITATIVE agent layer and ships PRIMITIVES ONLY: counts "
+                 "(n_*), raw values (best_neglog10p, max_l2g, Open Targets datatype "
+                 "scores), booleans (has_approval), and simple a/b ratios (each with "
+                 "a 'formula' note, null when the denominator is 0). The weighted 0-1 "
+                 "composites (genetic.genetic_support, functional.functional_support, "
+                 "composite.translation_gap) were REMOVED from entity_metrics; their "
+                 "raw components are kept as standalone primitives. Verdicts "
+                 "(under-researched / under-translated / emerging / clinically "
+                 "contested / contradiction) are COMPOSED BY AGENTS from these "
+                 "primitives - none are shipped. The 0-1 evidence_scores on "
+                 "genes.jsonl and the scores on pathways.jsonl are LEGACY weighted "
+                 "scores retained only for the current Track A map contract (to be "
+                 "replaced by metrics). See translational-evidence/score/METRICS.md.",
         "gene_mechanism_membership": "AUTHORITATIVE gene->mechanism membership is "
                  "MULTI-VALUED: use gene_pathways_api.jsonl.ad_bucket_signals "
                  "(each {bucket, source, matched_term}) - a gene belongs to ALL "

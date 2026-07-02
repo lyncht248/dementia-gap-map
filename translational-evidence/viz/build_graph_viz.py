@@ -63,7 +63,16 @@ FLAT_METRIC_PROPS = [
     "n_trials",
     "n_drugs",
     "has_approval",
-    "translation_gap",   # gene/pathway note: also a per-node flat metric
+    # The weighted 'translation_gap' composite was REMOVED from the metrics
+    # layer; these transparent count/ratio primitives are hoisted instead so
+    # an agent can compose its own genetics-vs-clinical gap. (The pathway
+    # 'translation_gap' still carried on node.scores is the LEGACY Track A
+    # map-contract score, surfaced separately as slim['translation_gap'].)
+    "best_neglog10p",       # gene (raw -log10 p)
+    "n_papers",             # gene, pathway (literature count)
+    "max_l2g",              # gene (raw OT L2G score)
+    "mean_best_neglog10p",  # pathway (mean member-gene best_neglog10p)
+    "trials_per_gene",      # pathway (ratio)
     "first_gwas_year",
     "latest_gwas_year",
     "n_recent_gwas",

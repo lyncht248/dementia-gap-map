@@ -974,14 +974,18 @@ def assign_layout(nodes):
 FLAT_METRIC_KEYS = {
     "gene": {
         "stopped_ratio": "clinical.stopped_ratio",
-        "direction_agreement": "genetic.direction_agreement",
+        "direction_agreement": "genetic.direction_agreement_ratio",
         "n_conflicting": "genetic.n_conflicting",
         "n_trials": "clinical.n_trials",
         "first_gwas_year": "temporal.first_gwas_year",
         "latest_gwas_year": "temporal.latest_gwas_year",
         "n_recent_gwas": "temporal.n_recent_gwas",
         "has_approval": "clinical.has_approval",
-        "translation_gap": "composite.translation_gap",
+        # translation_gap composite was removed; hoist its raw components so an
+        # agent / Cypher query can form its own genetics-vs-clinical gap.
+        "best_neglog10p": "genetic.best_neglog10p",
+        "n_papers": "literature.n_papers",
+        "max_l2g": "functional.max_l2g",
     },
     "pathway": {
         "stopped_ratio": "clinical.stopped_ratio",
@@ -991,7 +995,10 @@ FLAT_METRIC_KEYS = {
         "first_trial_year": "temporal.first_trial_year",
         "latest_trial_year": "temporal.latest_trial_year",
         "n_recent_trials": "temporal.n_recent_trials",
-        "translation_gap": "composite.translation_gap",
+        # translation_gap composite removed; hoist raw components instead.
+        "mean_best_neglog10p": "support.mean_best_neglog10p",
+        "trials_per_gene": "ratios.trials_per_gene",
+        "n_papers": "literature.n_papers",
     },
     "variant": {
         "n_associations": "genetic.n_associations",
@@ -999,7 +1006,7 @@ FLAT_METRIC_KEYS = {
         "first_year": "temporal.first_year",
         "latest_year": "temporal.latest_year",
         "n_recent": "temporal.n_recent",
-        "direction_agreement": "genetic.direction_agreement",
+        "direction_agreement": "genetic.direction_agreement_ratio",
     },
 }
 
