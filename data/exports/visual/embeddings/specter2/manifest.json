@@ -1,0 +1,24 @@
+{
+  "model": "specter2",
+  "n_papers": 4780,
+  "seed": 42,
+  "embed_seconds": 1700.6,
+  "D": 768,
+  "n_no_abstract": 86,
+  "n_clusters": 37,
+  "n_noise": 1024,
+  "umap": {
+    "nn2d": 15,
+    "min_dist2d": 0.1,
+    "nn10d": 15,
+    "components10d": 10
+  },
+  "hdbscan": {
+    "min_cluster_size": 25,
+    "min_samples": 5
+  },
+  "packing": {
+    "method": "anchored-collide",
+    "radius": 0.01487
+  }
+}
