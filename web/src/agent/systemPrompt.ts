@@ -12,6 +12,11 @@ Always ground factual claims in query results — never invent PMIDs, genes, rsI
 
 ## Data (DuckDB SQL — SELECT only, results capped at 200 rows, so aggregate or LIMIT)
 
+The exact current columns + types are in the LIVE SCHEMA block appended at the end
+of this message — that block is AUTHORITATIVE. The descriptions below are guidance;
+if a column differs, trust the live schema (or call describe_schema). Data is
+refreshed periodically, so never assume a column exists without checking.
+
 papers (4780) — one row per paper on the map
   paper_id (TEXT, 'pmid:'||pmid), pmid, title, year, journal, cluster_id, cluster_label,
   pathway_group, x, y, citation_count, relative_citation_ratio, is_clinical,

@@ -66,7 +66,13 @@ def num(v: Any) -> float | None:
         return None
 
 
-def write_table(name: str, rows: list[dict], schema: pa.schema) -> None:
+# Per-table build summary, used for the validation gate in main().
+BUILT: dict[str, dict] = {}
+
+
+def write_table(
+    name: str, rows: list[dict], schema: pa.schema, key_col: str | None = None
+) -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     # Build column-oriented arrays according to the declared schema.
     cols: dict[str, list] = {f.name: [] for f in schema}
@@ -77,6 +83,10 @@ def write_table(name: str, rows: list[dict], schema: pa.schema) -> None:
     table = pa.Table.from_arrays(arrays, schema=schema)
     out = os.path.join(OUT_DIR, f"{name}.parquet")
     pq.write_table(table, out, compression="zstd")
+    key_nonnull = (
+        sum(1 for v in cols.get(key_col, []) if v not in (None, "")) if key_col else None
+    )
+    BUILT[name] = {"rows": len(rows), "key_col": key_col, "key_nonnull": key_nonnull}
     print(f"  {name:18s} {len(rows):6d} rows  {os.path.getsize(out)/1024:8.1f} KiB")
 
 
@@ -125,7 +135,7 @@ def build_genes() -> None:
             ("example_variants", STRLIST),
         ]
     )
-    write_table("genes", rows, schema)
+    write_table("genes", rows, schema, "gene_id")
 
 
 def build_pathways() -> None:
@@ -159,7 +169,7 @@ def build_pathways() -> None:
             ("max_phase_score", F64), ("mapped_trial_mechanism", STR),
         ]
     )
-    write_table("pathways", rows, schema)
+    write_table("pathways", rows, schema, "pathway_id")
 
 
 def build_trials() -> None:
@@ -193,7 +203,7 @@ def build_trials() -> None:
             ("enrollment", F64), ("has_results", BOOL), ("start_date", STR),
         ]
     )
-    write_table("trials", rows, schema)
+    write_table("trials", rows, schema, "nct_id")
 
 
 def build_gwas() -> None:
@@ -223,7 +233,7 @@ def build_gwas() -> None:
             ("study_accession", STR), ("risk_frequency", F64),
         ]
     )
-    write_table("gwas", rows, schema)
+    write_table("gwas", rows, schema, "association_id")
 
 
 def build_functional_links() -> None:
@@ -253,12 +263,18 @@ def build_functional_links() -> None:
             ("source", STR), ("cell_type", STR), ("rank", F64),
         ]
     )
-    write_table("functional_links", rows, schema)
+    write_table("functional_links", rows, schema, "link_id")
 
 
 def build_papers_and_clusters() -> None:
     with open(MAP_DATA) as f:
         d = json.load(f)
+    for key in ("papers", "clusters"):
+        if not isinstance(d.get(key), list) or not d[key]:
+            raise SystemExit(
+                f"map_data.json is missing or has an empty '{key}' array — "
+                f"regenerate the map (npm run gen-data) before gen-parquet."
+            )
     cluster_label = {c["topic_id"]: c.get("label") for c in d["clusters"]}
 
     paper_rows = []
@@ -295,7 +311,7 @@ def build_papers_and_clusters() -> None:
             ("doi", STR), ("url", STR),
         ]
     )
-    write_table("papers", paper_rows, paper_schema)
+    write_table("papers", paper_rows, paper_schema, "paper_id")
 
     cluster_rows = []
     for c in d["clusters"]:
@@ -332,7 +348,7 @@ def build_papers_and_clusters() -> None:
             ("score_clinical_saturation", F64),
         ]
     )
-    write_table("clusters", cluster_rows, cluster_schema)
+    write_table("clusters", cluster_rows, cluster_schema, "topic_id")
 
 
 def build_manifest(tables: list[str]) -> None:
@@ -346,6 +362,32 @@ def build_manifest(tables: list[str]) -> None:
         json.dump(manifest, f, indent=2)
 
 
+EXPECTED_TABLES = [
+    "genes",
+    "pathways",
+    "trials",
+    "gwas",
+    "functional_links",
+    "papers",
+    "clusters",
+]
+
+
+def validate() -> list[str]:
+    """Fail loudly if the data refresh left a table empty or key-less."""
+    errors: list[str] = []
+    for t in EXPECTED_TABLES:
+        info = BUILT.get(t)
+        if info is None:
+            errors.append(f"{t}: not built")
+            continue
+        if info["rows"] == 0:
+            errors.append(f"{t}: 0 rows — source data missing?")
+        if info["key_col"] and info["key_nonnull"] == 0:
+            errors.append(f"{t}: key column '{info['key_col']}' is all-null")
+    return errors
+
+
 def main() -> int:
     if not os.path.isdir(TE):
         print(f"missing data dir: {TE}", file=sys.stderr)
@@ -357,10 +399,16 @@ def main() -> int:
     build_gwas()
     build_functional_links()
     build_papers_and_clusters()
-    build_manifest(
-        ["genes", "pathways", "trials", "gwas", "functional_links", "papers", "clusters"]
-    )
-    print("done.")
+
+    errors = validate()
+    if errors:
+        print("VALIDATION FAILED:", file=sys.stderr)
+        for e in errors:
+            print(f"  - {e}", file=sys.stderr)
+        return 1
+
+    build_manifest(EXPECTED_TABLES)
+    print("done. all tables validated.")
     return 0
 
 

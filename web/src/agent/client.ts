@@ -3,6 +3,7 @@
 // map control), feeds results back, and repeats until the model answers.
 import { SYSTEM_PROMPT } from "./systemPrompt";
 import { TOOLS, dispatchTool } from "./tools";
+import { schemaText } from "../lib/duckdb";
 import type { AgentController } from "./types";
 
 export interface ToolCall {
@@ -33,8 +34,27 @@ export interface AgentCallbacks {
 const MAX_STEPS = 8;
 const AGENT_ENDPOINT = "/api/agent";
 
+/** Empty transcript; the system message (with live schema) is injected lazily by
+ * runConversation on the first turn so it always reflects the current data. */
 export function initialMessages(): ChatMessage[] {
-  return [{ role: "system", content: SYSTEM_PROMPT }];
+  return [];
+}
+
+let systemMessage: ChatMessage | null = null;
+
+async function getSystemMessage(): Promise<ChatMessage> {
+  if (systemMessage) return systemMessage;
+  let live: string;
+  try {
+    live = await schemaText();
+  } catch {
+    live = "(live schema unavailable — verify columns with describe_schema)";
+  }
+  systemMessage = {
+    role: "system",
+    content: `${SYSTEM_PROMPT}\n\n## LIVE SCHEMA (authoritative — current columns & types)\n${live}`,
+  };
+  return systemMessage;
 }
 
 async function callProxy(
@@ -68,7 +88,11 @@ export async function runConversation(
   cb: AgentCallbacks = {},
   signal?: AbortSignal
 ): Promise<{ messages: ChatMessage[]; finalText: string }> {
-  const convo = [...history];
+  // Ensure the (live-schema) system message is present at the head of the convo.
+  const convo =
+    history[0]?.role === "system"
+      ? [...history]
+      : [await getSystemMessage(), ...history];
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const assistant = await callProxy(convo, signal);

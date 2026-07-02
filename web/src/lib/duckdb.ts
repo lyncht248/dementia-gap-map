@@ -76,6 +76,43 @@ export function warmupDuckDb(): void {
   });
 }
 
+export type TableSchema = Record<string, { name: string; type: string }[]>;
+
+let schemaPromise: Promise<TableSchema> | null = null;
+
+/** Live column/type schema of each registered view (cached). Source of truth for
+ * the agent — robust to Parquet schema changes without editing the prompt. */
+export function getSchema(): Promise<TableSchema> {
+  if (!schemaPromise) {
+    schemaPromise = (async () => {
+      const db = await getDb();
+      const conn = await db.connect();
+      const out: TableSchema = {};
+      try {
+        for (const t of TABLES) {
+          const res = await conn.query(`DESCRIBE ${t}`);
+          out[t] = res.toArray().map((r) => {
+            const j = r.toJSON() as { column_name?: unknown; column_type?: unknown };
+            return { name: String(j.column_name), type: String(j.column_type) };
+          });
+        }
+      } finally {
+        await conn.close();
+      }
+      return out;
+    })();
+  }
+  return schemaPromise;
+}
+
+/** Compact one-line-per-table rendering of the live schema for the prompt. */
+export async function schemaText(): Promise<string> {
+  const s = await getSchema();
+  return TABLES.map(
+    (t) => `${t}(${(s[t] ?? []).map((c) => `${c.name} ${c.type}`).join(", ")})`
+  ).join("\n");
+}
+
 function normalize(v: unknown): unknown {
   if (v == null) return null;
   if (typeof v === "bigint") return Number(v);

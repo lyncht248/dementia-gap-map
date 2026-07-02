@@ -7,7 +7,8 @@ type UiItem =
   | { kind: "user"; text: string }
   | { kind: "assistant"; text: string }
   | { kind: "tool"; name: string; args: Record<string, unknown>; result?: unknown }
-  | { kind: "error"; text: string };
+  | { kind: "error"; text: string }
+  | { kind: "note"; text: string };
 
 interface Conversation {
   id: string;
@@ -42,6 +43,7 @@ export default function AgentPanel({ controller }: { controller: AgentController
   const [input, setInput] = useState("");
   const countRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<Record<string, AbortController>>({});
 
   const active = convos.find((c) => c.id === activeId) ?? convos[0];
 
@@ -74,6 +76,8 @@ export default function AgentPanel({ controller }: { controller: AgentController
     const q = text.trim();
     if (!q || active.busy) return;
     const id = active.id;
+    const ac = new AbortController();
+    abortRef.current[id] = ac;
     const transcript: ChatMessage[] = [
       ...active.transcript,
       { role: "user", content: q },
@@ -88,25 +92,30 @@ export default function AgentPanel({ controller }: { controller: AgentController
     setInput("");
 
     try {
-      const { messages, finalText } = await runConversation(transcript, controller, {
-        onToolCall: (e) =>
-          update(id, (c) => ({
-            ...c,
-            items: [...c.items, { kind: "tool", name: e.name, args: e.args }],
-          })),
-        onToolResult: (e) =>
-          update(id, (c) => {
-            const items = [...c.items];
-            for (let i = items.length - 1; i >= 0; i--) {
-              const it = items[i];
-              if (it.kind === "tool" && it.name === e.name && it.result === undefined) {
-                items[i] = { ...it, result: e.result };
-                break;
+      const { messages, finalText } = await runConversation(
+        transcript,
+        controller,
+        {
+          onToolCall: (e) =>
+            update(id, (c) => ({
+              ...c,
+              items: [...c.items, { kind: "tool", name: e.name, args: e.args }],
+            })),
+          onToolResult: (e) =>
+            update(id, (c) => {
+              const items = [...c.items];
+              for (let i = items.length - 1; i >= 0; i--) {
+                const it = items[i];
+                if (it.kind === "tool" && it.name === e.name && it.result === undefined) {
+                  items[i] = { ...it, result: e.result };
+                  break;
+                }
               }
-            }
-            return { ...c, items };
-          }),
-      });
+              return { ...c, items };
+            }),
+        },
+        ac.signal
+      );
       update(id, (c) => ({
         ...c,
         transcript: messages,
@@ -114,16 +123,24 @@ export default function AgentPanel({ controller }: { controller: AgentController
         busy: false,
       }));
     } catch (e) {
+      const aborted =
+        ac.signal.aborted || (e instanceof Error && e.name === "AbortError");
       update(id, (c) => ({
         ...c,
         items: [
           ...c.items,
-          { kind: "error", text: String(e instanceof Error ? e.message : e) },
+          aborted
+            ? { kind: "note", text: "Stopped." }
+            : { kind: "error", text: String(e instanceof Error ? e.message : e) },
         ],
         busy: false,
       }));
+    } finally {
+      delete abortRef.current[id];
     }
   };
+
+  const stop = () => abortRef.current[active.id]?.abort();
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -202,9 +219,15 @@ export default function AgentPanel({ controller }: { controller: AgentController
           placeholder="Ask about the data or tell me what to show…"
           rows={2}
         />
-        <button type="submit" className="agent-send" disabled={active.busy || !input.trim()}>
-          {active.busy ? "…" : "Send"}
-        </button>
+        {active.busy ? (
+          <button type="button" className="agent-send agent-stop" onClick={stop}>
+            Stop
+          </button>
+        ) : (
+          <button type="submit" className="agent-send" disabled={!input.trim()}>
+            Send
+          </button>
+        )}
       </form>
     </div>
   );
@@ -221,6 +244,8 @@ function MessageItem({ item }: { item: UiItem }) {
     );
   if (item.kind === "error")
     return <div className="msg msg-error">⚠ {item.text}</div>;
+  if (item.kind === "note")
+    return <div className="msg msg-note">{item.text}</div>;
   return <ToolItem item={item} />;
 }
 

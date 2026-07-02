@@ -917,6 +917,18 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+.agent-stop {
+  background: var(--ink);
+}
+.agent-stop:hover {
+  background: #000;
+}
+.msg-note {
+  align-self: flex-start;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-style: italic;
+}
 
 /* --- map column --- */
 .map-topbar {

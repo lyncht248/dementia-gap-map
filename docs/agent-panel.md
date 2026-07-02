@@ -35,9 +35,9 @@ server is a **stateless proxy** — no DB, no session store.
 | File | Role |
 |---|---|
 | `scripts/build-agent-parquet.py` | JSONL + `map_data.json` → 7 Parquet tables in `web/public/data/parquet/` |
-| `web/src/lib/duckdb.ts` | Lazy DuckDB-Wasm; registers Parquet as views; `runSql()` |
+| `web/src/lib/duckdb.ts` | Lazy DuckDB-Wasm; registers Parquet as views; `runSql()`, `getSchema()` (live columns) |
 | `web/src/agent/systemPrompt.ts` | Schema + join keys + scoring semantics + behavior |
-| `web/src/agent/tools.ts` | Tool schemas (`query_data` + map control) + dispatcher |
+| `web/src/agent/tools.ts` | Tool schemas (`query_data`, `describe_schema` + map control) + dispatcher |
 | `web/src/agent/client.ts` | Client-side model/tool loop against `/api/agent` |
 | `web/src/agent/controller.ts` | Adapter: intents → React state setters + camera calls |
 | `web/src/agent/types.ts` | `AgentController`, `MapHandle`, `MapState` |
@@ -51,10 +51,14 @@ server is a **stateless proxy** — no DB, no session store.
 `papers, clusters, genes, pathways, trials, gwas, functional_links` — see
 `systemPrompt.ts` for columns/joins. Anchored on stable IDs only (PMID, Ensembl
 `gene_id`/`symbol`, NCT, rsID, `disease_group`), per the brief — never on
-coordinates or community numbers. Regenerate after a data refresh:
+coordinates or community numbers. The agent reads the **live schema** at runtime
+(injected into the prompt + a `describe_schema` tool), so column/score changes
+are picked up automatically — no prompt edit needed. Regenerate after a data
+refresh (the build validates and fails loudly on empty/broken tables):
 
 ```bash
-cd web && npm run gen-parquet   # -> web/public/data/parquet/*.parquet (committed)
+cd web && npm run build:data    # map_data.json + Parquet (both committed)
+# or just the Parquet: npm run gen-parquet
 ```
 
 ## Control API (`AgentController`)
@@ -86,5 +90,7 @@ Dev-only: `window.mapAgent` exposes the controller for console debugging.
 - Track B evidence attaches to papers by **PMID**, robust to re-clustering.
 - New tool → add a schema in `tools.ts`, a `case` in `dispatchTool`, and (if it
   controls the map) a method on `AgentController`.
-- If `map_data.json`/schemas change, rerun `gen-parquet` and update
-  `systemPrompt.ts`.
+- If `map_data.json`/schemas change, rerun `npm run build:data`. Column/score
+  changes are picked up automatically via the live schema + `describe_schema`;
+  you only need to touch `systemPrompt.ts` for *semantic* guidance (new joins,
+  scoring meaning), not for column names.

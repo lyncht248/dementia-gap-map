@@ -2,7 +2,7 @@
 // tool call locally: `query_data` hits DuckDB-Wasm, the rest drive the map via
 // the AgentController. Everything executes in the browser; the serverless proxy
 // only relays model turns.
-import { runSql } from "../lib/duckdb";
+import { getSchema, runSql } from "../lib/duckdb";
 import type { AgentController } from "./types";
 
 export interface ToolSpec {
@@ -35,6 +35,17 @@ export const TOOLS: ToolSpec[] = [
         },
         required: ["sql"],
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "describe_schema",
+      description:
+        "Return the live column names + types for every table. Call this if a " +
+        "query fails on an unknown column, or to confirm the current schema " +
+        "(it may change as the data is refreshed).",
+      parameters: { type: "object", properties: {} },
     },
   },
   {
@@ -178,6 +189,12 @@ export async function dispatchTool(
         return { error: String(e instanceof Error ? e.message : e) };
       }
     }
+    case "describe_schema":
+      try {
+        return await getSchema();
+      } catch (e) {
+        return { error: String(e instanceof Error ? e.message : e) };
+      }
     case "select_papers":
       return controller.selectPapers(asStrArray(args.paper_ids));
     case "highlight_papers":
