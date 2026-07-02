@@ -1,0 +1,31 @@
+{
+  "generated_from": "theme_atlas",
+  "link_confidence": {
+    "high": 11556,
+    "low": 1836,
+    "medium": 148
+  },
+  "link_methods": {
+    "chemical_ui_crosswalk": 247,
+    "drug_target": 5156,
+    "gene_pathway_curated": 148,
+    "mesh_ui_join": 102,
+    "pmid_join": 6051,
+    "regex_symbol_match": 1330,
+    "trial_mechanism": 506
+  },
+  "link_types": {
+    "chemical_annotation": 247,
+    "gene_mention": 1330,
+    "mesh_annotation": 102,
+    "model_inference": 5662,
+    "paper_overlap": 6051,
+    "pathway_mapping": 148
+  },
+  "n_atlas_papers": 4780,
+  "n_links": 13540,
+  "n_rollups": 45,
+  "n_themes": 45,
+  "source": "data/exports/visual/embeddings/qwen3-8b (Track A PR #17)",
+  "taxonomy": "theme_atlas_qwen3-8b"
+}

@@ -83,6 +83,18 @@ DATASETS = [
      "One record per Track A topic: Track B half of the map (pathway_group, "
      "top_genes, trials, aggregated scores).",
      {"topic_id": "Track A topic"}),
+    ("data/processed/shared/atlas_evidence_links.jsonl", "topic_evidence_link.schema.json",
+     None,
+     "SAME as topic_evidence_links but keyed to Track A's Theme Atlas (PR #17, 45 "
+     "embedding themes; topic_id='atlas:<n>'). Richer taxonomy for 'which "
+     "loci/trials/diseases sit under theme X' questions. PMID-anchored identically.",
+     {"topic_id": "atlas:<n> (Theme Atlas)", "evidence_id": "id in the referenced dataset",
+      "supporting_paper_ids": "PMIDs"}),
+    ("data/processed/shared/atlas_evidence_rollup.jsonl", "topic_evidence_rollup.schema.json",
+     "topic_id",
+     "One record per Theme Atlas theme (atlas:<n>): Track B evidence rolled up to "
+     "the 45-theme embedding taxonomy. Parallel to topic_evidence_rollup.",
+     {"topic_id": "atlas:<n> (Theme Atlas)"}),
     ("data/exports/graph/nodes.jsonl", "evidence_node.schema.json", "node_id",
      "PRE-JOINED graph nodes (variant/gene/pathway/drug/trial/disease/topic). "
      "The single best artifact for relationship questions.",

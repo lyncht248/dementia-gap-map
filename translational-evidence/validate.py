@@ -53,6 +53,12 @@ OPTIONAL_FILE_TO_SCHEMA = {
         "topic_evidence_link",
     common.SHARED_PROCESSED_DIR / "topic_evidence_rollup.jsonl":
         "topic_evidence_rollup",
+    # Same shape as the topic bridge, but keyed to Track A's Theme Atlas (45
+    # embedding themes). Reuses the topic_evidence_* schemas.
+    common.SHARED_PROCESSED_DIR / "atlas_evidence_links.jsonl":
+        "topic_evidence_link",
+    common.SHARED_PROCESSED_DIR / "atlas_evidence_rollup.jsonl":
+        "topic_evidence_rollup",
     GRAPH_EXPORT_DIR / "nodes.jsonl": "evidence_node",
     GRAPH_EXPORT_DIR / "edges.jsonl": "evidence_edge",
 }
