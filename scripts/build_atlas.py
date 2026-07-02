@@ -167,8 +167,8 @@ def pack_force(xy, groups, spacing, iters=220):
         # cool the packing forces over time for a clean settle
         t = it / iters
         g_grav = 0.05 * (1 - 0.5 * t)   # compact each region
-        g_glob = 0.045 * (1 - 0.4 * t)  # draw regions together (close whitespace)
-        g_anch = 0.006                  # retain internal sub-topic ordering
+        g_glob = 0.03 * (1 - 0.4 * t)   # draw regions together (close whitespace)
+        g_anch = 0.01                   # retain internal sub-topic ordering
 
         gcen = pos.mean(0)
         cen = {g: pos[groups == g].mean(0) for g in gids}
@@ -192,6 +192,65 @@ def pack_force(xy, groups, spacing, iters=220):
             np.add.at(disp, b, -unit * push[:, None])
             pos += disp
     return pos
+
+
+def hex_snap(xy, spacing):
+    """Snap the (already compact) cloud onto a single hexagonal lattice so every
+    paper gets its own cell — perfect tiling, zero overlaps, uniform gaps, like
+    the reference atlas. Nearest-free-cell assignment processed densest-first so
+    each point claims a cell close to itself and the gaps between disease islands
+    are preserved (rather than collapsing into one disk). Deterministic.
+    """
+    import numpy as np
+    from scipy.spatial import cKDTree
+
+    xy = np.asarray(xy, dtype=float)
+    n = len(xy)
+    d, _ = cKDTree(xy).query(xy, k=min(7, n))
+    order = np.argsort(d[:, -1])  # dense (small kth-NN dist) first
+
+    dx = spacing
+    dy = spacing * math.sqrt(3) / 2.0
+
+    def cell_of(x, y):
+        row = int(round(y / dy))
+        col = int(round((x - (row % 2) * dx / 2.0) / dx))
+        return row, col
+
+    def cell_center(row, col):
+        return (col * dx + (row % 2) * dx / 2.0, row * dy)
+
+    occupied: set[tuple[int, int]] = set()
+    out = [None] * n
+    for i in order:
+        x, y = xy[i]
+        r0, c0 = cell_of(x, y)
+        best = None
+        best_ring = 0
+        ring = 0
+        while True:
+            for rr in range(r0 - ring, r0 + ring + 1):
+                for cc in range(c0 - ring, c0 + ring + 1):
+                    if max(abs(rr - r0), abs(cc - c0)) != ring:
+                        continue
+                    if (rr, cc) in occupied:
+                        continue
+                    cxp, cyp = cell_center(rr, cc)
+                    dd = (cxp - x) ** 2 + (cyp - y) ** 2
+                    if best is None or dd < best[0]:
+                        best = (dd, rr, cc)
+                        best_ring = ring
+            # once we have a candidate, scan one more ring (a nearer cell can sit
+            # in the next ring out) then stop.
+            if best is not None and ring >= best_ring + 1:
+                break
+            ring += 1
+            if ring > 600:
+                break
+        _, rr, cc = best
+        occupied.add((rr, cc))
+        out[i] = cell_center(rr, cc)
+    return np.array(out, dtype=float)
 
 
 def hex_to_rgb(h: str) -> tuple[int, int, int]:
@@ -251,6 +310,8 @@ def main() -> None:
             groups[i] = grp_idx[grp_key.get(points[j]["cluster"], fallback_major)]
 
     packed = pack_force([(p["x"], p["y"]) for p in points], groups, spacing=PACK_SPACING)
+    # then snap onto one shared hex lattice: clean tiling, no overlaps.
+    packed = hex_snap(packed, PACK_SPACING)
     for p, (qx, qy) in zip(points, packed):
         p["px"], p["py"] = float(qx), float(qy)
 
@@ -309,8 +370,8 @@ def main() -> None:
         })
     major_records.sort(key=lambda m: -m["count"])
 
-    # Assign noise points (-1) to the nearest fine cluster centroid (2D) so the
-    # map is fully coloured; they render at lower opacity and carry no label.
+    # Assign noise points (-1) to the nearest fine cluster centroid so every dot
+    # carries a sub-topic; colour comes from position (gradient) in the browser.
     fine_cx = {r["id"]: (r["x"], r["y"]) for r in fine_records}
 
     def nearest_fine(px, py):
@@ -321,16 +382,44 @@ def main() -> None:
                 bd, best = d, cid
         return best
 
-    # points array: [px, py, fine_id, year, is_noise]
+    # points array: [px, py, fine_id, year]
     pt_rows = []
     titles = []
-    for p in points:
+    idx_of = {}
+    for i, p in enumerate(points):
         c = p["cluster"]
-        is_noise = 1 if c == -1 else 0
-        if is_noise:
+        if c == -1:
             c = nearest_fine(p["px"], p["py"])
-        pt_rows.append([round(p["px"], 3), round(p["py"], 3), c, p["year"], is_noise])
+        pt_rows.append([round(p["px"], 3), round(p["py"], 3), c, p["year"]])
         titles.append(p["title"])
+        idx_of[p["paper_id"]] = i
+
+    # Citation graph: in-corpus paper->reference links (a paper cites another
+    # paper in the corpus). Undirected here — "cites / is cited by". Emitted as
+    # index pairs into `points` for hover-highlighting.
+    def _norm_ref(r):
+        if isinstance(r, dict):
+            r = r.get("paper_id") or r.get("pmid")
+        if r is None:
+            return None
+        r = str(r)
+        return r if r.startswith("pmid:") else "pmid:" + r
+
+    corpus_ids = set(idx_of)
+    edge_set = set()
+    papers_path = ROOT / "data/processed/topic-dynamics/papers.jsonl"
+    if papers_path.exists():
+        for line in papers_path.open():
+            d = json.loads(line)
+            src = d.get("paper_id")
+            if src not in corpus_ids:
+                continue
+            for r in (d.get("references") or []):
+                t = _norm_ref(r)
+                if t in corpus_ids and t != src:
+                    a, b = sorted((idx_of[src], idx_of[t]))
+                    edge_set.add((a, b))
+    edges = sorted(edge_set)
 
     years = [p["year"] for p in points]
     data = {
@@ -340,6 +429,7 @@ def main() -> None:
             "n_papers": len(points),
             "n_major": len(major_records),
             "n_minor": len(fine_records),
+            "n_edges": len(edges),
             "year_min": min(years),
             "year_max": max(years),
         },
@@ -347,6 +437,7 @@ def main() -> None:
         "minors": fine_records,
         "points": pt_rows,
         "titles": titles,
+        "edges": edges,
     }
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -357,7 +448,7 @@ def main() -> None:
 
     print(f"wrote {OUT_DIR/'index.html'}")
     print(f"  {len(points)} papers | {len(major_records)} major topics | "
-          f"{len(fine_records)} minor topics")
+          f"{len(fine_records)} minor topics | {len(edges)} citation links")
     for m in major_records:
         print(f"    {m['count']:>4}  {m['label']}")
 
@@ -411,7 +502,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <h1>Dementia Gap Map — Theme Atlas</h1>
     <p id="sub"></p>
     <div class="legend" id="legend"></div>
-    <div class="hint">Scroll to zoom · drag to pan · zoom in for finer topics</div>
+    <div class="hint">Scroll to zoom · drag to pan · hover a dot to trace its citations · zoom in for finer topics</div>
   </div>
   <div id="tip"></div>
   <div id="zoom"><button id="zout">–</button><button id="zin">+</button></div>
@@ -433,13 +524,35 @@ const cx0 = (minx+maxx)/2, cy0 = (miny+maxy)/2;
 
 // hex-lattice spacing -> dot radius that tiles the lattice with a tiny gap
 const spacing = DATA.meta.spacing || 0.032;
-const dotR = spacing * 0.5;
+const dotR = spacing * 0.46;
 
-const minorColor = {}, minorMajor = {}, minorLabel = {};
-for (const m of DATA.minors){ minorColor[m.id]=m.color; minorMajor[m.id]=m.major; minorLabel[m.id]=m.label; }
+const minorMajor = {}, minorLabel = {};
+for (const m of DATA.minors){ minorMajor[m.id]=m.major; minorLabel[m.id]=m.label; }
 const majorLabel = {}, majorColor = {};
 for (const M of DATA.majors){ majorLabel[M.id]=M.label; majorColor[M.id]=M.color; }
 const hidden = new Set();  // hidden major ids
+
+// ---- gradient colour --------------------------------------------------------
+// Each dot's colour = inverse-distance blend of the disease-area colours, so a
+// region core keeps its hue while borders melt smoothly into their neighbours.
+function hx(h){ h=h.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+const MC = DATA.majors.map(M=>({x:M.x,y:M.y,c:hx(M.color)}));
+const PC = new Array(P.length);
+for(let i=0;i<P.length;i++){
+  const px=P[i][0], py=P[i][1];
+  let r=0,g=0,b=0,ws=0;
+  for(const m of MC){
+    const dx=px-m.x, dy=py-m.y;
+    const w=1/Math.pow(dx*dx+dy*dy+2e-3, 2.3);
+    r+=m.c[0]*w; g+=m.c[1]*w; b+=m.c[2]*w; ws+=w;
+  }
+  PC[i]='rgb('+Math.round(r/ws)+','+Math.round(g/ws)+','+Math.round(b/ws)+')';
+}
+
+// ---- citation adjacency (a paper cites / is cited by another in the corpus) --
+const ADJ = Array.from({length:P.length}, ()=>[]);
+for(const e of (DATA.edges||[])){ ADJ[e[0]].push(e[1]); ADJ[e[1]].push(e[0]); }
+let hoverIdx = -1;
 
 // ---- view state -------------------------------------------------------------
 let view = { s:1, tx:0, ty:0 };   // screen = world*s + t
@@ -469,9 +582,11 @@ function draw(){
   ctx.clearRect(0,0,w,h);
 
   const zoom = view.s / baseS;
-  // dot grows with zoom but is capped so deep zoom reads as a clean lattice
-  // (with gaps + labels) rather than giant overlapping blobs.
-  const r = Math.min(Math.max(1.1, dotR*view.s), 7);
+  // dot grows with zoom but is capped so deep zoom reads as a clean lattice.
+  const r = Math.min(Math.max(1.0, dotR*view.s), 9);
+
+  const hoverOn = hoverIdx>=0 && !hidden.has(minorMajor[P[hoverIdx][2]]);
+  const nb = hoverOn ? new Set(ADJ[hoverIdx]) : null;
 
   // dots
   for (let i=0;i<P.length;i++){
@@ -479,13 +594,34 @@ function draw(){
     if (hidden.has(minorMajor[fid])) continue;
     const X=wx(p[0]), Y=wy(p[1]);
     if (X<-4||X>w+4||Y<-4||Y>h+4) continue;
+    ctx.globalAlpha = (hoverOn && i!==hoverIdx && !nb.has(i)) ? 0.16 : 1;
     ctx.beginPath();
     ctx.arc(X,Y,r,0,6.2832);
-    ctx.fillStyle = minorColor[fid];
-    ctx.globalAlpha = p[4] ? 0.42 : 0.92;
+    ctx.fillStyle = PC[i];
     ctx.fill();
   }
   ctx.globalAlpha = 1;
+
+  // citation links radiating from the hovered paper
+  if (hoverOn){
+    const hX=wx(P[hoverIdx][0]), hY=wy(P[hoverIdx][1]);
+    ctx.strokeStyle='rgba(28,28,38,.5)';
+    ctx.lineWidth=Math.min(1.5, 0.7*zoom);
+    ctx.beginPath();
+    for(const j of ADJ[hoverIdx]){
+      if(hidden.has(minorMajor[P[j][2]])) continue;
+      ctx.moveTo(hX,hY); ctx.lineTo(wx(P[j][0]),wy(P[j][1]));
+    }
+    ctx.stroke();
+    for(const j of ADJ[hoverIdx]){
+      if(hidden.has(minorMajor[P[j][2]])) continue;
+      ctx.beginPath(); ctx.arc(wx(P[j][0]),wy(P[j][1]),r,0,6.2832);
+      ctx.fillStyle=PC[j]; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(hX,hY,r+2,0,6.2832);
+    ctx.fillStyle=PC[hoverIdx]; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='#1b1b1f'; ctx.stroke();
+  }
 
   // labels — minor appear as you zoom in, major fade out
   const showMinor = zoom > 1.7;
@@ -523,8 +659,10 @@ function drawLabel(text,x,y,size,color,alpha,bold){
 let drag=null;
 cv.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY,tx:view.tx,ty:view.ty}; cv.classList.add('drag'); });
 window.addEventListener('mouseup',()=>{ drag=null; cv.classList.remove('drag'); });
+cv.addEventListener('mouseleave',()=>{ if(hoverIdx>=0){ hoverIdx=-1; draw(); } hideTip(); });
 window.addEventListener('mousemove',e=>{
-  if(drag){ view.tx = drag.tx + (e.clientX-drag.x); view.ty = drag.ty - (e.clientY-drag.y); draw(); hideTip(); return; }
+  if(drag){ if(hoverIdx>=0)hoverIdx=-1; view.tx = drag.tx + (e.clientX-drag.x); view.ty = drag.ty - (e.clientY-drag.y); draw(); hideTip(); return; }
+  if(e.target!==cv){ if(hoverIdx>=0){ hoverIdx=-1; draw(); } hideTip(); return; }
   hover(e);
 });
 cv.addEventListener('wheel',e=>{
@@ -552,10 +690,12 @@ function hover(e){
     const dx=wx(p[0])-e.clientX, dy=wy(p[1])-e.clientY;
     const d=dx*dx+dy*dy; if(d<bd){bd=d;best=i;}
   }
+  if(best!==hoverIdx){ hoverIdx=best; draw(); }
   if(best<0){ hideTip(); return; }
-  const p=P[best], fid=p[2];
+  const p=P[best], fid=p[2], deg=ADJ[best].length;
   tip.innerHTML = `<div class="t">${esc(DATA.titles[best])}</div>`+
-    `<div class="m">${p[3]} · ${minorLabel[fid]} · ${majorLabel[minorMajor[fid]]}</div>`;
+    `<div class="m">${p[3]} · ${minorLabel[fid]} · ${majorLabel[minorMajor[fid]]}</div>`+
+    `<div class="m">${deg} citation link${deg===1?'':'s'} in corpus</div>`;
   tip.style.opacity=1;
   const tx=Math.min(e.clientX+14, window.innerWidth-320);
   const ty=Math.min(e.clientY+14, window.innerHeight-90);
