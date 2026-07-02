@@ -1,91 +1,28 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { MapData, Paper } from "./types";
-import { loadMapData } from "./lib/data";
-import MapCanvas from "./components/MapCanvas";
-import NewsFeed from "./components/NewsFeed";
+import { useRef, useState } from "react";
+import AtlasMap, { type AtlasMapHandle } from "./components/AtlasMap";
+import AtlasFeed from "./components/AtlasFeed";
+import type { SelectedPaper } from "./lib/atlasRender";
 
+// The dementia gap map: the Qwen-embedding theme atlas sits in the map panel;
+// the surrounding shell keeps the region-selection tool + the paper feed.
 export default function App() {
-  const [data, setData] = useState<MapData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const [selectMode, setSelectMode] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<SelectedPaper[]>([]);
+  const atlasRef = useRef<AtlasMapHandle>(null);
 
-  const [activeGroups, setActiveGroups] = useState<Set<string>>(new Set());
-  const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
-
-  useEffect(() => {
-    loadMapData()
-      .then((d) => {
-        setData(d);
-        setActiveGroups(new Set(d.clusters.map((c) => c.pathway_group)));
-        const years = d.papers.map((p) => p.year);
-        setYearRange([Math.min(...years), Math.max(...years)]);
-      })
-      .catch((e) => setError(String(e)));
-  }, []);
-
-  const yearBounds = useMemo<[number, number]>(() => {
-    if (!data) return [2000, 2026];
-    const years = data.papers.map((p) => p.year);
-    return [Math.min(...years), Math.max(...years)];
-  }, [data]);
-
-  const pathwayGroups = useMemo(() => {
-    if (!data) return [];
-    const seen = new Map<string, string>(); // group -> color
-    for (const c of data.clusters) if (!seen.has(c.pathway_group)) seen.set(c.pathway_group, c.color);
-    return [...seen.entries()];
-  }, [data]);
-
-  const isActive = useCallback(
-    (p: Paper) =>
-      activeGroups.has(p.pathway_group) &&
-      p.year >= yearRange[0] &&
-      p.year <= yearRange[1],
-    [activeGroups, yearRange]
-  );
-
-  const selected = useMemo(
-    () => (data ? data.papers.filter((p) => selectedIds.has(p.paper_id)) : []),
-    [data, selectedIds]
-  );
-
-  const resetAll = () => {
-    setSelectedIds(new Set());
-    setActiveGroups(new Set(data?.clusters.map((c) => c.pathway_group)));
-    setYearRange(yearBounds);
-    setSelectMode(false);
-    setFiltersOpen(false);
+  const clearSelection = () => {
+    setSelected([]);
+    atlasRef.current?.clearSelection();
   };
-
-  const toggleGroup = (g: string) =>
-    setActiveGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(g)) next.delete(g);
-      else next.add(g);
-      return next;
-    });
-
-  if (error) {
-    return (
-      <div className="loading">
-        <p>Could not load map data.</p>
-        <pre>{error}</pre>
-      </div>
-    );
-  }
-  if (!data) return <div className="loading">Loading map…</div>;
 
   return (
     <div className="app">
       <header className="hero">
         <h1>Dementia Gap Map</h1>
         <p>
-          Explore research papers matching &ldquo;Dementia AND GWAS&rdquo;,
-          clustered by topic. Drag to pan, scroll to zoom, then draw a region to
-          inspect a group of papers below.
+          A theme map of ~4,780 &ldquo;Dementia AND GWAS&rdquo; papers, grouped by disease
+          area from Qwen3 embeddings. Drag to pan, scroll to zoom, hover a dot to trace its
+          citations, then draw a region to inspect a group of papers below.
         </p>
       </header>
 
@@ -95,92 +32,28 @@ export default function App() {
             className={`btn ${selectMode ? "active" : ""}`}
             onClick={() => setSelectMode((v) => !v)}
           >
-            {selectMode ? "Drawing…" : "Select region"}
+            {selectMode ? "Draw a region…" : "Select region"}
           </button>
-          <button
-            className={`btn ${filtersOpen ? "active" : ""}`}
-            onClick={() => setFiltersOpen((v) => !v)}
-          >
-            Filters
-          </button>
+          {selected.length > 0 && (
+            <button className="btn" onClick={clearSelection}>Clear</button>
+          )}
         </div>
 
-        {filtersOpen && (
-          <div className="filters">
-            <div className="filters-row">
-              <span className="filters-label">Pathway groups</span>
-              <div className="filters-groups">
-                {pathwayGroups.map(([g, color]) => (
-                  <button
-                    key={g}
-                    className={`fchip ${activeGroups.has(g) ? "on" : ""}`}
-                    onClick={() => toggleGroup(g)}
-                  >
-                    <span className="dot" style={{ background: color }} />
-                    {g}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="filters-row">
-              <span className="filters-label">
-                From year: {yearRange[0]}
-              </span>
-              <input
-                type="range"
-                min={yearBounds[0]}
-                max={yearBounds[1]}
-                value={yearRange[0]}
-                onChange={(e) =>
-                  setYearRange(([, hi]) => [
-                    Math.min(Number(e.target.value), hi),
-                    hi,
-                  ])
-                }
-              />
-              <span className="filters-label">to {yearRange[1]}</span>
-              <input
-                type="range"
-                min={yearBounds[0]}
-                max={yearBounds[1]}
-                value={yearRange[1]}
-                onChange={(e) =>
-                  setYearRange(([lo]) => [lo, Math.max(Number(e.target.value), lo)])
-                }
-              />
-            </div>
-          </div>
-        )}
-
-        <MapCanvas
-          papers={data.papers}
-          edges={data.edges ?? []}
-          clusters={data.clusters}
-          viewMode="clusters"
-          selectMode={selectMode}
-          isActive={isActive}
-          selectedIds={selectedIds}
-          onSelect={(ids) => {
-            setSelectedIds(new Set(ids));
-            setSelectMode(false);
-          }}
-          onReset={resetAll}
-        />
-
-        <div className="toolbar toolbar-bottom">
-          <span className="count-note">{data.papers.length} papers</span>
+        <div className="map-wrap">
+          <AtlasMap
+            ref={atlasRef}
+            selectMode={selectMode}
+            onSelect={setSelected}
+            onSelectModeChange={setSelectMode}
+          />
         </div>
       </section>
 
-      <NewsFeed
-        selected={selected}
-        clusters={data.clusters}
-        onClear={() => setSelectedIds(new Set())}
-      />
+      <AtlasFeed selected={selected} onClear={clearSelection} />
 
       <footer className="foot">
-        Co-citation map of dementia &amp; GWAS literature · data from PubMed / NIH
-        iCite, GWAS Catalog, Open Targets &amp; ClinicalTrials.gov
+        Theme atlas of dementia &amp; GWAS literature · Qwen3-Embedding-8B · citation links
+        from PubMed / NIH iCite
       </footer>
     </div>
   );
