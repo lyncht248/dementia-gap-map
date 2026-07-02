@@ -364,10 +364,14 @@ body {
 .feed-body {
   display: grid;
   grid-template-columns: 260px 1fr;
+  /* cap the whole body and let each column scroll, so the paper list fills the
+     bubble to the aside's height instead of being cut off with empty space. */
+  grid-template-rows: minmax(0, 78vh);
 }
 @media (max-width: 760px) {
   .feed-body {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
   }
 }
 .feed-aside {
@@ -376,11 +380,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
 }
 @media (max-width: 760px) {
   .feed-aside {
     border-right: none;
     border-bottom: 1px solid var(--line);
+    overflow-y: visible;
   }
 }
 .aside-section h4 {
@@ -570,8 +577,13 @@ button.tag.trial.on {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 620px;
+  min-height: 0;
   overflow-y: auto;
+}
+@media (max-width: 760px) {
+  .feed-list {
+    overflow-y: visible;
+  }
 }
 .card {
   border: 1px solid var(--line);
@@ -589,6 +601,13 @@ button.tag.trial.on {
 .card-topic {
   font-weight: 600;
   color: var(--ink);
+}
+.card-area {
+  color: var(--muted);
+  font-size: 11.5px;
+  padding-left: 8px;
+  margin-left: 2px;
+  border-left: 1px solid var(--line);
 }
 .card-year {
   margin-left: auto;
@@ -779,69 +798,4 @@ button.tag.trial.on {
 }
 .atlas-zoom button:hover {
   background: #fff;
-}
-
-/* Atlas selection feed */
-.feed {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 18px 22px;
-}
-.feed .feed-hint {
-  color: var(--muted);
-  font-size: 14px;
-  margin: 8px 0 0;
-}
-.feed .pill {
-  display: inline-block;
-  background: var(--accent);
-  color: #fff;
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.feed-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.feed-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 46vh;
-  overflow: auto;
-}
-.feed-item {
-  padding: 10px 0;
-  border-top: 1px solid var(--line);
-}
-.feed-item:first-child {
-  border-top: none;
-}
-.feed-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-  text-decoration: none;
-  line-height: 1.35;
-}
-a.feed-title:hover {
-  color: var(--accent);
-  text-decoration: underline;
-}
-.feed-meta {
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.feed-more {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--muted);
 }

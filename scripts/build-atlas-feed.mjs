@@ -36,6 +36,10 @@ const rollups = readJsonl("data/processed/shared/atlas_evidence_rollup.jsonl");
 const themeOf = new Map(points.map((p) => [p.paper_id, p.cluster]));
 // theme id -> readable label (the atlas map's own labels, kept in sync)
 const themeLabel = new Map(atlas.minors.map((m) => [m.id, m.label]));
+// theme id -> its disease area (major) id  — the coarse level of the hierarchy
+const themeArea = new Map(atlas.minors.map((m) => [m.id, m.major]));
+// disease area id -> { label, color }
+const areaInfo = new Map(atlas.majors.map((m) => [m.id, { label: m.label, color: m.color }]));
 // "atlas:N" -> evidence rollup
 const rollupOf = new Map(rollups.map((r) => [r.topic_id, r]));
 
@@ -66,10 +70,14 @@ function hslToRgb(h, s, l) {
 }
 
 // ---- papers: reuse metadata, regroup by atlas theme ------------------------
+// Each paper carries BOTH levels of the hierarchy: its fine theme (cluster_id,
+// e.g. "East Asian AD Genetics") and its disease area (area, e.g. "Alzheimer's
+// Disease & Dementia"). The feed can group / filter by either.
 const papers = mapData.papers.map((p) => {
   const t = themeOf.get(p.paper_id);
   const cluster_id = t == null || t < 0 ? "other" : `t${t}`;
-  return { ...p, cluster_id };
+  const area = t == null || t < 0 ? "other" : themeArea.get(t) ?? "other";
+  return { ...p, cluster_id, area };
 });
 
 // ---- clusters: one per atlas theme present + "other" -----------------------
@@ -126,11 +134,23 @@ clusters.push({
 // per-theme emergence (burst + growth + influence) over its members
 computeEmergence(papers, clusters);
 
+// ---- disease areas (the coarse level of the hierarchy) ---------------------
+const areaCount = new Map();
+for (const p of papers) areaCount.set(p.area, (areaCount.get(p.area) || 0) + 1);
+const areas = [...areaCount.keys()]
+  .map((id) => ({
+    id,
+    label: id === "other" ? "Other / unclustered" : areaInfo.get(id)?.label ?? id,
+    color: id === "other" ? "#b4b7bd" : areaInfo.get(id)?.color ?? "#999",
+    paper_count: areaCount.get(id),
+  }))
+  .sort((a, b) => b.paper_count - a.paper_count);
+
 // ---- write -----------------------------------------------------------------
 // Slim the papers down to what the NewsFeed reads (keeps the file small).
 const slimPapers = papers.map((p) => ({
   paper_id: p.paper_id, title: p.title, year: p.year, journal: p.journal,
-  authors: p.authors, cluster_id: p.cluster_id, x: p.x, y: p.y,
+  authors: p.authors, cluster_id: p.cluster_id, area: p.area, x: p.x, y: p.y,
   genes: p.genes, pathway_group: p.pathway_group, trials: p.trials,
   metrics: p.metrics, url: p.url,
 }));
@@ -138,9 +158,10 @@ const slimPapers = papers.map((p) => ({
 const out = {
   generated_note:
     `Theme-atlas NewsFeed: ${slimPapers.length} papers regrouped by ${themeIds.length} Qwen embedding ` +
-    `themes (+ "other"), with Track B evidence rollups and per-theme emergence. ` +
-    `Built by scripts/build-atlas-feed.mjs.`,
+    `themes (+ "other") within ${areas.length} disease areas, with Track B evidence rollups and ` +
+    `per-theme emergence. Built by scripts/build-atlas-feed.mjs.`,
   disease: mapData.disease,
+  areas,
   clusters,
   papers: slimPapers,
 };
