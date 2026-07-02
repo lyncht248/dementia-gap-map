@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentController } from "../agent/types";
 import { initialMessages, runConversation, type ChatMessage } from "../agent/client";
+import Markdown from "./Markdown";
 
 type UiItem =
   | { kind: "user"; text: string }
@@ -213,7 +214,11 @@ function MessageItem({ item }: { item: UiItem }) {
   if (item.kind === "user")
     return <div className="msg msg-user">{item.text}</div>;
   if (item.kind === "assistant")
-    return <div className="msg msg-assistant">{item.text}</div>;
+    return (
+      <div className="msg msg-assistant">
+        <Markdown text={item.text} />
+      </div>
+    );
   if (item.kind === "error")
     return <div className="msg msg-error">⚠ {item.text}</div>;
   return <ToolItem item={item} />;

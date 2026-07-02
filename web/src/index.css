@@ -666,9 +666,127 @@ body {
   white-space: pre-wrap;
 }
 .msg-assistant {
-  align-self: flex-start;
+  align-self: stretch;
   color: var(--ink);
-  white-space: pre-wrap;
+}
+
+/* --- markdown rendering (assistant messages) --- */
+.md-body {
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.md-body > :first-child {
+  margin-top: 0;
+}
+.md-body > :last-child {
+  margin-bottom: 0;
+}
+.md-body p {
+  margin: 0 0 8px;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+  margin: 14px 0 6px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.md-body h1 {
+  font-size: 17px;
+}
+.md-body h2 {
+  font-size: 15.5px;
+}
+.md-body h3 {
+  font-size: 14px;
+}
+.md-body h4 {
+  font-size: 13px;
+  color: var(--muted);
+}
+.md-body ul,
+.md-body ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.md-body li {
+  margin: 2px 0;
+}
+.md-body li > ul,
+.md-body li > ol {
+  margin: 2px 0;
+}
+.md-body strong {
+  font-weight: 700;
+}
+.md-body a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.md-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  background: #f0f0ee;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.5px 5px;
+}
+.md-body pre {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: #1c1c1e;
+  color: #e6e6e6;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.md-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: 12px;
+}
+.md-body blockquote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 10px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+.md-body hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 12px 0;
+}
+.md-table-wrap {
+  margin: 0 0 10px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.md-body table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.md-body th,
+.md-body td {
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+.md-body th + th,
+.md-body td + td {
+  border-left: 1px solid var(--line);
+}
+.md-body thead th {
+  background: #f6f6f4;
+  font-weight: 700;
+}
+.md-body tbody tr:last-child td {
+  border-bottom: none;
 }
 .msg-error {
   align-self: stretch;
