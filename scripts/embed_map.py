@@ -190,7 +190,9 @@ def encode_specter2(
     config = MODEL_CONFIG["specter2"]
     tokenizer = AutoTokenizer.from_pretrained(config["base_model_id"])
     model = AutoAdapterModel.from_pretrained(config["base_model_id"])
-    model.load_adapter(config["model_id"], source="hf", load_as="specter2", set_active=True)
+    adapter_name = model.load_adapter(config["model_id"], source="hf", load_as="specter2")
+    model.set_active_adapters(adapter_name)
+    print(f"[adapter] active={model.active_adapters}", flush=True)
     model.to(device)
     model.eval()
 
