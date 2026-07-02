@@ -54,6 +54,36 @@ functional_links (3372) — variant/locus -> gene (Open Targets L2G)
   link_id, rsid, variant_or_locus, gene_id (Ensembl), gene_symbol, disease_group,
   evidence_type, method, score (L2G), source, cell_type, rank
 
+entity_metrics (~73k) — the FULL per-entity metric layer, LONG format: one row per
+  (entity, metric). Columns: entity_id, entity_type ('gene'|'variant'|'pathway'),
+  label (gene symbol / rsID / pathway label), pathway_group, metric_key, value_num,
+  value_bool, value_text, value_list, source. ~44 metric_keys grouped by prefix:
+    clinical.*   n_trials, n_stopped, stopped_ratio, n_with_results, has_approval,
+                 max_phase_score, n_drugs, mechanism, clinical_translation, clinical_saturation
+    genetic.*    genetic_support, gwas_association_count, gwas_study_count,
+                 n_conflicting, direction_agreement, direction_n, best_neglog10p, ot_genetic_association
+    functional.* functional_support, max_l2g, n_l2g_loci, ot_affected_pathway, ot_rna_expression
+    temporal.*   first_gwas_year, latest_gwas_year, first_trial_year, latest_trial_year, n_recent*
+    cross_disease.* n_disease_groups, direction_flip_across_disease, disease_groups
+    composite.translation_gap ; support.* (pathway means) ; links.* (l2g_genes, reported_genes)
+  Query a scalar with: SELECT value_num FROM entity_metrics WHERE entity_type='gene'
+  AND label='APOE' AND metric_key='clinical.n_trials'. Discover keys with
+  SELECT DISTINCT metric_key FROM entity_metrics. This is THE source for gene-level
+  clinical development and effect-direction disagreement.
+
+target_evidence (1499) — Open Targets per gene x disease association scores
+  gene_id, target_label, approved_name, disease_group, disease_id, disease_label,
+  ot_overall, ot_genetic_association, ot_genetic_literature, ot_clinical,
+  ot_literature, ot_animal_model, ot_affected_pathway, ot_rna_expression
+
+graph_nodes (~15k) / graph_edges (~11k) — pre-joined typed evidence graph.
+  node_id = '<type>:<id>' (gene:ENSG…, variant:rs…, drug:…, trial:NCT…, pathway:…,
+  disease:…, topic:<cluster>). node_type, label, disease_groups, score.
+  edge_type: variant_gene, gene_pathway, gene_disease, trial_drug, trial_pathway,
+  drug_pathway, topic_gene, topic_pathway, topic_disease (source_id/target_id/score).
+  Use for multi-hop the flat tables can't do: drug↔target↔trial (trial_drug +
+  drug_pathway + gene_pathway) and community↔evidence (topic_gene/topic_pathway).
+
 ## Joins & IDs
 - Gene: genes.symbol / genes.gene_id ; gwas.reported_genes / gwas.ensembl_gene_ids ;
   functional_links.gene_symbol / gene_id ; pathways.gene_ids (symbols) ;
@@ -71,10 +101,19 @@ functional_links (3372) — variant/locus -> gene (Open Targets L2G)
   functional evidence for the gene).
 - pathways.translation_gap = combined_support * (1 - clinical_translation): HIGH means
   strong biology but little clinical/trial activity — i.e. UNDERSERVED.
-- "Underserved locus/gene for clinical trials" ≈ high genetic_support &/or functional_support
-  but low trial coverage. Approximate by joining genes to trials on disease_group /
-  mechanism, or use pathways.translation_gap. State that it's an approximation and show the
-  numbers you used.
+- "Underserved / undertranslated" gene = high genetic_support/functional_support but low
+  clinical activity. Now gene-level (not just an approximation): entity_metrics
+  clinical.n_trials, clinical.has_approval, clinical.max_phase_score, composite.translation_gap
+  per gene; also pathways.translation_gap for the mechanism view.
+- "Active development vs stalled": entity_metrics clinical.n_trials / clinical.n_stopped /
+  clinical.stopped_ratio / has_approval per gene; or trials.overall_status by mechanism_group;
+  or the graph (gene -> gene_pathway -> trial_pathway -> trial, and trial_drug for drugs).
+- "Scientific disagreement": entity_metrics genetic.n_conflicting, genetic.direction_agreement,
+  cross_disease.direction_flip_across_disease (effect-direction conflict); gwas.effect_direction
+  / effect_odds_ratio across studies; clinical.stopped_ratio + trials.overall_status
+  ('TERMINATED'/'WITHDRAWN') for trial-failure disagreement.
+- "Back-trace a mechanism to its GWAS anchors": entity_metrics temporal.first_gwas_year per
+  gene, or min(papers.year) via gwas.pmid -> papers.
 
 ## Controlling the map
 - To show/point at papers: resolve to paper_ids with query_data (SELECT paper_id ...), then

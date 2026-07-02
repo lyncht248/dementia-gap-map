@@ -14,6 +14,10 @@ export const TABLES = [
   "functional_links",
   "papers",
   "clusters",
+  "entity_metrics",
+  "target_evidence",
+  "graph_nodes",
+  "graph_edges",
 ] as const;
 
 export interface QueryResult {

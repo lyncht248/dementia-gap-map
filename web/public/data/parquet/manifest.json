@@ -7,6 +7,10 @@
     "gwas",
     "functional_links",
     "papers",
-    "clusters"
+    "clusters",
+    "entity_metrics",
+    "target_evidence",
+    "graph_nodes",
+    "graph_edges"
   ]
 }

@@ -26,6 +26,8 @@ import pyarrow.parquet as pq
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TE = os.path.join(ROOT, "data", "processed", "translational-evidence")
+SHARED = os.path.join(ROOT, "data", "processed", "shared")
+GRAPH = os.path.join(ROOT, "data", "exports", "graph")
 MAP_DATA = os.path.join(ROOT, "web", "public", "data", "map_data.json")
 OUT_DIR = os.path.join(ROOT, "web", "public", "data", "parquet")
 
@@ -55,6 +57,16 @@ def as_str_list(v: Any) -> list[str]:
         else:
             out.append(str(x))
     return out
+
+
+def as_text(v: Any) -> str | None:
+    """Coerce to a string (JSON-encode dicts/lists) so a struct field can't slip
+    into a string column."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return v
+    return json.dumps(v, sort_keys=True, ensure_ascii=False)
 
 
 def num(v: Any) -> float | None:
@@ -209,28 +221,38 @@ def build_trials() -> None:
 def build_gwas() -> None:
     rows = []
     for a in read_jsonl(os.path.join(TE, "gwas_associations.jsonl")):
-        var = a.get("variant")
-        rsid = var.get("rsid") if isinstance(var, dict) else var
+        var = a.get("variant") if isinstance(a.get("variant"), dict) else {}
+        eff = a.get("effect") if isinstance(a.get("effect"), dict) else {}
         rows.append(
             {
                 "association_id": a.get("association_id"),
                 "pmid": str(a.get("pmid")) if a.get("pmid") is not None else None,
-                "rsid": rsid,
+                "rsid": var.get("rsid") if var else a.get("variant"),
+                "risk_allele": var.get("risk_allele"),
                 "reported_genes": as_str_list(a.get("reported_genes")),
                 "ensembl_gene_ids": as_str_list(a.get("ensembl_gene_ids")),
+                "entrez_gene_ids": as_str_list(a.get("entrez_gene_ids")),
                 "p_value": num(a.get("p_value")),
-                "disease_group": a.get("disease_group"),
-                "trait": a.get("trait"),
-                "study_accession": a.get("study_accession"),
+                "effect_odds_ratio": num(eff.get("odds_ratio")),
+                "effect_beta": num(eff.get("beta")),
+                "effect_direction": eff.get("direction"),
                 "risk_frequency": num(a.get("risk_frequency")),
+                "snp_type": as_text(a.get("snp_type")),
+                "disease_group": a.get("disease_group"),
+                "trait": as_text(a.get("trait")),
+                "study_accession": as_text(a.get("study_accession")),
+                "publication": as_text(a.get("publication")),
             }
         )
     schema = pa.schema(
         [
             ("association_id", STR), ("pmid", STR), ("rsid", STR),
-            ("reported_genes", STRLIST), ("ensembl_gene_ids", STRLIST),
-            ("p_value", F64), ("disease_group", STR), ("trait", STR),
-            ("study_accession", STR), ("risk_frequency", F64),
+            ("risk_allele", STR), ("reported_genes", STRLIST),
+            ("ensembl_gene_ids", STRLIST), ("entrez_gene_ids", STRLIST),
+            ("p_value", F64), ("effect_odds_ratio", F64), ("effect_beta", F64),
+            ("effect_direction", STR), ("risk_frequency", F64), ("snp_type", STR),
+            ("disease_group", STR), ("trait", STR), ("study_accession", STR),
+            ("publication", STR),
         ]
     )
     write_table("gwas", rows, schema, "association_id")
@@ -351,6 +373,143 @@ def build_papers_and_clusters() -> None:
     write_table("clusters", cluster_rows, cluster_schema, "topic_id")
 
 
+def _classify(v: Any):
+    """Split a metric value into typed columns (bool checked before int)."""
+    if isinstance(v, bool):
+        return None, v, None, None
+    if isinstance(v, (int, float)):
+        return float(v), None, None, None
+    if isinstance(v, list):
+        return None, None, None, as_str_list(v)
+    if v is None:
+        return None, None, None, None
+    return None, None, str(v), None
+
+
+def build_entity_metrics() -> None:
+    """The full per-entity metric layer (genes/variants/pathways), long-format:
+    one row per (entity, metric_key). Covers clinical.* (n_trials, has_approval,
+    max_phase_score, n_drugs, stopped_ratio), genetic.* (n_conflicting,
+    direction_agreement), functional.*, temporal.* (first/latest gwas/trial year),
+    cross_disease.*, composite.translation_gap, support.*, links.*."""
+    rows = []
+    for d in read_jsonl(os.path.join(TE, "entity_metrics.jsonl")):
+        eid = d.get("entity_id")
+        etype = d.get("entity_type")
+        label = d.get("label")
+        pg = d.get("pathway_group")
+        for k, v in (d.get("metrics") or {}).items():
+            val = v.get("value") if isinstance(v, dict) else v
+            src = v.get("source") if isinstance(v, dict) else None
+            num_v, bool_v, text_v, list_v = _classify(val)
+            rows.append(
+                {
+                    "entity_id": eid,
+                    "entity_type": etype,
+                    "label": label,
+                    "pathway_group": pg,
+                    "metric_key": k,
+                    "value_num": num_v,
+                    "value_bool": bool_v,
+                    "value_text": text_v,
+                    "value_list": list_v,
+                    "source": src,
+                }
+            )
+    schema = pa.schema(
+        [
+            ("entity_id", STR), ("entity_type", STR), ("label", STR),
+            ("pathway_group", STR), ("metric_key", STR),
+            ("value_num", F64), ("value_bool", BOOL), ("value_text", STR),
+            ("value_list", STRLIST), ("source", STR),
+        ]
+    )
+    write_table("entity_metrics", rows, schema, "entity_id")
+
+
+def build_target_evidence() -> None:
+    """Open Targets per gene x disease association scores."""
+    rows = []
+    for d in read_jsonl(os.path.join(TE, "target_evidence.jsonl")):
+        sc = d.get("scores") or {}
+        rows.append(
+            {
+                "gene_id": d.get("gene_id"),
+                "target_id": d.get("target_id"),
+                "target_label": d.get("target_label"),
+                "approved_name": d.get("approved_name"),
+                "disease_group": d.get("disease_group"),
+                "disease_id": d.get("disease_id"),
+                "disease_label": d.get("disease_label"),
+                "ot_overall": num(sc.get("overall")),
+                "ot_genetic_association": num(sc.get("genetic_association")),
+                "ot_genetic_literature": num(sc.get("genetic_literature")),
+                "ot_clinical": num(sc.get("clinical")),
+                "ot_literature": num(sc.get("literature")),
+                "ot_animal_model": num(sc.get("animal_model")),
+                "ot_affected_pathway": num(sc.get("affected_pathway")),
+                "ot_rna_expression": num(sc.get("rna_expression")),
+                "source": d.get("source"),
+            }
+        )
+    schema = pa.schema(
+        [
+            ("gene_id", STR), ("target_id", STR), ("target_label", STR),
+            ("approved_name", STR), ("disease_group", STR), ("disease_id", STR),
+            ("disease_label", STR), ("ot_overall", F64),
+            ("ot_genetic_association", F64), ("ot_genetic_literature", F64),
+            ("ot_clinical", F64), ("ot_literature", F64), ("ot_animal_model", F64),
+            ("ot_affected_pathway", F64), ("ot_rna_expression", F64), ("source", STR),
+        ]
+    )
+    write_table("target_evidence", rows, schema, "gene_id")
+
+
+def build_graph() -> None:
+    """Pre-joined typed evidence graph for multi-hop traversal. node_id is
+    '<type>:<id>' (gene:ENSG…, variant:rs…, drug:…, trial:NCT…, pathway:…,
+    disease:…, topic:…). edge_type: variant_gene, gene_pathway, gene_disease,
+    trial_drug, trial_pathway, drug_pathway, topic_gene, topic_pathway,
+    topic_disease. Gives drug↔target↔trial and topic(community)↔evidence links."""
+    nodes = []
+    for d in read_jsonl(os.path.join(GRAPH, "nodes.jsonl")):
+        nodes.append(
+            {
+                "node_id": d.get("node_id"),
+                "node_type": d.get("node_type"),
+                "label": d.get("label"),
+                "disease_groups": as_str_list(d.get("disease_groups")),
+                "score": num(d.get("score")),
+            }
+        )
+    node_schema = pa.schema(
+        [
+            ("node_id", STR), ("node_type", STR), ("label", STR),
+            ("disease_groups", STRLIST), ("score", F64),
+        ]
+    )
+    write_table("graph_nodes", nodes, node_schema, "node_id")
+
+    edges = []
+    for d in read_jsonl(os.path.join(GRAPH, "edges.jsonl")):
+        edges.append(
+            {
+                "edge_id": d.get("edge_id"),
+                "edge_type": d.get("edge_type"),
+                "source_id": d.get("source_id"),
+                "target_id": d.get("target_id"),
+                "score": num(d.get("score")),
+            }
+        )
+    edge_schema = pa.schema(
+        [
+            ("edge_id", STR), ("edge_type", STR), ("source_id", STR),
+            ("target_id", STR), ("score", F64),
+        ]
+    )
+    write_table("graph_edges", edges, edge_schema, "edge_id")
+
+
 def build_manifest(tables: list[str]) -> None:
     manifest = {
         "note": "Parquet tables for the in-browser agent (DuckDB-Wasm). "
@@ -370,6 +529,10 @@ EXPECTED_TABLES = [
     "functional_links",
     "papers",
     "clusters",
+    "entity_metrics",
+    "target_evidence",
+    "graph_nodes",
+    "graph_edges",
 ]
 
 
@@ -399,6 +562,9 @@ def main() -> int:
     build_gwas()
     build_functional_links()
     build_papers_and_clusters()
+    build_entity_metrics()
+    build_target_evidence()
+    build_graph()
 
     errors = validate()
     if errors:

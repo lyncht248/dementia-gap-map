@@ -49,8 +49,13 @@ server is a **stateless proxy** — no DB, no session store.
 
 ## Data tables (DuckDB, SELECT-only, 200-row cap)
 
-`papers, clusters, genes, pathways, trials, gwas, functional_links` — see
-`systemPrompt.ts` for columns/joins. Anchored on stable IDs only (PMID, Ensembl
+`papers, clusters, genes, pathways, trials, gwas, functional_links,
+entity_metrics, target_evidence, graph_nodes, graph_edges` (~2.2 MB Parquet;
+DuckDB-Wasm HTTP-range-reads only the columns a query needs). `entity_metrics` is
+the full long-format per-entity metric layer (44 metrics incl. gene-level
+`clinical.n_trials`/`has_approval`, `genetic.n_conflicting`/`direction_agreement`,
+`temporal.first_gwas_year`); `graph_*` is the typed evidence graph
+(drug↔target↔trial, topic↔evidence). See `systemPrompt.ts` for columns/joins. Anchored on stable IDs only (PMID, Ensembl
 `gene_id`/`symbol`, NCT, rsID, `disease_group`), per the brief — never on
 coordinates or community numbers. The agent reads the **live schema** at runtime
 (injected into the prompt + a `describe_schema` tool), so column/score changes
