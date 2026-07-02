@@ -160,17 +160,17 @@ export default function MapCanvas({
       if (s.x < -20 || s.x > size.w + 20 || s.y < -20 || s.y > size.h + 20) return;
       const isOther = p.cluster_id === "other";
       const r = radiusFor(p) * (isOther ? 0.65 : 1);
-      const cluster = clusterById.get(p.cluster_id);
+      const hcolor = p.hypothesis_color ?? NEUTRAL;
       let color = NEUTRAL;
       let alpha = 0.25;
       if (mode === "inactive") {
         color = NEUTRAL;
         alpha = 0.18;
       } else if (viewMode === "clusters") {
-        color = cluster?.color ?? NEUTRAL;
-        alpha = mode === "selected" ? 1 : isOther ? 0.4 : 0.82;
+        color = hcolor;
+        alpha = mode === "selected" ? 1 : p.hypothesis ? 0.82 : 0.4;
       } else {
-        color = mode === "selected" ? (cluster?.color ?? "#333") : "#7a7a80";
+        color = mode === "selected" ? hcolor : "#7a7a80";
         alpha = mode === "selected" ? 1 : 0.5;
       }
       ctx.globalAlpha = alpha;
@@ -223,26 +223,33 @@ export default function MapCanvas({
       // stays visible, stacking where they genuinely overlap.
       const HYP_FONT = "700 15px ui-sans-serif, system-ui, -apple-system, sans-serif";
       const hbh = 22;
-      const step = hbh + 3;
+      const step = hbh + 4;
       ctx.font = HYP_FONT;
       for (const h of [...hypotheses].sort((a, b) => (b.paper_count ?? 0) - (a.paper_count ?? 0))) {
         const s = toScreen(h.centroid, transform);
         if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) continue;
         const tw = ctx.measureText(h.label).width;
-        const mk = (y: number) => ({ x0: s.x - tw / 2 - 10, y0: y - hbh / 2 - 2, x1: s.x + tw / 2 + 10, y1: y + hbh / 2 + 2 });
-        // try centroid, then alternating up/down offsets; fall back to centroid
-        let y = s.y;
-        for (const off of [0, step, -step, 2 * step, -2 * step, 3 * step, -3 * step]) {
-          if (!overlaps(mk(s.y + off))) { y = s.y + off; break; }
+        const mk = (cx: number, cy: number) => ({ x0: cx - tw / 2 - 10, y0: cy - hbh / 2 - 2, x1: cx + tw / 2 + 10, y1: cy + hbh / 2 + 2 });
+        // search outward (centroid first, then expanding rings in all directions)
+        // so crowded central hypotheses spread apart instead of overlapping
+        let cx = s.x, cy = s.y, placed = false;
+        for (let ring = 0; ring <= 4 && !placed; ring++) {
+          const d = ring * step;
+          const cands: [number, number][] = ring === 0
+            ? [[0, 0]]
+            : [[0, d], [0, -d], [d * 1.7, 0], [-d * 1.7, 0], [d * 1.3, d], [-d * 1.3, d], [d * 1.3, -d], [-d * 1.3, -d]];
+          for (const [dx, dy] of cands) {
+            if (!overlaps(mk(s.x + dx, s.y + dy))) { cx = s.x + dx; cy = s.y + dy; placed = true; break; }
+          }
         }
-        drawn.push(mk(y));
-        ctx.globalAlpha = 0.86;
-        ctx.fillStyle = "rgba(255,255,255,0.9)";
-        roundRect(ctx, s.x - tw / 2 - 9, y - hbh / 2, tw + 18, hbh, 7);
+        drawn.push(mk(cx, cy));
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        roundRect(ctx, cx - tw / 2 - 9, cy - hbh / 2, tw + 18, hbh, 7);
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.fillStyle = "#1c1c22";
-        ctx.fillText(h.label, s.x, y + 0.5);
+        ctx.fillStyle = darken(h.color);
+        ctx.fillText(h.label, cx, cy + 0.5);
       }
 
       // --- layer 2: per-cluster specifics, only once zoomed in ---
@@ -276,7 +283,7 @@ export default function MapCanvas({
       const src = papers[hoverIdx];
       if (nbrs && src) {
         const s0 = toScreen(src, transform);
-        const col = clusterById.get(src.cluster_id)?.color ?? "#333";
+        const col = src.hypothesis_color ?? "#333";
         ctx.strokeStyle = col;
         ctx.lineWidth = 1.2;
         ctx.globalAlpha = 0.75;
@@ -475,6 +482,17 @@ export default function MapCanvas({
       )}
     </div>
   );
+}
+
+// Darken a #rrggbb colour toward black so bold label text reads on a light pill.
+function darken(hex: string, f = 0.62): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return "#1c1c22";
+  const n = parseInt(m[1], 16);
+  const r = Math.round(((n >> 16) & 255) * f);
+  const g = Math.round(((n >> 8) & 255) * f);
+  const b = Math.round((n & 255) * f);
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 function roundRect(

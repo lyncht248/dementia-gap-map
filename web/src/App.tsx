@@ -15,16 +15,21 @@ export default function App() {
   const [activeGroups, setActiveGroups] = useState<Set<string>>(new Set());
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
 
+  const allGroups = useCallback(
+    (d: MapData) => new Set([...(d.hypotheses ?? []).map((h) => h.id), "unclassified"]),
+    []
+  );
+
   useEffect(() => {
     loadMapData()
       .then((d) => {
         setData(d);
-        setActiveGroups(new Set(d.clusters.map((c) => c.pathway_group)));
+        setActiveGroups(allGroups(d));
         const years = d.papers.map((p) => p.year);
         setYearRange([Math.min(...years), Math.max(...years)]);
       })
       .catch((e) => setError(String(e)));
-  }, []);
+  }, [allGroups]);
 
   const yearBounds = useMemo<[number, number]>(() => {
     if (!data) return [2000, 2026];
@@ -32,16 +37,16 @@ export default function App() {
     return [Math.min(...years), Math.max(...years)];
   }, [data]);
 
-  const pathwayGroups = useMemo(() => {
+  const hypoGroups = useMemo<[string, string, string][]>(() => {
     if (!data) return [];
-    const seen = new Map<string, string>(); // group -> color
-    for (const c of data.clusters) if (!seen.has(c.pathway_group)) seen.set(c.pathway_group, c.color);
-    return [...seen.entries()];
+    const g: [string, string, string][] = (data.hypotheses ?? []).map((h) => [h.id, h.label, h.color]);
+    g.push(["unclassified", "Unclassified", "#cdcdd6"]);
+    return g;
   }, [data]);
 
   const isActive = useCallback(
     (p: Paper) =>
-      activeGroups.has(p.pathway_group) &&
+      activeGroups.has(p.hypothesis ?? "unclassified") &&
       p.year >= yearRange[0] &&
       p.year <= yearRange[1],
     [activeGroups, yearRange]
@@ -54,7 +59,7 @@ export default function App() {
 
   const resetAll = () => {
     setSelectedIds(new Set());
-    setActiveGroups(new Set(data?.clusters.map((c) => c.pathway_group)));
+    if (data) setActiveGroups(allGroups(data));
     setYearRange(yearBounds);
     setSelectMode(false);
     setFiltersOpen(false);
@@ -84,8 +89,8 @@ export default function App() {
         <h1>Dementia Gap Map</h1>
         <p>
           Explore research papers matching &ldquo;Dementia AND GWAS&rdquo;,
-          clustered by topic. Drag to pan, scroll to zoom, then draw a region to
-          inspect a group of papers below.
+          coloured by the disease hypothesis each supports. Drag to pan, scroll
+          to zoom, then draw a region to inspect a group of papers below.
         </p>
       </header>
 
@@ -108,16 +113,16 @@ export default function App() {
         {filtersOpen && (
           <div className="filters">
             <div className="filters-row">
-              <span className="filters-label">Pathway groups</span>
+              <span className="filters-label">Hypotheses</span>
               <div className="filters-groups">
-                {pathwayGroups.map(([g, color]) => (
+                {hypoGroups.map(([g, label, color]) => (
                   <button
                     key={g}
                     className={`fchip ${activeGroups.has(g) ? "on" : ""}`}
                     onClick={() => toggleGroup(g)}
                   >
                     <span className="dot" style={{ background: color }} />
-                    {g}
+                    {label}
                   </button>
                 ))}
               </div>

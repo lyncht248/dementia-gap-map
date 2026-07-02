@@ -1,58 +1,69 @@
 {
-  "_note": "Etiological-hypothesis overlay for the dementia-GWAS map. Each paper is scored against every hypothesis from its gene links (paper.genes) and title keywords; it is assigned to the highest-scoring hypothesis above MIN_SCORE, and each hypothesis label is placed at the median position of its papers — independent of the co-citation clusters. Edit genes/keywords to retune; `weight` overrides a gene's default score (used to damp ubiquitous genes like APOE). Rebuild with `npm run build-map`.",
-  "min_score": 2,
-  "min_papers": 18,
+  "_note": "Etiological-hypothesis colouring + overlay for the dementia-GWAS map. Each paper is scored against every hypothesis from its gene links (paper.genes) and title keywords and assigned to the highest-scoring one above min_score. Papers with no signal inherit their co-citation cluster's dominant hypothesis (so regions stay contiguous); clusters with no clear dominant stay 'unclassified' (grey). Points are COLOURED by hypothesis, and each label sits at the median position of the papers that matched it directly. Edit genes/keywords/colors to retune; gene_weight_overrides damps ubiquitous genes like APOE. Rebuild with `npm run build-map`.",
+  "min_score": 1.5,
+  "min_papers": 16,
   "gene_weight": 2,
   "keyword_weight": 1.5,
-  "gene_weight_overrides": { "APOE": 0.5, "APP": 1, "MAPT": 1 },
+  "gene_weight_overrides": { "APOE": 0.5, "APP": 1.5, "MAPT": 1.5 },
+  "cluster_fill_min_share": 0.25,
+  "cluster_fill_min_papers": 8,
+  "unclassified_color": "#cdcdd6",
   "hypotheses": [
     {
       "id": "amyloid",
       "label": "Amyloid",
+      "color": "#e15759",
       "genes": ["APP", "PSEN1", "PSEN2", "BACE1", "BACE2", "ADAM10", "APH1B", "NCSTN", "PSENEN", "CLU"],
-      "keywords": ["amyloid", "abeta", "a-beta", "plaque", "secretase", "app processing", "oligomer", "aducanumab", "lecanemab"]
+      "keywords": ["amyloid", "abeta", "a-beta", "aβ", "plaque", "secretase", "app processing", "oligomer", "aducanumab", "lecanemab", "presenilin", "angiopathy"]
     },
     {
       "id": "tau",
       "label": "Tau",
+      "color": "#7c5cbf",
       "genes": ["MAPT", "STH", "PTK2B"],
-      "keywords": ["tau ", "tau-", "tauopath", "neurofibrillary", "tangle", "phospho-tau", "ptau", "p-tau", "4-repeat", "3-repeat", "tubulin"]
+      "keywords": ["tau ", "tau-", "tau,", "tau.", "tauopath", "neurofibrillary", "tangle", "phospho-tau", "ptau", "p-tau", "4-repeat", "3-repeat", "microtubule", "corticobasal", "supranuclear palsy", "argyrophilic"]
     },
     {
       "id": "neuroinflammation",
       "label": "Neuroinflammation",
+      "color": "#f28e2b",
       "genes": ["TREM2", "CD33", "MS4A4A", "MS4A6A", "MS4A2", "INPP5D", "SPI1", "PLCG2", "ABI3", "HLA-DRB1", "HLA-DRA", "HLA-DRB5", "CR1", "AIF1", "TYROBP", "IL34", "CSF1R", "CD2AP", "GRN"],
-      "keywords": ["microglia", "microglial", "immune", "inflamm", "neuroinflamm", "complement", "innate", "cytokine", "interleukin", "astrocyt", "macrophage", "autoimmun", "il-33", "tnf"]
+      "keywords": ["microglia", "microglial", "immune", "inflamm", "neuroinflamm", "complement", "innate", "cytokine", "interleukin", "astrocyt", "glial", "macrophage", "autoimmun", "il-33", "tnf", "nlrp3", "inflammasome", "phagocyt"]
     },
     {
       "id": "vascular",
       "label": "Vascular",
+      "color": "#4e79a7",
       "genes": ["FOXF2", "COL4A1", "COL4A2", "HTRA1", "NOTCH3"],
-      "keywords": ["vascular", "small vessel", "white matter", "hyperintensit", "cerebrovascular", "stroke", "blood-brain", "perivascular", "hypertens", "atherosclero", "cardiovascular", "ischemi", "blood pressure", "microbleed"]
+      "keywords": ["vascular", "small vessel", "white matter", "hyperintensit", "cerebrovascular", "stroke", "blood-brain", "perivascular", "hypertens", "atherosclero", "cardiovascular", "ischemi", "blood pressure", "microbleed", "lacunar", "cadasil", "endothelial", "arteriol"]
     },
     {
       "id": "lipid",
       "label": "Lipid & Metabolic",
+      "color": "#59a14f",
       "genes": ["APOE", "ABCA7", "ABCA1", "ABCG1", "APOC1", "LDLR", "PLTP", "SREBF1", "CYP7A1", "SORL1"],
-      "keywords": ["lipid", "cholesterol", "apolipoprotein", "lipoprotein", " hdl", " ldl", "triglycerid", "lipidom", "metabol", "fatty acid", "statin", "obesity", "body mass", "diabet", "insulin"]
+      "keywords": ["lipid", "cholesterol", "apolipoprotein", "lipoprotein", " hdl", " ldl", "triglycerid", "lipidom", "metabol", "fatty acid", "statin", "obesity", "body mass", "diabet", "insulin", "sterol", "adiposity", "sphingolipid"]
     },
     {
       "id": "synuclein",
       "label": "α-Synuclein",
+      "color": "#e377c2",
       "genes": ["SNCA", "GBA", "GBA1", "LRRK2", "PRKN", "PINK1", "PARK7", "VPS35"],
-      "keywords": ["synuclein", "lewy", "parkinson", "dopaminerg", "nigra", "dlb"]
+      "keywords": ["synuclein", "lewy", "parkinson", "dopaminerg", "nigra", "dlb", "multiple system atrophy"]
     },
     {
       "id": "endolysosomal",
       "label": "Endolysosomal",
+      "color": "#17becf",
       "genes": ["BIN1", "PICALM", "RIN3", "PLD3", "EPHA1", "SNX1", "RAB7A"],
-      "keywords": ["endocyt", "endosom", "endolysosom", "autophag", "lysosom", "trafficking", "vesicle", "clathrin", "sorting nexin"]
+      "keywords": ["endocyt", "endosom", "endolysosom", "autophag", "lysosom", "trafficking", "vesicle", "clathrin", "sorting nexin", "retromer"]
     },
     {
       "id": "tdp43",
       "label": "TDP-43 / ALS-FTD",
+      "color": "#edc948",
       "genes": ["TARDBP", "C9orf72", "TMEM106B", "UNC13A", "TBK1", "VCP", "FUS", "KIF5A", "OPTN", "SQSTM1", "CHMP2B"],
-      "keywords": ["tdp-43", "tdp43", "frontotemporal", "amyotrophic", " als", "ftld", " ftd", "motor neuron", "c9orf72", "proteinopathy", "cryptic exon"]
+      "keywords": ["tdp-43", "tdp43", "frontotemporal", "amyotrophic", " als", "ftld", " ftd", "motor neuron", "c9orf72", "proteinopathy", "cryptic exon", "stress granule"]
     }
   ]
 }

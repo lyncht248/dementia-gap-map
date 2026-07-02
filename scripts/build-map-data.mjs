@@ -490,25 +490,34 @@ console.log(`  ${outEdges.length} edges kept for drawing`);
 
 computeEmergence(outPapers, outClusters); // per-cluster burst/growth/RCR emergence score
 
-// --- etiological-hypothesis overlay -----------------------------------------
-// Independent of the co-citation communities: assign each paper to the dementia
-// hypothesis it best matches (gene links + title keywords), then drop one clean
-// label at the median position of each hypothesis's papers. These float over the
-// map as an interpretive layer — a paper's hypothesis need not match its cluster.
-console.log("placing hypothesis overlay…");
+// --- etiological-hypothesis colouring + overlay -----------------------------
+// The map is coloured by which dementia hypothesis each paper supports, not by
+// its co-citation community. Each paper is scored against every hypothesis from
+// its gene links + title keywords and assigned to the best match. Papers with no
+// direct signal inherit their cluster's dominant hypothesis so regions stay
+// contiguous; clusters with no clear dominant stay "unclassified" (grey). Labels
+// are placed at the median position of the DIRECTLY-matched papers only.
+console.log("colouring + placing hypotheses…");
 const hypoConfig = JSON.parse(fs.readFileSync(P("scripts/hypotheses.json"), "utf8"));
-const MIN_SCORE = hypoConfig.min_score ?? 2;
-const MIN_HYPO_PAPERS = hypoConfig.min_papers ?? 18;
+const MIN_SCORE = hypoConfig.min_score ?? 1.5;
+const MIN_HYPO_PAPERS = hypoConfig.min_papers ?? 16;
 const GENE_W = hypoConfig.gene_weight ?? 2;
 const KW_W = hypoConfig.keyword_weight ?? 1.5;
 const GENE_W_OVERRIDE = hypoConfig.gene_weight_overrides || {};
+const FILL_MIN_SHARE = hypoConfig.cluster_fill_min_share ?? 0.25;
+const FILL_MIN_PAPERS = hypoConfig.cluster_fill_min_papers ?? 8;
+const UNCLASSIFIED_COLOR = hypoConfig.unclassified_color ?? "#cdcdd6";
 const hypos = hypoConfig.hypotheses.map((h) => ({
   ...h,
   geneSet: new Set(h.genes),
   kws: h.keywords.map((k) => k.toLowerCase()),
-  pts: [],
+  pts: [], // direct-match coordinates, for label placement
 }));
-for (const p of outPapers) {
+const hypoById = new Map(hypos.map((h) => [h.id, h]));
+
+// 1) direct per-paper assignment from its own genes + title
+const ownHypo = new Array(outPapers.length).fill(null);
+outPapers.forEach((p, i) => {
   const title = (p.title || "").toLowerCase();
   let best = null, bestScore = 0;
   for (const h of hypos) {
@@ -517,26 +526,83 @@ for (const p of outPapers) {
     for (const kw of h.kws) if (title.includes(kw)) s += KW_W;
     if (s > bestScore) { bestScore = s; best = h; }
   }
-  if (best && bestScore >= MIN_SCORE) best.pts.push([p.x, p.y]);
+  if (best && bestScore >= MIN_SCORE) {
+    ownHypo[i] = best.id;
+    best.pts.push([p.x, p.y]);
+  }
+});
+
+// 2) dominant hypothesis per co-citation cluster (from directly-matched papers)
+const clusterFill = new Map(); // cluster_id -> hypothesis id (or undefined)
+for (const [c, idxs] of members) {
+  if (c === "other") continue;
+  const cid = communityMeta.get(c).cluster_id;
+  const tally = new Map();
+  let matched = 0;
+  for (const i of idxs) { const h = ownHypo[i]; if (h) { tally.set(h, (tally.get(h) || 0) + 1); matched++; } }
+  let domId, domN = 0;
+  for (const [h, n] of tally) if (n > domN) { domN = n; domId = h; }
+  if (domId && matched >= FILL_MIN_PAPERS && domN / matched >= FILL_MIN_SHARE) clusterFill.set(cid, domId);
 }
+
+// Hypotheses that dominate at least one cluster own a solid region; the rest
+// (e.g. tau, endolysosomal) are "regionless" — their papers are scattered inside
+// other regions.
+const filledHypos = new Set(clusterFill.values());
+
+// 3) final per-paper colour. Cluster fill wins so a mechanism cluster reads as
+// one solid region — EXCEPT a paper whose own signal is a regionless hypothesis
+// keeps that colour, so those minority hypotheses still show as dots (and their
+// overlay label sits on matching points). Papers in clusters with no dominant
+// hypothesis fall back to their own signal.
+outPapers.forEach((p, i) => {
+  const own = ownHypo[i];
+  const hid = own && filledHypos.size && !filledHypos.has(own)
+    ? own
+    : clusterFill.get(p.cluster_id) ?? own ?? null;
+  p.hypothesis = hid;
+  p.hypothesis_color = hid ? hypoById.get(hid).color : UNCLASSIFIED_COLOR;
+});
+
 const median = (arr) => {
   const a = [...arr].sort((x, y) => x - y);
   const m = a.length >> 1;
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
 };
+// Prefer to anchor each label on the largest solid region it owns (the cluster
+// it fills with the most papers) — those regions are spatially distinct, so the
+// labels separate. Hypotheses that own no region (only scattered matches) fall
+// back to the median of their matched papers.
+const hAnchor = new Map(); // hid -> {centroid, n}
+for (const cl of outClusters) {
+  const hid = clusterFill.get(cl.topic_id);
+  if (!hid) continue;
+  const cur = hAnchor.get(hid);
+  if (!cur || cl.paper_count > cur.n) hAnchor.set(hid, { centroid: cl.centroid, n: cl.paper_count });
+}
 const outHypotheses = hypos
   .filter((h) => h.pts.length >= MIN_HYPO_PAPERS)
-  .map((h) => ({
-    id: h.id,
-    label: h.label,
-    paper_count: h.pts.length,
-    centroid: {
-      x: Math.round(median(h.pts.map((q) => q[0])) * 100) / 100,
-      y: Math.round(median(h.pts.map((q) => q[1])) * 100) / 100,
-    },
-  }))
+  .map((h) => {
+    const anchor = hAnchor.get(h.id);
+    const centroid = anchor
+      ? anchor.centroid
+      : {
+          x: Math.round(median(h.pts.map((q) => q[0])) * 100) / 100,
+          y: Math.round(median(h.pts.map((q) => q[1])) * 100) / 100,
+        };
+    return {
+      id: h.id,
+      label: h.label,
+      color: h.color,
+      paper_count: outPapers.filter((p) => p.hypothesis === h.id).length,
+      match_count: h.pts.length,
+      centroid,
+    };
+  })
   .sort((a, b) => b.paper_count - a.paper_count);
-console.log(`  ${outHypotheses.length} hypotheses placed: ${outHypotheses.map((h) => `${h.label}(${h.paper_count})`).join(", ")}`);
+const nColoured = outPapers.filter((p) => p.hypothesis).length;
+console.log(`  ${outHypotheses.length} hypotheses; ${nColoured}/${outPapers.length} papers coloured (${Math.round(100 * nColoured / outPapers.length)}%)`);
+console.log(`  ${outHypotheses.map((h) => `${h.label}(${h.paper_count})`).join(", ")}`);
 
 const nGeneP = outPapers.filter((p) => p.genes.length).length;
 const data = {

@@ -18,6 +18,10 @@ export interface Paper {
   y: number;
   genes: string[];
   pathway_group: string;
+  /** Assigned dementia hypothesis id (null if unclassified). */
+  hypothesis?: string | null;
+  /** Resolved point colour for the hypothesis (or neutral grey if unclassified). */
+  hypothesis_color?: string;
   trials: string[];
   metrics: PaperMetrics;
   url?: string;
@@ -68,7 +72,10 @@ export interface Cluster {
 export interface Hypothesis {
   id: string;
   label: string;
+  color: string;
   paper_count: number;
+  /** papers that matched this hypothesis directly (before cluster fill) */
+  match_count?: number;
   centroid: { x: number; y: number };
 }
 
