@@ -1,27 +1,44 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AtlasMap, { type AtlasMapHandle } from "./components/AtlasMap";
-import AtlasFeed from "./components/AtlasFeed";
+import NewsFeed from "./components/NewsFeed";
 import type { AtlasReady, SelectedPaper } from "./lib/atlasRender";
+import type { Cluster, Paper } from "./types";
 
-// The dementia gap map: the Qwen-embedding theme atlas sits in the map panel,
-// wrapped in the familiar shell — Select region (lasso), a Filters dropdown
-// (disease areas + year range), a paper count, Reset view, and the paper feed.
+interface FeedData {
+  clusters: Cluster[];
+  byId: Map<string, Paper>;
+}
+
+// The dementia gap map: the Qwen-embedding theme atlas sits in the map panel;
+// selecting papers on it drives the rich NewsFeed (grouped by the 45 embedding
+// themes, with Track B genes / pathways / trials + emerging topics).
 export default function App() {
   const [selectMode, setSelectMode] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [selected, setSelected] = useState<SelectedPaper[]>([]);
+  const [selected, setSelected] = useState<Paper[]>([]);
   const [meta, setMeta] = useState<AtlasReady | null>(null);
   const [hiddenMajors, setHiddenMajors] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
   const [count, setCount] = useState(0);
+  const [feed, setFeed] = useState<FeedData | null>(null);
   const atlasRef = useRef<AtlasMapHandle>(null);
+
+  // NewsFeed data: papers regrouped by the atlas themes + Track B evidence.
+  useEffect(() => {
+    fetch(`${import.meta.env.BASE_URL}atlas/atlas_feed.json`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: { clusters: Cluster[]; papers: Paper[] }) => {
+        setFeed({ clusters: d.clusters, byId: new Map(d.papers.map((p) => [p.paper_id, p])) });
+      })
+      .catch(() => setFeed({ clusters: [], byId: new Map() }));
+  }, []);
 
   const clearSelection = () => {
     setSelected([]);
     atlasRef.current?.clearSelection();
   };
 
-  // Reset view: recenter the map AND clear filters + any selection.
+  // Reset view: recenter the map AND clear the filters + any selection.
   const resetAll = () => {
     setHiddenMajors([]);
     if (meta) setYearRange([meta.yearMin, meta.yearMax]);
@@ -38,8 +55,17 @@ export default function App() {
     setCount(m.total);
   };
 
+  // Map the atlas' selected paper ids -> full paper records for the feed.
+  const onSelect = (rows: SelectedPaper[]) => {
+    const byId = feed?.byId;
+    if (!byId) return;
+    setSelected(rows.map((r) => byId.get(r.paper_id)).filter((p): p is Paper => !!p));
+  };
+
   const toggleMajor = (id: string) =>
     setHiddenMajors((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const clusters = useMemo(() => feed?.clusters ?? [], [feed]);
 
   return (
     <div className="app">
@@ -117,7 +143,7 @@ export default function App() {
             selectMode={selectMode}
             hiddenMajors={hiddenMajors}
             yearRange={yearRange}
-            onSelect={setSelected}
+            onSelect={onSelect}
             onSelectModeChange={setSelectMode}
             onReady={onReady}
             onCount={setCount}
@@ -132,11 +158,11 @@ export default function App() {
         </button>
       </section>
 
-      <AtlasFeed selected={selected} onClear={clearSelection} />
+      <NewsFeed selected={selected} clusters={clusters} onClear={clearSelection} />
 
       <footer className="foot">
         Theme atlas of dementia &amp; GWAS literature · Qwen3-Embedding-8B · citation links
-        from PubMed / NIH iCite
+        from PubMed / NIH iCite, GWAS Catalog, Open Targets &amp; ClinicalTrials.gov
       </footer>
     </div>
   );
