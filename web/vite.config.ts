@@ -1,6 +1,16 @@
+import path from "node:path";
 import { defineConfig, loadEnv, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import { runAgentProxy } from "./api/_agent-core";
+
+const ENV_KEYS = [
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "OPENAI_MODEL",
+  "OPENAI_TEMPERATURE",
+  "OPENROUTER_REFERER",
+  "OPENROUTER_TITLE",
+];
 
 // Serve POST /api/agent during `vite dev` using the same proxy core Vercel runs,
 // so the agent works locally without `vercel dev`.
@@ -35,14 +45,10 @@ function agentDevProxy(): PluginOption {
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Load .env / .env.local (unprefixed) so the dev proxy can read the API key.
-  const env = loadEnv(mode, process.cwd(), "");
-  for (const k of [
-    "OPENAI_API_KEY",
-    "OPENAI_BASE_URL",
-    "OPENAI_MODEL",
-    "OPENROUTER_REFERER",
-    "OPENROUTER_TITLE",
-  ]) {
+  // Check both web/ and the repo root above it, so a root-level .env works too.
+  const cwd = process.cwd();
+  const env = { ...loadEnv(mode, path.dirname(cwd), ""), ...loadEnv(mode, cwd, "") };
+  for (const k of ENV_KEYS) {
     if (env[k] && !process.env[k]) process.env[k] = env[k];
   }
   return { plugins: [react(), agentDevProxy()] };
