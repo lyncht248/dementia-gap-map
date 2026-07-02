@@ -94,10 +94,34 @@ SET r.score      = toFloat(row.score),
     r.confidence = row.confidence;
 
 LOAD CSV WITH HEADERS FROM 'file:///edges.csv' AS row
+WITH row WHERE row.edge_type = 'drug_pathway'
+MATCH (s:Entity {node_id: row.source_id})
+MATCH (t:Entity {node_id: row.target_id})
+CREATE (s)-[r:DRUG_PATHWAY {edge_id: row.edge_id}]->(t)
+SET r.score      = toFloat(row.score),
+    r.evidence   = row.evidence,
+    r.edge_type  = row.edge_type,
+    // Track A<->B bridge edges carry how (method) + how confident (confidence); null on Track-B-internal edges.
+    r.method     = row.method,
+    r.confidence = row.confidence;
+
+LOAD CSV WITH HEADERS FROM 'file:///edges.csv' AS row
 WITH row WHERE row.edge_type = 'gene_disease'
 MATCH (s:Entity {node_id: row.source_id})
 MATCH (t:Entity {node_id: row.target_id})
 CREATE (s)-[r:GENE_DISEASE {edge_id: row.edge_id}]->(t)
+SET r.score      = toFloat(row.score),
+    r.evidence   = row.evidence,
+    r.edge_type  = row.edge_type,
+    // Track A<->B bridge edges carry how (method) + how confident (confidence); null on Track-B-internal edges.
+    r.method     = row.method,
+    r.confidence = row.confidence;
+
+LOAD CSV WITH HEADERS FROM 'file:///edges.csv' AS row
+WITH row WHERE row.edge_type = 'gene_pathway'
+MATCH (s:Entity {node_id: row.source_id})
+MATCH (t:Entity {node_id: row.target_id})
+CREATE (s)-[r:GENE_PATHWAY {edge_id: row.edge_id}]->(t)
 SET r.score      = toFloat(row.score),
     r.evidence   = row.evidence,
     r.edge_type  = row.edge_type,

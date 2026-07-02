@@ -127,7 +127,9 @@ SRC_OT = "open_targets"
 
 PATHWAY_BUCKET_KEYWORDS = {
     "amyloid": [
-        "amyloid", "secretase", "presenilin", "beta-amyloid", "a-beta",
+        # NB: no bare "a-beta" - it substring-matches "alpha-beta ..." (T-cell
+        # GO terms) and mislabels DAPL1/SHH/MAPK8IP1 as amyloid. Use full forms.
+        "amyloid", "secretase", "presenilin", "beta-amyloid", "amyloid beta",
         "plaque", "a4 protein",
     ],
     "tau": [
@@ -1001,7 +1003,10 @@ def write_gene_pathway_csv(gene_records):
     GENE_PATHWAY_CSV.parent.mkdir(parents=True, exist_ok=True)
     tmp = GENE_PATHWAY_CSV.with_name(GENE_PATHWAY_CSV.name + ".tmp")
     with tmp.open("w", encoding="utf-8", newline="") as fh:
-        fh.write(CSV_HEADER_COMMENT + "\n")
+        # Header FIRST (no leading '#' comment): consumers use csv.DictReader
+        # directly (score/scores.py, exports/build_evidence_graph.py, Track A's
+        # build-map-data.mjs); a leading comment makes them read 0 rows. Provenance
+        # is documented in CATALOG.json + this builder, not inline.
         writer = csv.DictWriter(
             fh, fieldnames=["gene_symbol", "pathway_group", "notes"]
         )

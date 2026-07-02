@@ -284,11 +284,14 @@ One record per distinct `variant.rsid` in `gwas_associations.jsonl`.
 
 ---
 
-## Worked examples — composing a verdict from primitives
+## Worked recipes — AGENT-COMPOSED from primitives (NOT shipped)
 
-These verdicts are **NOT** stored in `entity_metrics.jsonl`. They are what a
-downstream agent computes **from** the primitives above. `val(x, k)` reads
-`x["metrics"][k]["value"]`. Numbers are from the real `2026-07-02` build.
+Every verdict below is **AGENT-COMPOSED** from the primitives above — **none is
+stored in `entity_metrics.jsonl`**. There is **no predefined 0-1 score** for any
+of these questions; the layer ships only the transparent counts / raw values /
+ratios, and an agent picks its own thresholds and combines them. `val(x, k)` reads
+`x["metrics"][k]["value"]`. The thresholds shown are illustrative (an agent may
+choose others). Numbers are from the real `2026-07-02` build.
 
 ### 1. "Under-researched" (gene) — strong genetics, thin literature/clinical
 
@@ -317,31 +320,41 @@ Contrast: **APOE** → `best_neglog10p = 302.7` but `n_papers = 418`,
 `n_recent_papers = 75`, `n_trials = 21` → **not** under-researched (agent
 skips it because literature/clinical follow-through is high).
 
-### 2. "Under-translated" (gene) — strong, well-studied biology, no trials
+### 2. "Under-translated" (gene) — strong biology, little/no clinical follow-through
 
 Compose from **high `genetic.best_neglog10p`** AND **healthy
-`literature.n_papers`** AND **`clinical.n_trials == 0` / `clinical.max_phase is
-None`** (the biology is established but nothing has reached the clinic):
+`literature.n_papers`** AND **low `clinical.n_trials` / low `clinical.max_phase`**
+(the biology is established but little/nothing has reached the clinic). The
+`ratios.studies_per_trial` ratio quantifies the gap: it is **`null`** when there
+are zero trials (the strongest case), and **high** when many GWAS studies point
+at a mechanism with only a few trials.
 
 ```python
 def under_translated(g):
-    return (val(g, "genetic.best_neglog10p") is not None
-            and val(g, "genetic.best_neglog10p") >= 30
+    genetics = val(g, "genetic.best_neglog10p")
+    n_trials = val(g, "clinical.n_trials")
+    studies_per_trial = val(g, "ratios.studies_per_trial")  # null when n_trials==0
+    return (genetics is not None and genetics >= 30
             and val(g, "literature.n_papers") >= 20         # well studied
-            and val(g, "clinical.n_trials") == 0            # but zero trials
-            and val(g, "clinical.has_approval") is False)
+            and val(g, "clinical.has_approval") is False
+            # either zero trials (studies_per_trial is null), or many
+            # studies-per-trial (a few trials for a lot of genetics):
+            and (n_trials == 0 or (studies_per_trial or 0) >= 2))
 ```
 
 - **TOMM40** → `best_neglog10p = 219.1`, `n_gwas_studies = 21`,
   `n_variants = 27`, `functional.max_l2g = 0.649`, `functional.n_l2g_loci = 39`,
   `open_targets.genetic_association = 0.577`, `literature.n_papers = 49`
   (`n_recent_papers = 3`), yet `clinical.n_trials = 0`, `clinical.max_phase =
-  None`, `has_approval = false`, `ratios.trials_per_paper = 0.0`. Strong,
-  well-studied genetics with **zero** clinical activity → the agent labels it
-  **"under-translated"**. (Its `primary_bucket` is `endocytosis_endosomal`,
-  whose mapped trial mechanism has **no** trials in this corpus, so
-  `clinical.n_trials == 0` — a fact the agent reads straight off
-  `clinical.mechanism`/`clinical.n_trials`.)
+  None`, `has_approval = false`, `ratios.studies_per_trial = null` (0 trials),
+  `ratios.trials_per_paper = 0.0`. Strong, well-studied genetics with **zero**
+  clinical activity → the agent labels it **"under-translated"**. (Its
+  `primary_bucket` is `endocytosis_endosomal`, whose mapped trial mechanism has
+  **no** trials in this corpus, so `clinical.n_trials == 0` — a fact the agent
+  reads straight off `clinical.mechanism`/`clinical.n_trials`.)
+- Contrast the *few-trials* case: **APOE** → `n_gwas_studies = 41`,
+  `n_trials = 21`, `ratios.studies_per_trial = 1.95` — plenty of genetics **and**
+  real clinical activity, so the agent does **not** call it under-translated.
 
 ### 3. "Contradicted / direction-conflicted" (gene)
 
@@ -379,10 +392,34 @@ regulation** (`188` genes, `n_papers = 198`, `n_trials = 0`). Well-supported,
 widely-published pathways with **no mapped trials** — the agent flags them; the
 layer ships only the counts/ratios.
 
-### 5. "Recently-emerging locus" (variant)
+### 5. "Emerging" (gene) — recent GWAS activity dominates
 
-Compose from a recent, strong signal: `temporal.latest_year >= CURRENT_YEAR - 2`
-AND `temporal.n_recent >= 1` AND `genetic.best_neglog10p` high:
+The directive's emerging signal is **high `temporal.n_recent_gwas`** and/or
+**high `ratios.recent_gwas_fraction`** (`n_recent_gwas / n_gwas_studies`, with
+"recent" = `year >= CURRENT_YEAR - 3`):
+
+```python
+def emerging_gene(g):
+    frac = val(g, "ratios.recent_gwas_fraction")   # null when n_gwas_studies==0
+    return (val(g, "temporal.n_recent_gwas") >= 2
+            and frac is not None and frac >= 0.5
+            and val(g, "genetic.best_neglog10p") >= 8)   # ~genome-wide sig
+```
+
+Honest note for the `2026-07-02` build: **no gene passes** this — every gene's
+`temporal.n_recent_gwas` is `0` (the latest *gene-attributed* GWAS publication
+year is 2021, below `CURRENT_YEAR - 3 = 2023`), so `ratios.recent_gwas_fraction`
+is `0.0` for all genes. That is an honest signal, not a bug: the layer ships the
+counts and lets the agent conclude "nothing is emerging by GWAS recency at the
+gene level right now." Re-running with a different window (e.g.
+`TE_CURRENT_YEAR=2022`) shifts it deterministically.
+
+### 6. "Recently-emerging locus" (variant) — where emergence actually shows
+
+At the **variant** level (which carries per-`publication.date` recency across
+2025/2026 GWAS), emergence has real hits. Compose from a recent, strong signal:
+`temporal.latest_year >= CURRENT_YEAR - 2` AND `temporal.n_recent >= 1` AND
+`genetic.best_neglog10p` high:
 
 ```python
 def emerging_locus(v):
@@ -397,6 +434,28 @@ Real hits: **rs6733839** (`latest_year = 2026`, `n_recent = 9`,
 (`latest_year = 2025`, `n_recent = 10`, `best_neglog10p = 43.5`). Because
 recency uses `CURRENT_YEAR` (not wall-clock), re-running with
 `TE_CURRENT_YEAR=2024` shifts the window deterministically.
+
+### 7. "Clinically contested" (gene) — lots of trials, high failure, no approval
+
+Compose from **high `clinical.n_trials`** AND **high `clinical.stopped_ratio`**
+AND **`clinical.has_approval == false`** (a mechanism the clinic has attacked
+hard, with a high share of stopped/terminated trials and still no approval):
+
+```python
+def clinically_contested(g):
+    sr = val(g, "clinical.stopped_ratio")            # null when n_trials==0
+    return (val(g, "clinical.n_trials") >= 5
+            and sr is not None and sr >= 0.3
+            and val(g, "clinical.has_approval") is False)
+```
+
+Real hits (all inherit the **amyloid** mechanism cohort — 96 trials,
+`n_stopped = 36`, `stopped_ratio = 0.375`, `has_approval = false`): **RTN2**
+(`best_neglog10p = 97.0`), **MMP13** (`43.7`), **ADAM10** (`10.5`). The agent
+reads a genome-wide-significant gene mapped to a heavily-tried mechanism where a
+third of trials stopped and nothing is approved → **"clinically contested"**. The
+layer ships only `n_trials` / `n_stopped` / `stopped_ratio` / `has_approval`; the
+"contested" call is the agent's.
 
 ---
 

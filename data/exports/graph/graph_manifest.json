@@ -2,7 +2,9 @@
   "edges": {
     "by_type": {
       "drug_gene": 477,
+      "drug_pathway": 170,
       "gene_disease": 1947,
+      "gene_pathway": 1075,
       "topic_disease": 30,
       "topic_gene": 1490,
       "topic_pathway": 40,
@@ -27,7 +29,7 @@
       "note": "topic_gene/topic_pathway/topic_disease edges carry the bridge link's method + confidence (hoisted onto the edge and mirrored in provenance with the exact join_key). See translational-evidence/exports/LINK_METHODS.md.",
       "total": 1560
     },
-    "total": 9138
+    "total": 10383
   },
   "generated_by": "translational-evidence/exports/build_evidence_graph.py",
   "generated_on": "2026-07-02",

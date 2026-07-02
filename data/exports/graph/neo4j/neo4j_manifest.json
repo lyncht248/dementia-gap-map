@@ -2,7 +2,9 @@
   "edges_csv": {
     "by_type": {
       "drug_gene": 477,
+      "drug_pathway": 170,
       "gene_disease": 1947,
+      "gene_pathway": 1075,
       "topic_disease": 30,
       "topic_gene": 1490,
       "topic_pathway": 40,
@@ -23,7 +25,7 @@
       "confidence"
     ],
     "path": "data/exports/graph/neo4j/edges.csv",
-    "rows": 9138
+    "rows": 10383
   },
   "generated_by": "translational-evidence/exports/build_neo4j_export.py",
   "generated_on": "2026-07-02",
