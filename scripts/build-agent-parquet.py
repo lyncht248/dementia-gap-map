@@ -28,7 +28,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TE = os.path.join(ROOT, "data", "processed", "translational-evidence")
 SHARED = os.path.join(ROOT, "data", "processed", "shared")
 GRAPH = os.path.join(ROOT, "data", "exports", "graph")
-MAP_DATA = os.path.join(ROOT, "web", "public", "data", "map_data.json")
+# Frontend graph data moved to the Qwen theme atlas; papers/clusters come from
+# its feed (same paper shape: paper_id, x, y, cluster_id, genes, ...).
+MAP_DATA = os.path.join(ROOT, "web", "public", "atlas", "atlas_feed.json")
 OUT_DIR = os.path.join(ROOT, "web", "public", "data", "parquet")
 
 
@@ -465,6 +467,48 @@ def build_target_evidence() -> None:
     write_table("target_evidence", rows, schema, "gene_id")
 
 
+def build_drugs() -> None:
+    """Drug -> mechanism/target capture (ChEMBL + Open Targets MoA). Gives the
+    drug side that the flat tables lack, incl. mechanism_targets (gene symbols
+    parsed from 'target:<SYMBOL>' MoA signals) for repurposing questions."""
+    path = os.path.join(TE, "drug_mechanism_api.jsonl")
+    if not os.path.exists(path):
+        return
+    rows = []
+    for d in read_jsonl(path):
+        signals = d.get("mechanism_signals") or []
+        targets = sorted(
+            {
+                s.get("matched_term", "").split("target:", 1)[1]
+                for s in signals
+                if isinstance(s, dict) and str(s.get("matched_term", "")).startswith("target:")
+            }
+        )
+        moa = sorted({s.get("moa_text") for s in signals if isinstance(s, dict) and s.get("moa_text")})
+        rows.append(
+            {
+                "chembl_id": d.get("chembl_id"),
+                "name": d.get("name"),
+                "ot_name": d.get("ot_name"),
+                "primary_mechanism": d.get("primary_mechanism"),
+                "mechanisms": as_str_list(d.get("mechanisms")),
+                "mechanism_targets": [t for t in targets if t],
+                "moa_texts": [m for m in moa if m],
+                "trial_count": num(d.get("trial_count")),
+                "trial_names": as_str_list(d.get("trial_names")),
+            }
+        )
+    schema = pa.schema(
+        [
+            ("chembl_id", STR), ("name", STR), ("ot_name", STR),
+            ("primary_mechanism", STR), ("mechanisms", STRLIST),
+            ("mechanism_targets", STRLIST), ("moa_texts", STRLIST),
+            ("trial_count", F64), ("trial_names", STRLIST),
+        ]
+    )
+    write_table("drugs", rows, schema, "chembl_id")
+
+
 def build_graph() -> None:
     """Pre-joined typed evidence graph for multi-hop traversal. node_id is
     '<type>:<id>' (gene:ENSG…, variant:rs…, drug:…, trial:NCT…, pathway:…,
@@ -531,6 +575,7 @@ EXPECTED_TABLES = [
     "clusters",
     "entity_metrics",
     "target_evidence",
+    "drugs",
     "graph_nodes",
     "graph_edges",
 ]
@@ -564,6 +609,7 @@ def main() -> int:
     build_papers_and_clusters()
     build_entity_metrics()
     build_target_evidence()
+    build_drugs()
     build_graph()
 
     errors = validate()

@@ -51,14 +51,18 @@
     },
     "trials": {
       "type": "array",
-      "description": "Trials whose mechanism_group is the dominant pathway_group's crosswalked trial mechanism (up to 10).",
+      "description": "Up to 10 trials from the topic's SPECIFIC topic->trial links: drug_target (target-specific, high confidence) surfaced first, then the trial_mechanism low-confidence fallback. Each entry records the link method/confidence and, for drug_target, the target gene(s) and drug(s).",
       "items": {
         "type": "object",
         "properties": {
           "nct_id": { "type": ["string", "null"] },
           "brief_title": { "type": ["string", "null"] },
           "phase": { "type": ["string", "null"] },
-          "mechanism_group": { "type": ["string", "null"] }
+          "mechanism_group": { "type": ["string", "null"] },
+          "link_method": { "type": ["string", "null"] },
+          "link_confidence": { "type": ["string", "null"] },
+          "target_genes": { "type": ["array", "null"], "items": { "type": "string" } },
+          "drugs": { "type": ["array", "null"], "items": { "type": "string" } }
         }
       }
     },
@@ -82,7 +86,10 @@
         "n_gene_mention": { "type": "integer" },
         "n_paper_overlap_genes": { "type": "integer" },
         "n_gwas_assoc": { "type": "integer" },
-        "n_pathways": { "type": "integer" }
+        "n_pathways": { "type": "integer" },
+        "n_trials": { "type": "integer" },
+        "n_trials_drug_target": { "type": "integer" },
+        "n_trials_mechanism_fallback": { "type": "integer" }
       }
     },
     "disease_groups": {

@@ -16,6 +16,7 @@ export const TABLES = [
   "clusters",
   "entity_metrics",
   "target_evidence",
+  "drugs",
   "graph_nodes",
   "graph_edges",
 ] as const;

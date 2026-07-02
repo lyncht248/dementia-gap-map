@@ -1,128 +1,223 @@
 keyword,mechanism_group,notes
-aducanumab,amyloid,"Aduhelm; anti-amyloid mAb"
-lecanemab,amyloid,"Leqembi / BAN2401; anti-amyloid protofibril mAb"
-ban2401,amyloid,"development code for lecanemab"
-donanemab,amyloid,"Kisunla; anti-amyloid (pyroglutamate) mAb"
-gantenerumab,amyloid,"anti-amyloid mAb"
-solanezumab,amyloid,"anti-amyloid (soluble monomer) mAb"
-bapineuzumab,amyloid,"anti-amyloid mAb (discontinued)"
-crenezumab,amyloid,"anti-amyloid mAb"
-ponezumab,amyloid,"anti-amyloid mAb"
-gantenerumab,amyloid,"anti-amyloid mAb (duplicate-safe; first match wins)"
-remternetug,amyloid,"anti-amyloid (pyroglutamate) mAb"
-lecanemab,amyloid,"duplicate-safe entry"
-amyloid,amyloid,"generic amyloid-directed keyword"
-abeta,amyloid,"amyloid-beta shorthand"
-a-beta,amyloid,"amyloid-beta shorthand"
-beta-amyloid,amyloid,"amyloid-beta peptide"
-beta amyloid,amyloid,"amyloid-beta peptide (spaced)"
-amyloid-beta,amyloid,"amyloid-beta peptide"
-plaque,amyloid,"amyloid plaque-directed"
-bace,amyloid,"beta-secretase (BACE1) inhibitor target"
-verubecestat,amyloid,"BACE inhibitor"
-lanabecestat,amyloid,"BACE inhibitor"
-atabecestat,amyloid,"BACE inhibitor"
-elenbecestat,amyloid,"BACE inhibitor"
-umibecestat,amyloid,"BACE inhibitor"
-secretase,amyloid,"gamma/beta-secretase modulators & inhibitors"
-semagacestat,amyloid,"gamma-secretase inhibitor"
-avagacestat,amyloid,"gamma-secretase inhibitor"
-tramiprosate,amyloid,"amyloid aggregation inhibitor"
-aln-app,amyloid,"APP-lowering siRNA"
-tau,tau,"generic tau-directed keyword"
-anti-tau,tau,"anti-tau therapeutic"
-anti tau,tau,"anti-tau therapeutic (spaced)"
-semorinemab,tau,"anti-tau mAb"
-gosuranemab,tau,"anti-tau mAb"
-tilavonemab,tau,"anti-tau mAb"
-zagotenemab,tau,"anti-tau mAb"
-bepranemab,tau,"anti-tau mAb"
-mapt,tau,"microtubule-associated protein tau gene target"
-tauopathy,tau,"tau-aggregation pathology"
-tau aggregation,tau,"tau aggregation inhibitor"
-lmtx,tau,"tau aggregation inhibitor (methylene-blue derivative)"
-methylthioninium,tau,"tau aggregation inhibitor (LMTX/TRx0237)"
-tau protein,tau,"tau-directed"
-donepezil,cholinergic_symptomatic,"acetylcholinesterase inhibitor (Aricept)"
-rivastigmine,cholinergic_symptomatic,"acetylcholinesterase inhibitor (Exelon)"
-galantamine,cholinergic_symptomatic,"acetylcholinesterase inhibitor (Razadyne)"
-memantine,cholinergic_symptomatic,"NMDA antagonist; standard AD symptomatic tx"
-cholinesterase,cholinergic_symptomatic,"acetylcholinesterase inhibitor class"
-acetylcholine,cholinergic_symptomatic,"cholinergic system"
-cholinergic,cholinergic_symptomatic,"cholinergic system"
-tacrine,cholinergic_symptomatic,"first-gen cholinesterase inhibitor"
-huperzine,cholinergic_symptomatic,"cholinesterase inhibitor (natural)"
-namenda,cholinergic_symptomatic,"brand name for memantine"
-aricept,cholinergic_symptomatic,"brand name for donepezil"
-anti-inflammatory,inflammation_microglia,"neuroinflammation-targeting"
-antiinflammatory,inflammation_microglia,"neuroinflammation-targeting"
-microglia,inflammation_microglia,"microglial modulation"
-neuroinflammation,inflammation_microglia,"neuroinflammation-targeting"
-trem2,inflammation_microglia,"TREM2 microglial receptor agonist"
-al002,inflammation_microglia,"anti-TREM2 mAb"
-nsaid,inflammation_microglia,"non-steroidal anti-inflammatory drug"
-ibuprofen,inflammation_microglia,"NSAID"
-naproxen,inflammation_microglia,"NSAID"
-celecoxib,inflammation_microglia,"COX-2 inhibitor NSAID"
-etanercept,inflammation_microglia,"TNF inhibitor (anti-inflammatory biologic)"
-immun,inflammation_microglia,"immunomodulatory / immune-targeting (substring: immune/immuno/immunotherapy)"
-inflammation,inflammation_microglia,"inflammation-targeting"
-sargramostim,inflammation_microglia,"GM-CSF innate-immune modulator"
-minocycline,inflammation_microglia,"anti-inflammatory / microglial inhibitor"
-insulin,lipid_metabolism,"intranasal insulin / metabolic"
-semaglutide,lipid_metabolism,"GLP-1 agonist; metabolic"
-liraglutide,lipid_metabolism,"GLP-1 agonist; metabolic"
-metformin,lipid_metabolism,"insulin-sensitizer; metabolic"
-pioglitazone,lipid_metabolism,"PPAR-gamma insulin sensitizer"
-rosiglitazone,lipid_metabolism,"PPAR-gamma insulin sensitizer"
-statin,lipid_metabolism,"HMG-CoA reductase inhibitor"
-atorvastatin,lipid_metabolism,"statin"
-simvastatin,lipid_metabolism,"statin"
-cholesterol,lipid_metabolism,"lipid metabolism"
-lipid,lipid_metabolism,"lipid metabolism"
-dha,lipid_metabolism,"docosahexaenoic acid omega-3 fatty acid"
-omega-3,lipid_metabolism,"omega-3 fatty acid"
-omega 3,lipid_metabolism,"omega-3 fatty acid (spaced)"
-fish oil,lipid_metabolism,"omega-3 source"
-apoe,lipid_metabolism,"apolipoprotein E lipid-transport target"
-antihypertensive,vascular,"blood-pressure lowering"
-blood pressure,vascular,"vascular / hypertension"
-hypertension,vascular,"vascular risk factor"
-vascular,vascular,"cerebrovascular-directed"
-anticoagulant,vascular,"anticoagulation"
-aspirin,vascular,"antiplatelet / vascular"
-antiplatelet,vascular,"antiplatelet / vascular"
-clopidogrel,vascular,"antiplatelet"
-warfarin,vascular,"anticoagulant"
-cilostazol,vascular,"vasodilator / antiplatelet"
-nilvadipine,vascular,"calcium channel blocker (antihypertensive)"
-telmisartan,vascular,"angiotensin receptor blocker"
-bdnf,synaptic_neuroprotection,"brain-derived neurotrophic factor"
-neuroprotect,synaptic_neuroprotection,"neuroprotective"
-neurotrophic,synaptic_neuroprotection,"neurotrophic factor"
-synap,synaptic_neuroprotection,"synaptic (synapse/synaptic) function"
-nmda,synaptic_neuroprotection,"NMDA receptor modulation (glutamatergic)"
-glutamate,synaptic_neuroprotection,"glutamatergic modulation"
-nerve growth,synaptic_neuroprotection,"nerve growth factor"
-ngf,synaptic_neuroprotection,"nerve growth factor"
-levetiracetam,synaptic_neuroprotection,"synaptic hyperexcitability modulation"
-riluzole,synaptic_neuroprotection,"glutamate modulator / neuroprotection"
-cerebrolysin,synaptic_neuroprotection,"neurotrophic peptide mixture"
-pet,diagnostic_biomarker,"positron emission tomography imaging biomarker"
-amyloid pet,diagnostic_biomarker,"amyloid PET imaging"
-tau pet,diagnostic_biomarker,"tau PET imaging"
-mri,diagnostic_biomarker,"magnetic resonance imaging biomarker"
-csf,diagnostic_biomarker,"cerebrospinal fluid biomarker"
-plasma biomarker,diagnostic_biomarker,"blood plasma biomarker"
-blood test,diagnostic_biomarker,"blood-based diagnostic"
-blood-based,diagnostic_biomarker,"blood-based diagnostic"
-diagnostic,diagnostic_biomarker,"diagnostic-directed"
-imaging,diagnostic_biomarker,"imaging biomarker"
-biomarker,diagnostic_biomarker,"biomarker-directed"
-flortaucipir,diagnostic_biomarker,"tau PET tracer"
-florbetapir,diagnostic_biomarker,"amyloid PET tracer"
-florbetaben,diagnostic_biomarker,"amyloid PET tracer"
-flutemetamol,diagnostic_biomarker,"amyloid PET tracer"
-pib,diagnostic_biomarker,"Pittsburgh Compound B amyloid PET tracer"
-p-tau,diagnostic_biomarker,"phosphorylated-tau fluid biomarker"
-neurofilament,diagnostic_biomarker,"NfL neurodegeneration biomarker"
+2-hydroxypropyl-beta-cyclodextrin,other,primary=other; no MoA reported | 0 MoA row(s)
+hydromethylthionine mesylate,other,primary=other; no MoA reported | 0 MoA row(s)
+blarcamesine hydrochloride,other,primary=other; no MoA reported | 0 MoA row(s)
+microcrystalline cellulose,other,primary=other; no MoA reported | 0 MoA row(s)
+donepezil hydrochloride,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Acetylcholinesterase inhibitor; target:ACHE | 1 MoA row(s)
+paliperidone palmitate,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Dopamine D2 receptor antagonist; moa:Serotonin 2a (5-HT2a) receptor antagonist | 2 MoA row(s)
+"estrogens, conjugated",other,primary=other; Estrogen receptor agonist | 1 MoA row(s)
+pittsburgh compound b,other,primary=other; no MoA reported | 0 MoA row(s)
+fludeoxyglucose f 18,other,primary=other; no MoA reported | 0 MoA row(s)
+buntanetap tartrate,other,primary=other; no MoA reported | 0 MoA row(s)
+choline alfoscerate,other,primary=other; no MoA reported | 0 MoA row(s)
+tafamidis meglumine,other,primary=other; Transthyretin stabiliser | 1 MoA row(s)
+vanutide cridificar,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein vaccine antigen; target:APP | 1 MoA row(s)
+leuprolide acetate,other,primary=other; Gonadotropin-releasing hormone receptor agonist | 1 MoA row(s)
+methylprednisolone,other,primary=other; Glucocorticoid receptor agonist | 1 MoA row(s)
+apilimod mesylate,other,primary=other; 1-phosphatidylinositol 3-phosphate 5-kinase inhibitor | 1 MoA row(s)
+divalproex sodium,other,primary=other; Succinate semialdehyde dehydrogenase inhibitor | 1 MoA row(s)
+flortaucipir f 18,other,primary=other; no MoA reported | 0 MoA row(s)
+florzolotau (18f),other,primary=other; no MoA reported | 0 MoA row(s)
+flutafuranol f 18,other,primary=other; no MoA reported | 0 MoA row(s)
+flutemetamol f 18,other,primary=other; no MoA reported | 0 MoA row(s)
+insulin glulisine,lipid_metabolism,primary=lipid_metabolism; moa:Insulin receptor agonist | 1 MoA row(s)
+lithium carbonate,other,primary=other; Glycogen synthase kinase-3 inhibitor; Inositol-1(or 4)-monophosphatase 1 inhibitor | 2 MoA row(s)
+trospium chloride,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Muscarinic acetylcholine receptor M2 antagonist; moa:Muscarinic acetylcholine receptor M3 antagonist | 2 MoA row(s)
+deutetrabenazine,other,primary=other; Synaptic vesicular amine transporter inhibitor | 1 MoA row(s)
+dextromethorphan,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Glutamate [NMDA] receptor subunit epsilon 1 antagonist | 4 MoA row(s)
+florbetapir f 18,other,primary=other; no MoA reported | 0 MoA row(s)
+dexmedetomidine,vascular,primary=vascular; moa:Adrenergic receptor alpha-2 agonist | 1 MoA row(s)
+diphenhydramine,other,primary=other; Histamine H1 receptor antagonist; Histamine H1 receptor antagonist | 2 MoA row(s)
+insulin detemir,lipid_metabolism,primary=lipid_metabolism; moa:Insulin receptor agonist | 1 MoA row(s)
+ioflupane i 123,other,primary=other; no MoA reported | 0 MoA row(s)
+methylphenidate,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Dopamine transporter inhibitor | 4 MoA row(s)
+rildinadstrocel,other,primary=other; no MoA reported | 0 MoA row(s)
+sodium benzoate,other,primary=other; no MoA reported | 0 MoA row(s)
+insulin aspart,lipid_metabolism,primary=lipid_metabolism; moa:Insulin receptor agonist | 1 MoA row(s)
+metoclopramide,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Dopamine D2 receptor antagonist; moa:Serotonin 4 (5-HT4) receptor agonist; moa:Serotonin 3a (5-HT3a) receptor antagonist | 3 MoA row(s)
+olipudase alfa,other,primary=other; no MoA reported | 0 MoA row(s)
+osoresnontrine,other,primary=other; Phosphodiesterase 9A inhibitor | 1 MoA row(s)
+varoglutamstat,other,primary=other; no MoA reported | 0 MoA row(s)
+acetaminophen,other,primary=other; Cyclooxygenase inhibitor; Anandamide amidohydrolase inhibitor; Vanilloid receptor opener | 3 MoA row(s)
+brexpiprazole,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor antagonist; moa:Serotonin 1a (5-HT1a) receptor partial agonist; moa:Dopamine D2 receptor partial agonist | 3 MoA row(s)
+carbamazepine,other,primary=other; Sodium channel alpha subunit blocker | 1 MoA row(s)
+dapagliflozin,other,primary=other; Sodium/glucose cotransporter 2 inhibitor; Sodium/glucose cotransporter 2 inhibitor | 2 MoA row(s)
+dexamethasone,other,primary=other; Glucocorticoid receptor agonist | 1 MoA row(s)
+edelinontrine,other,primary=other; Phosphodiesterase 9A inhibitor | 1 MoA row(s)
+insulin human,lipid_metabolism,primary=lipid_metabolism; moa:Insulin receptor agonist | 1 MoA row(s)
+levetiracetam,vascular,primary=vascular; moa:Voltage-gated N-type calcium channel alpha-1B subunit blocker | 2 MoA row(s)
+nizubaglustat,other,primary=other; no MoA reported | 0 MoA row(s)
+oxcarbazepine,other,primary=other; Sodium channel alpha subunit blocker | 1 MoA row(s)
+rosiglitazone,other,primary=other; Peroxisome proliferator-activated receptor gamma agonist; Peroxisome proliferator-activated receptor gamma agonist | 2 MoA row(s)
+valproic acid,other,primary=other; Succinate semialdehyde dehydrogenase inhibitor; Succinate semialdehyde dehydrogenase inhibitor; Succinate semialdehyde dehydrogenase inhibitor | 3 MoA row(s)
+aripiprazole,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor antagonist; moa:Dopamine D2 receptor partial agonist; moa:Serotonin 1a (5-HT1a) receptor partial agonist | 3 MoA row(s)
+atorvastatin,lipid_metabolism,primary=lipid_metabolism; moa:HMG-CoA reductase inhibitor | 1 MoA row(s)
+bapineuzumab,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein binding agent; target:APP | 1 MoA row(s)
+bryostatin 1,other,primary=other; no MoA reported | 0 MoA row(s)
+cerlapirdine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 6 (5-HT6) receptor antagonist | 1 MoA row(s)
+daridorexant,other,primary=other; Orexin receptor 2 antagonist; Orexin receptor antagonist; Orexin receptor 1 antagonist | 3 MoA row(s)
+elenbecestat,amyloid,primary=amyloid; target:BACE1; moa:Beta-secretase 1 inhibitor | 1 MoA row(s)
+escitalopram,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin transporter inhibitor | 1 MoA row(s)
+florquinitau,other,primary=other; no MoA reported | 0 MoA row(s)
+flortaucipir,other,primary=other; no MoA reported | 0 MoA row(s)
+fosgonimeton,other,primary=other; no MoA reported | 0 MoA row(s)
+gantenerumab,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein binding agent; target:APP | 1 MoA row(s)
+idalopirdine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 6 (5-HT6) receptor antagonist | 1 MoA row(s)
+irsenontrine,other,primary=other; Phosphodiesterase 9A inhibitor | 1 MoA row(s)
+ispronicline,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Neuronal acetylcholine receptor; alpha4/beta2 partial agonist | 1 MoA row(s)
+itraconazole,other,primary=other; Cytochrome P450 51 inhibitor | 1 MoA row(s)
+lanabecestat,amyloid,primary=amyloid; target:BACE1; moa:Beta-secretase 1 inhibitor | 1 MoA row(s)
+latrepirdine,other,primary=other; no MoA reported | 0 MoA row(s)
+lenalidomide,other,primary=other; CRL4(CRBN) E3 ubiquitin ligase modulator; CRL4(CRBN) E3 ubiquitin ligase inhibitor | 2 MoA row(s)
+lumateperone,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin transporter inhibitor; moa:Dopamine D2 receptor antagonist; moa:Serotonin 2a (5-HT2a) receptor antagonist | 3 MoA row(s)
+moxifloxacin,other,primary=other; Topoisomerase IV inhibitor; Bacterial DNA gyrase inhibitor | 2 MoA row(s)
+neflamapimod,other,primary=other; MAP kinase p38 alpha inhibitor | 1 MoA row(s)
+nelotanserin,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor inverse agonist | 1 MoA row(s)
+paliperidone,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor antagonist; moa:Dopamine D2 receptor antagonist | 2 MoA row(s)
+pegipanermin,other,primary=other; no MoA reported | 0 MoA row(s)
+pimavanserin,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor inverse agonist | 1 MoA row(s)
+pioglitazone,other,primary=other; Peroxisome proliferator-activated receptor gamma agonist | 1 MoA row(s)
+rivastigmine,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Cholinesterases; ACHE & BCHE inhibitor; target:ACHE; target:BCHE | 2 MoA row(s)
+sargramostim,other,primary=other; Granulocyte-macrophage colony-stimulating factor receptor agonist | 1 MoA row(s)
+semagacestat,amyloid,primary=amyloid; target:PSEN2; moa:Gamma-secretase inhibitor; target:PSEN1 | 1 MoA row(s)
+tarenflurbil,amyloid,primary=amyloid; target:PSEN2; moa:Gamma-secretase modulator; target:PSEN1 | 1 MoA row(s)
+verubecestat,amyloid,primary=amyloid; target:BACE1; moa:Beta-secretase 1 inhibitor | 1 MoA row(s)
+adrabetadex,other,primary=other; no MoA reported | 0 MoA row(s)
+aleplasinin,other,primary=other; Plasminogen activator inhibitor-1 inhibitor | 1 MoA row(s)
+amilomotide,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein vaccine antigen; target:APP | 1 MoA row(s)
+amisulpride,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin (5-HT) receptor antagonist; moa:Dopamine receptors; D2 & D3 antagonist | 2 MoA row(s)
+arimoclomol,other,primary=other; no MoA reported | 0 MoA row(s)
+armodafinil,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Dopamine transporter inhibitor | 1 MoA row(s)
+atabecestat,amyloid,primary=amyloid; target:BACE1; moa:Beta-secretase 1 inhibitor | 1 MoA row(s)
+atomoxetine,other,primary=other; Norepinephrine transporter inhibitor | 1 MoA row(s)
+avagacestat,amyloid,primary=amyloid; target:PSEN2; moa:Gamma-secretase inhibitor; target:PSEN1 | 1 MoA row(s)
+brexanolone,other,primary=other; GABA-A receptor; anion channel positive allosteric modulator | 1 MoA row(s)
+cannabidiol,other,primary=other; Cannabinoid CB1 receptor negative allosteric modulator | 1 MoA row(s)
+dalzanemdor,other,primary=other; no MoA reported | 0 MoA row(s)
+doxycycline,other,primary=other; Matrix metalloproteinase 8 inhibitor; Matrix metalloproteinase-1 inhibitor; Bacterial 70S ribosome inhibitor | 5 MoA row(s)
+encenicline,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Neuronal acetylcholine receptor protein alpha-7 subunit partial agonist; target:CHRNA7 | 1 MoA row(s)
+ferumoxytol,other,primary=other; no MoA reported | 0 MoA row(s)
+florbetaben,other,primary=other; no MoA reported | 0 MoA row(s)
+florbetapir,other,primary=other; no MoA reported | 0 MoA row(s)
+fluconazole,other,primary=other; Cytochrome P450 51 inhibitor | 1 MoA row(s)
+galantamine,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Acetylcholinesterase inhibitor; target:ACHE | 1 MoA row(s)
+gosuranemab,tau,primary=tau; target:MAPT; moa:Microtubule-associated protein tau inhibitor | 1 MoA row(s)
+gsk-2647544,other,primary=other; no MoA reported | 0 MoA row(s)
+haloperidol,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor antagonist; moa:D2-like dopamine receptor inverse agonist | 4 MoA row(s)
+huperzine a,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Acetylcholinesterase inhibitor; target:ACHE | 1 MoA row(s)
+icapamespib,other,primary=other; no MoA reported | 0 MoA row(s)
+intepirdine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 6 (5-HT6) receptor antagonist | 1 MoA row(s)
+latozinemab,other,primary=other; no MoA reported | 0 MoA row(s)
+lemborexant,other,primary=other; Orexin receptor 1 antagonist; Orexin receptor 2 antagonist | 2 MoA row(s)
+liraglutide,other,primary=other; Glucagon-like peptide 1 receptor agonist | 1 MoA row(s)
+mardepodect,other,primary=other; Phosphodiesterase 10A inhibitor | 1 MoA row(s)
+minocycline,other,primary=other; Bacterial 70S ribosome inhibitor | 1 MoA row(s)
+mirtazapine,vascular,primary=vascular; moa:Adrenergic receptor alpha-2 antagonist | 3 MoA row(s)
+niacinamide,other,primary=other; no MoA reported | 0 MoA row(s)
+nicergoline,other,primary=other; no MoA reported | 0 MoA row(s)
+osugacestat,other,primary=other; no MoA reported | 0 MoA row(s)
+pozanicline,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Nicotinic acetylcholine receptor alpha4/beta2/alpha5 partial agonist; moa:Neuronal acetylcholine receptor; alpha6/beta2 partial agonist | 2 MoA row(s)
+pridopidine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Dopamine D2 receptor modulator | 1 MoA row(s)
+propranolol,vascular,primary=vascular; moa:Beta-2 adrenergic receptor antagonist; moa:Beta-1 adrenergic receptor antagonist | 2 MoA row(s)
+remternetug,other,primary=other; no MoA reported | 0 MoA row(s)
+risperidone,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor antagonist; moa:Serotonin 2c (5-HT2c) receptor antagonist; moa:Dopamine D2 receptor antagonist | 3 MoA row(s)
+roflumilast,other,primary=other; Phosphodiesterase 4 inhibitor | 1 MoA row(s)
+semaglutide,other,primary=other; Glucagon-like peptide 1 receptor agonist | 1 MoA row(s)
+sevoflurane,other,primary=other; Glycine receptor (alpha-1/beta) positive modulator; Potassium channel subfamily K member 10 opener; Potassium channel subfamily K member 18 opener | 7 MoA row(s)
+simvastatin,lipid_metabolism,primary=lipid_metabolism; moa:HMG-CoA reductase inhibitor | 1 MoA row(s)
+solanezumab,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein binding agent; target:APP | 1 MoA row(s)
+tertomotide,other,primary=other; no MoA reported | 0 MoA row(s)
+tricaprilin,other,primary=other; no MoA reported | 0 MoA row(s)
+troculeucel,other,primary=other; no MoA reported | 0 MoA row(s)
+valbenazine,other,primary=other; Synaptic vesicular amine transporter inhibitor; Synaptic vesicular amine transporter inhibitor | 2 MoA row(s)
+venlafaxine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin transporter inhibitor | 2 MoA row(s)
+zatolmilast,other,primary=other; Phosphodiesterase 4D inhibitor | 1 MoA row(s)
+ziprasidone,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor antagonist; moa:Dopamine D2 receptor antagonist; moa:Serotonin 2c (5-HT2c) receptor antagonist | 6 MoA row(s)
+acoramidis,other,primary=other; Transthyretin stabiliser; Transthyretin stabiliser | 2 MoA row(s)
+aducanumab,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein binding agent; target:APP | 1 MoA row(s)
+alprazolam,other,primary=other; GABA-A receptor; anion channel positive allosteric modulator | 1 MoA row(s)
+amantadine,cholinergic_symptomatic,primary=cholinergic_symptomatic; target:GRIN2B; moa:Glutamate [NMDA] receptor antagonist | 2 MoA row(s)
+azeliragon,other,primary=other; Advanced glycosylation end product-specific receptor antagonist | 1 MoA row(s)
+begacestat,amyloid,primary=amyloid; target:PSEN2; moa:Gamma-secretase inhibitor; target:PSEN1 | 1 MoA row(s)
+bexarotene,other,primary=other; Retinoid X receptor agonist | 1 MoA row(s)
+bezisterim,other,primary=other; no MoA reported | 0 MoA row(s)
+bms-984923,other,primary=other; no MoA reported | 0 MoA row(s)
+cilostazol,other,primary=other; Phosphodiesterase 3A inhibitor | 1 MoA row(s)
+citalopram,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin transporter inhibitor | 1 MoA row(s)
+clonazepam,other,primary=other; GABA-A receptor; anion channel positive allosteric modulator | 1 MoA row(s)
+crenezumab,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein inhibitor; target:APP | 1 MoA row(s)
+dabigatran,other,primary=other; Thrombin inhibitor | 1 MoA row(s)
+desflurane,other,primary=other; Potassium channel subfamily K member 10 opener; Potassium channel subfamily K member 18 opener; Potassium channel subfamily K member 2 opener | 7 MoA row(s)
+duloxetine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin transporter inhibitor | 2 MoA row(s)
+emrusolmin,other,primary=other; no MoA reported | 0 MoA row(s)
+etalanetug,other,primary=other; no MoA reported | 0 MoA row(s)
+etanercept,inflammation_microglia,primary=inflammation_microglia; moa:TNF-alpha inhibitor | 1 MoA row(s)
+fluoxetine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin transporter inhibitor | 1 MoA row(s)
+gabapentin,vascular,primary=vascular; moa:Voltage-gated calcium channel modulator | 1 MoA row(s)
+gsk-356278,other,primary=other; no MoA reported | 0 MoA row(s)
+isoflurane,other,primary=other; Potassium channel subfamily K member 2 opener; Potassium channel subfamily K member 9 opener; GABA-A receptor; anion channel positive allosteric modulator | 7 MoA row(s)
+ladostigil,other,primary=other; no MoA reported | 0 MoA row(s)
+lornoxicam,other,primary=other; Cyclooxygenase inhibitor | 1 MoA row(s)
+ly-2886721,other,primary=other; no MoA reported | 0 MoA row(s)
+mibampator,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Glutamate receptor ionotropic AMPA positive allosteric modulator | 1 MoA row(s)
+nimodipine,vascular,primary=vascular; moa:Voltage-gated L-type calcium channel blocker | 2 MoA row(s)
+olanzapine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:D2-like dopamine receptor antagonist; moa:Serotonin 2c (5-HT2c) receptor antagonist; moa:Serotonin 2a (5-HT2a) receptor antagonist | 6 MoA row(s)
+paroxetine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin transporter inhibitor | 2 MoA row(s)
+posdinemab,tau,primary=tau; target:MAPT; moa:Microtubule-associated protein tau inhibitor | 1 MoA row(s)
+prednisone,other,primary=other; Glucocorticoid receptor agonist | 1 MoA row(s)
+pregabalin,vascular,primary=vascular; moa:Voltage-gated calcium channel modulator | 1 MoA row(s)
+quetiapine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor antagonist; moa:Dopamine D2 receptor antagonist; moa:Serotonin 2c (5-HT2c) receptor antagonist | 3 MoA row(s)
+selegiline,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Monoamine oxidase B inhibitor | 2 MoA row(s)
+sertraline,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin transporter inhibitor | 1 MoA row(s)
+xanomeline,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Muscarinic acetylcholine receptor M1 agonist; moa:Muscarinic acetylcholine receptor M4 agonist | 4 MoA row(s)
+zidovudine,inflammation_microglia,primary=inflammation_microglia; moa:Human immunodeficiency virus type 1 reverse transcriptase inhibitor | 1 MoA row(s)
+bupropion,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Dopamine transporter inhibitor | 4 MoA row(s)
+buspirone,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 1a (5-HT1a) receptor partial agonist | 1 MoA row(s)
+clonidine,vascular,primary=vascular; moa:Adrenergic receptor alpha-2 agonist | 2 MoA row(s)
+clozapine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Dopamine D2 receptor antagonist; moa:Serotonin 2a (5-HT2a) receptor antagonist | 2 MoA row(s)
+dasatinib,other,primary=other; Bcr/Abl fusion protein inhibitor | 1 MoA row(s)
+donanemab,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein disrupting agent; target:APP | 1 MoA row(s)
+donepezil,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Acetylcholinesterase inhibitor; target:ACHE | 1 MoA row(s)
+gsk239512,other,primary=other; Histamine H3 receptor antagonist | 1 MoA row(s)
+gsk933776,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein binding agent; target:APP | 1 MoA row(s)
+ibuprofen,other,primary=other; Cyclooxygenase inhibitor; Cyclooxygenase inhibitor; Cyclooxygenase inhibitor | 3 MoA row(s)
+lecanemab,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein inhibitor; target:APP | 1 MoA row(s)
+lecozotan,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 1a (5-HT1a) receptor antagonist | 1 MoA row(s)
+lorazepam,other,primary=other; GABA-A receptor; anion channel positive allosteric modulator | 1 MoA row(s)
+magnesium,other,primary=other; no MoA reported | 0 MoA row(s)
+melatonin,other,primary=other; Melatonin receptor agonist | 1 MoA row(s)
+memantine,cholinergic_symptomatic,primary=cholinergic_symptomatic; target:GRIN2B; moa:Glutamate [NMDA] receptor negative allosteric modulator | 1 MoA row(s)
+metformin,other,primary=other; Mitochondrial complex I (NADH dehydrogenase) inhibitor; Mitochondrial glycerol-3-phosphate dehydrogenase inhibitor | 2 MoA row(s)
+midazolam,other,primary=other; GABA-A receptor; anion channel positive allosteric modulator; GABA-A receptor; anion channel positive allosteric modulator | 2 MoA row(s)
+miglustat,other,primary=other; Ceramide glucosyltransferase inhibitor | 1 MoA row(s)
+modafinil,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Dopamine transporter inhibitor | 1 MoA row(s)
+orm-12741,vascular,primary=vascular; moa:Alpha-2c adrenergic receptor antagonist | 1 MoA row(s)
+ponezumab,amyloid,primary=amyloid; moa:Amyloid-beta A4 protein binding agent; target:APP | 1 MoA row(s)
+prx-03140,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 4 (5-HT4) receptor partial agonist | 1 MoA row(s)
+ramelteon,other,primary=other; Melatonin receptor agonist | 1 MoA row(s)
+scyllitol,other,primary=other; no MoA reported | 0 MoA row(s)
+simufilam,other,primary=other; Filamin-A positive modulator | 1 MoA row(s)
+trazodone,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:Serotonin 2a (5-HT2a) receptor antagonist; moa:Serotonin 2c (5-HT2c) receptor antagonist; moa:Serotonin transporter inhibitor | 3 MoA row(s)
+ambroxol,other,primary=other; no MoA reported | 0 MoA row(s)
+caffeine,other,primary=other; Adenosine receptor antagonist; Adenosine receptor antagonist | 2 MoA row(s)
+cp1-1189,other,primary=other; no MoA reported | 0 MoA row(s)
+creatine,other,primary=other; no MoA reported | 0 MoA row(s)
+curcumin,other,primary=other; no MoA reported | 0 MoA row(s)
+fentanyl,other,primary=other; Mu opioid receptor agonist; Mu opioid receptor agonist; Mu opioid receptor agonist | 3 MoA row(s)
+htl-9936,other,primary=other; no MoA reported | 0 MoA row(s)
+idazoxan,vascular,primary=vascular; moa:Adrenergic receptor alpha-2 antagonist | 1 MoA row(s)
+ketamine,cholinergic_symptomatic,primary=cholinergic_symptomatic; target:GRIN2B; moa:Glutamate [NMDA] receptor negative allosteric modulator | 1 MoA row(s)
+loxapine,synaptic_neuroprotection,primary=synaptic_neuroprotection; moa:D2-like dopamine receptor antagonist; moa:Serotonin 2a (5-HT2a) receptor antagonist; moa:Serotonin 2c (5-HT2c) receptor antagonist | 9 MoA row(s)
+nabilone,other,primary=other; Cannabinoid CB1 receptor agonist | 1 MoA row(s)
+naproxen,other,primary=other; Cyclooxygenase inhibitor; Cyclooxygenase inhibitor | 2 MoA row(s)
+oxytocin,other,primary=other; Oxytocin receptor agonist | 1 MoA row(s)
+prazosin,vascular,primary=vascular; moa:Adrenergic receptor alpha-1 antagonist | 1 MoA row(s)
+propofol,other,primary=other; GABA-A receptor; anion channel positive allosteric modulator | 1 MoA row(s)
+warfarin,other,primary=other; Vitamin k epoxide reductase complex subunit 1 isoform 1 inhibitor; Vitamin k epoxide reductase complex subunit 1 isoform 1 inhibitor | 2 MoA row(s)
+abt-126,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Neuronal acetylcholine receptor protein alpha-7 subunit agonist; target:CHRNA7 | 1 MoA row(s)
+aspirin,other,primary=other; Cyclooxygenase inhibitor | 1 MoA row(s)
+azd1446,cholinergic_symptomatic,primary=cholinergic_symptomatic; moa:Neuronal acetylcholine receptor; alpha4/beta2 agonist | 1 MoA row(s)
+ginkgo,other,primary=other; no MoA reported | 0 MoA row(s)
+gv-971,other,primary=other; no MoA reported | 0 MoA row(s)
+srx246,other,primary=other; Vasopressin V1a receptor antagonist | 1 MoA row(s)
+qs-21,other,primary=other; no MoA reported | 0 MoA row(s)

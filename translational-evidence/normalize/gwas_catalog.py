@@ -316,7 +316,11 @@ def aggregate_genes(assoc_records, assoc_lines, studies_by_acc):
 
             g["accessions"].add(accession)
             g["association_count"] += 1
-            g["disease_groups"].add(disease_group)
+            # disease_group may be None when no MeSH Dementia label matched the
+            # trait; the gene.disease_groups array is string-only (schema), so
+            # skip nulls here.
+            if disease_group is not None:
+                g["disease_groups"].add(disease_group)
 
             if p_value is not None:
                 if g["best_p_value"] is None or p_value < g["best_p_value"]:

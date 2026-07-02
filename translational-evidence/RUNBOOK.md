@@ -38,12 +38,20 @@ Step order:
 6. `normalize/clinicaltrials.py`
 7. `normalize/open_targets.py`
 8. `normalize/open_targets_l2g.py`
-9. `map/pathways.py`
-10. `score/scores.py`
-11. `validate.py`
+9. `map/gene_pathway_build.py` — API capture → `gene_pathways_api.jsonl` + `gene_pathway.csv`
+10. `map/intervention_mechanism_build.py` — API capture → `drug_mechanism_api.jsonl` + `intervention_mechanism.csv`
+11. `map/pathways.py`
+12. `score/scores.py`
+13. `validate.py`
 
 With `--skip-ingest`, steps 1–4 (the ingest steps) are omitted and only steps
-5–11 run.
+5–13 run. Steps 9–10 hit the APIs (mygene / Reactome / Open Targets) through the
+cached `data/raw` layer, so `--skip-ingest` still reuses their cache and
+`TE_REFRESH=1` forces fresh calls. **Ordering note:** step 10 regenerates
+`intervention_mechanism.csv`, which `normalize/clinicaltrials.py` (step 6)
+consumes for trial mechanism tagging — on the first run against a *new* corpus,
+run the pipeline twice (or run the two `map/*_build.py` scripts before the
+normalize steps) so the trial tags pick up a freshly regenerated CSV.
 
 You can also run any single stage directly, e.g.
 `python3 translational-evidence/normalize/gwas_catalog.py`.
@@ -136,10 +144,61 @@ provenance, and Alzheimer stays recoverable downstream as the subset
   colocalisation links (AD GWAS→QTL colocalisation is near-empty), over **1,710**
   distinct genes.
 
-### Map (curated source → processed JSONL)
-- **`map/pathways.py`** — reads the source-controlled
-  `map/gene_pathway.csv`, groups genes by `pathway_group`, and writes one
-  `pathways.jsonl` record per group. No network calls.
+### Map (API-derived capture → thin projection → processed JSONL)
+
+The gene→pathway and drug→mechanism maps are now **API-derived and
+multi-valued**. Two build scripts capture the FULL annotation set from every
+source into rich JSONL sidecars, then emit a THIN single-value CSV projection for
+the legacy consumers. See **[`map/README.md`](map/README.md)** for the full
+design; the short version:
+
+- **`map/gene_pathway_build.py`** — for every gene in `genes.jsonl`, captures
+  **all** GO terms (mygene.info), **all** Reactome pathways, and **all** Open
+  Targets target pathways, and records them verbatim. It then tags AD-mechanism
+  **buckets as a LIST of signals** (`{bucket, source, matched_term}`) and derives
+  ONE `primary_bucket` (the most-source-supported bucket) purely for the thin
+  CSV. Writes:
+  - `data/processed/translational-evidence/gene_pathways_api.jsonl` — one rich
+    record per gene (full `sources.*` + `ad_bucket_signals[]` + `buckets[]` +
+    `primary_bucket` + `primary_support[]`). **Records everything; nothing is
+    collapsed away.**
+  - `map/gene_pathway.csv` — **GENERATED thin projection**
+    (`gene_symbol, pathway_group=primary_bucket, notes`) with a `# GENERATED …
+    do not hand-edit` header. Genes with no keyword hit (`unknown`) are omitted
+    from the CSV but keep their full raw annotations in the JSONL.
+  - `data/processed/translational-evidence/pathways.jsonl` — regenerated from the
+    projection (same shape as `map/pathways.py`).
+- **`map/intervention_mechanism_build.py`** — ranks distinct DRUG/BIOLOGICAL
+  intervention names from `trials.jsonl` by trial frequency and resolves the top
+  N against Open Targets, capturing **every** mechanism-of-action row + its full
+  target list. Tags **mechanisms as a LIST of signals** and derives ONE
+  `primary_mechanism` for the thin CSV. Writes:
+  - `data/processed/translational-evidence/drug_mechanism_api.jsonl` — one rich
+    record per resolved ChEMBL drug (`sources.opentargets[]` = every MoA+targets,
+    `mechanism_signals[]`, `mechanisms[]`, `primary_mechanism`, `primary_support[]`,
+    all trial spellings + summed `trial_count`).
+  - `map/intervention_mechanism.csv` — **GENERATED thin projection**
+    (`keyword, mechanism_group=primary_mechanism, notes`) consumed by
+    `normalize/clinicaltrials.py`.
+- **`map/pathways.py`** — reads `map/gene_pathway.csv` (now the generated thin
+  projection; it skips the leading `# GENERATED …` comment line automatically),
+  groups genes by `pathway_group`, and writes one `pathways.jsonl` record per
+  group. No network calls.
+
+> **The two map CSVs are GENERATED — do not hand-edit them.** The full,
+> multi-source, multi-valued truth is in the two `*_api.jsonl` sidecars; the CSVs
+> are only single-value convenience projections for legacy consumers. Both build
+> scripts are stdlib-only and go through `common.get_json`/`post_json` (cached to
+> `data/raw`; `TE_REFRESH=1` forces fresh calls).
+
+**The ONLY remaining hand elements in Track B** are (1) the transparent
+in-code **bucket/mechanism keyword rulesets** (`PATHWAY_BUCKET_KEYWORDS` /
+`TRIAL_MECHANISM_KEYWORDS`, which only *name* which fixed-vocabulary mechanism a
+captured term belongs to) and (2) the **scoring weights** in `score/SCORING.md`
+(deferred by decision). Everything else — gene pathway membership, drug MoA, and
+the **`mesh_ui_join` disease classification** (`map/mesh_tree.py` reads the MeSH
+Dementia subtree live from MeSH SPARQL; the old hand `mesh_disease.csv` was
+deleted) — is API-derived.
 
 ### Score (processed JSONL → enriched in place)
 - **`score/scores.py`** — computes the four explainable scores and enriches
@@ -150,23 +209,42 @@ provenance, and Alzheimer stays recoverable downstream as the subset
   it is joined by Ensembl `gene_id` first, then `gene_symbol`, and is `null` when
   a gene has no functional_links. Also (re)writes `score/SCORING.md`. Reads no
   live APIs.
-- **`score/entity_metrics.py`** — builds the **per-entity METRICS layer**: one
-  flat, machine-readable metrics record per **gene / variant / pathway**, written
-  to `data/processed/translational-evidence/entity_metrics.jsonl`
+- **`score/entity_metrics.py`** — builds the **per-entity METRICS layer** (the
+  **AUTHORITATIVE agent layer**): one flat, machine-readable metrics record per
+  **gene / variant / pathway**, written to
+  `data/processed/translational-evidence/entity_metrics.jsonl`
   (schema `entity_metric.schema.json`). Reads the already-processed Track B files
-  (`genes`, `gwas_associations`, `functional_links`, `trials`, `pathways`) plus
-  `map/gene_pathway.csv`; reads no live APIs. Every metric is a **number /
-  boolean / null** under a dotted `"<group>.<name>"` key wrapped as
-  `{value, source}`, where `source` names the exact input field(s) + formula, so
-  the layer is fully **explainable** and nothing is fabricated. **By design it
-  ships transparent signals only — no baked-in verdicts** ("contradicted",
-  "opportunity", "novel"): downstream agents compose those from the metrics, and
-  because `additionalProperties` is allowed everywhere they can attach their own
-  metric keys. See **`score/METRICS.md`** for the full field reference (every
-  metric, formula, source, per entity_type) and worked verdict-composition
-  examples. **Recency** metrics use `CURRENT_YEAR` (default `2026`, overridable
-  via `TE_CURRENT_YEAR`) as "now" — never `datetime.today()` — with a 3-year
-  recent window, so a given input always yields the same output:
+  (`genes`, `gwas_associations`, `functional_links`, `trials`, `pathways`,
+  `target_evidence`, `gene_pathways_api`) plus `shared/topic_evidence_links.jsonl`
+  (literature counts) and the optional Track A `papers.jsonl` snapshot
+  (paper→year for recency); reads no live APIs. Every metric is a **PRIMITIVE**
+  under a dotted `"<group>.<name>"` key wrapped as `{value, source}`:
+  **counts** (`n_*`), **raw** observed/external values (`best_neglog10p`,
+  `max_l2g`, Open Targets datatype scores), **booleans** (`has_approval`), small
+  **lists**, and **simple `a/b` ratios** (each carrying a `formula` note and
+  `null` when the denominator is 0). `source` names the exact input field(s) +
+  formula, so the layer is fully **explainable** and nothing is fabricated.
+
+  > **Weighted composites REMOVED (counts/ratios philosophy).** The old
+  > opinionated 0-1 composites — `genetic.genetic_support`,
+  > `functional.functional_support`, `composite.translation_gap` — were **removed
+  > from entity_metrics**. **No weighted 0-1 verdicts are shipped** (no
+  > `0.5*x + 0.3*y`, no `"under-researched"` / `"under-translated"` /
+  > `"emerging"` labels). Their raw **components** are kept as standalone
+  > primitives so an **agent composes** those higher-order answers itself (see the
+  > worked recipes in `score/METRICS.md`). `open_targets.*` are Open Targets' OWN
+  > external harmonic-sum scores, kept RAW and clearly labelled — not our stats.
+  > The 0-1 `evidence_scores` on `genes.jsonl` and the `scores` on `pathways.jsonl`
+  > are **LEGACY weighted scores retained only for the current Track A map
+  > contract** (to be replaced by these metrics); they are NOT part of the metrics
+  > layer. Because `additionalProperties` is allowed everywhere, agents may attach
+  > their own metric keys (e.g. `agent.under_researched`).
+
+  See **`score/METRICS.md`** for the full field reference (every metric, formula,
+  source, per entity_type) and worked agent-composition recipes. **Recency**
+  metrics use `CURRENT_YEAR` (default `2026`, overridable via `TE_CURRENT_YEAR`)
+  as "now" — never `datetime.today()` — with a 3-year recent window, so a given
+  input always yields the same output:
 
   ```bash
   python3 translational-evidence/score/entity_metrics.py
@@ -174,8 +252,8 @@ provenance, and Alzheimer stays recoverable downstream as the subset
   TE_CURRENT_YEAR=2024 python3 translational-evidence/score/entity_metrics.py
   ```
 
-  `2026-07-01` build: **6,318** records — **523 gene**, **5,786 variant**,
-  **9 pathway**.
+  `2026-07-02` build: **7,278** records — **1,484 gene**, **5,786 variant**,
+  **8 pathway**.
 
   > Not yet wired into `run_all.py` (its `score/` step runs only `scores.py`);
   > run it after `scores.py` — the graph exporters in §9 pick it up automatically.
@@ -265,7 +343,15 @@ provenance, and Alzheimer stays recoverable downstream as the subset
   | CSV | columns | rows | feeds |
   | --- | --- | --- | --- |
   | `chemical_gene.csv` | `chemical_ui, chemical_term, gene_symbol, notes` | 46 | `chemical_ui_crosswalk` |
-  | `gene_pathway.csv` | `gene_symbol, pathway_group, notes` | 41 | `gene_pathway_curated` |
+  | `gene_pathway.csv` | `gene_symbol, pathway_group, notes` | 304 (**GENERATED**) | `gene_pathway_curated` |
+
+  > `gene_pathway.csv` is no longer a hand-curated table — it is now the
+  > **GENERATED thin projection** written by `map/gene_pathway_build.py` from the
+  > API capture (`gene_pathways_api.jsonl`), one row per gene that got a
+  > `primary_bucket` (304 in the `2026-07-02` build vs the retired 41 hand rows).
+  > The `gene_pathway_curated` bridge method feeds off `pathway_group`, so it now
+  > runs against the API-derived projection. `chemical_gene.csv` is still a small
+  > hand crosswalk for `chemical_ui_crosswalk`.
 
   `mesh_ui_join` no longer uses a hand CSV: `mesh_disease.csv` was **deleted** and
   replaced by `map/mesh_tree.py`, which reads the Dementia subtree live from the
@@ -334,7 +420,7 @@ each conforms to a schema in `shared/schemas/`. Counts below are from the
 | `trials.jsonl` | `trial.schema.json` | 6,841 |
 | `target_evidence.jsonl` | `target_evidence.schema.json` | 1,499 |
 | `functional_links.jsonl` | `functional_link.schema.json` | 3,372 |
-| `entity_metrics.jsonl` | `entity_metric.schema.json` | 6,318 |
+| `entity_metrics.jsonl` | `entity_metric.schema.json` | 7,278 |
 
 (Counts grew from the earlier Alzheimer-only build because the pipeline now
 covers ADRD; `target_evidence` is ~300 targets × 5 disease ids.
@@ -342,13 +428,14 @@ covers ADRD; `target_evidence` is ~300 targets × 5 disease ids.
 colocalisation links over 1,710 distinct genes.)
 
 `entity_metrics.jsonl` is the **per-entity METRICS layer** (one flat record per
-gene / variant / pathway = **523 + 5,786 + 9**). Each metric is a
-number/boolean/null under a dotted `"<group>.<name>"` key wrapped as
-`{value, source}` — transparent signals only, no baked-in verdicts, extensible
-via `additionalProperties`. See **`score/METRICS.md`** for every metric's
-definition, formula, source, and worked verdict-composition examples. Built by
-`score/entity_metrics.py`; recency uses `CURRENT_YEAR` (env-overridable via
-`TE_CURRENT_YEAR`, default `2026`).
+gene / variant / pathway = **1,484 + 5,786 + 8 = 7,278**). Each metric is a
+PRIMITIVE (count / raw value / boolean / list / simple ratio) under a dotted
+`"<group>.<name>"` key wrapped as `{value, source}` (ratios add `formula`) —
+transparent primitives only, **no weighted 0-1 composites**, no baked-in
+verdicts, extensible via `additionalProperties`. See **`score/METRICS.md`** for
+every metric's definition, formula, source, and worked agent-composition recipes.
+Built by `score/entity_metrics.py`; recency uses `CURRENT_YEAR` (env-overridable
+via `TE_CURRENT_YEAR`, default `2026`).
 
 `genes.jsonl` and `pathways.jsonl` are produced by the normalize/map steps and
 then **rewritten in place** by `score/scores.py` with the scores attached
@@ -421,16 +508,16 @@ Validator result (all files, including the two shared outputs and the graph
 
 ```
 data/processed/translational-evidence/gwas_associations.jsonl: 7351 records, OK
-data/processed/translational-evidence/genes.jsonl: 523 records, OK
-data/processed/translational-evidence/pathways.jsonl: 9 records, OK
+data/processed/translational-evidence/genes.jsonl: 1484 records, OK
+data/processed/translational-evidence/pathways.jsonl: 8 records, OK
 data/processed/translational-evidence/trials.jsonl: 6841 records, OK
 data/processed/translational-evidence/target_evidence.jsonl: 1499 records, OK
 data/processed/translational-evidence/functional_links.jsonl: 3372 records, OK
-data/processed/translational-evidence/entity_metrics.jsonl: 6318 records, OK
-data/processed/shared/topic_evidence_links.jsonl: 6902 records, OK
-data/processed/shared/topic_evidence_rollup.jsonl: 17 records, OK
-data/exports/graph/nodes.jsonl: 15294 records, OK
-data/exports/graph/edges.jsonl: 11018 records, OK
+data/processed/translational-evidence/entity_metrics.jsonl: 7278 records, OK
+data/processed/shared/topic_evidence_links.jsonl: 11119 records, OK
+data/processed/shared/topic_evidence_rollup.jsonl: 10 records, OK
+data/exports/graph/nodes.jsonl: 16246 records, OK
+data/exports/graph/edges.jsonl: 9138 records, OK
 ```
 
 ---
@@ -711,38 +798,45 @@ scripts read the inputs, so a re-run against the full corpus just works.
 
 Join keys: `gene` → `gene:<gene_id>`, `variant` → `variant:<rsid>` (the id
 already carries the prefix), `pathway` → `pathway:<mechanism_group>`. The
-`2026-07-01` manifest reports **6,318** metrics records loaded and attached with
-**0 unmatched** (`gene` 523, `variant` 5,786, `pathway` 9) — see
+`2026-07-02` manifest reports **7,278** metrics records loaded and attached with
+**0 unmatched** (`gene` 1,484, `variant` 5,786, `pathway` 8) — see
 `graph_manifest.json → metrics.{attached_by_type, flat_keys, unmatched_records}`.
 
-Flat props hoisted per node type (`FLAT_METRIC_KEYS`):
+Flat props hoisted per node type (`FLAT_METRIC_KEYS`). The old weighted
+`translation_gap` composite was **REMOVED** from the metrics layer; its raw
+count/ratio **components** are hoisted instead (`best_neglog10p`, `n_papers`,
+`max_l2g` on genes; `mean_best_neglog10p`, `trials_per_gene`, `n_papers` on
+pathways) so an agent / Cypher query forms its own genetics-vs-clinical gap:
 
 | node type | flat props (→ dotted metric) |
 | --- | --- |
-| `gene` | `stopped_ratio`, `direction_agreement`, `n_conflicting`, `n_trials`, `first_gwas_year`, `latest_gwas_year`, `n_recent_gwas`, `has_approval`, `translation_gap` |
-| `pathway` | `stopped_ratio`, `has_approval`, `n_trials`, `n_drugs`, `first_trial_year`, `latest_trial_year`, `n_recent_trials`, `translation_gap` |
+| `gene` | `stopped_ratio`, `direction_agreement`, `n_conflicting`, `n_trials`, `first_gwas_year`, `latest_gwas_year`, `n_recent_gwas`, `has_approval`, `best_neglog10p`, `n_papers`, `max_l2g` |
+| `pathway` | `stopped_ratio`, `has_approval`, `n_trials`, `n_drugs`, `first_trial_year`, `latest_trial_year`, `n_recent_trials`, `mean_best_neglog10p`, `trials_per_gene`, `n_papers` |
 | `variant` | `n_associations`, `n_studies`, `first_year`, `latest_year`, `n_recent`, `direction_agreement` |
 
 `build_neo4j_export.py` writes these as typed CSV columns and `load.cypher`
 loads them with `toInteger()` / `toFloat()` / `toBoolean()` (a blank column ==
-Cypher `null`). Note: the pathway/gene `translation_gap` metric is loaded as
-`metrics_translation_gap` in Neo4j to avoid clashing with the existing
-`translation_gap` score column. `load.cypher` §5 ships **commented-out example
+Cypher `null`). The `metrics_translation_gap` column was **removed** in step with
+the metrics-layer change; the raw count/ratio columns above replace it. (The
+node still carries the LEGACY `genetic_support` / `functional_support` /
+`translation_gap` **Track A map-contract scores** on its `scores` dict / as their
+own CSV columns — those are distinct from the metrics layer and are being
+replaced by the metrics.) `load.cypher` §5 ships **commented-out example
 queries** (copy one to run) — these are read-only illustrations; **verdicts are
 composed from the metrics, never baked in**:
 
 ```cypher
-// Genetically supported but clinically stalled genes
-// (strong genetics + high stopped share; no verdict baked in — just the metrics)
+// Strong genetics but clinically stalled genes (high raw signal + high stopped
+// share; no verdict baked in — the old 0-1 translation_gap composite is gone)
 MATCH (g:Gene)
-WHERE g.genetic_support >= 0.7 AND g.stopped_ratio >= 0.3 AND g.n_trials >= 5
-RETURN g.label, g.genetic_support, g.stopped_ratio, g.n_trials, g.metrics_translation_gap
-ORDER BY g.stopped_ratio DESC, g.genetic_support DESC LIMIT 25;
+WHERE g.best_neglog10p >= 20 AND g.stopped_ratio >= 0.3 AND g.n_trials >= 5
+RETURN g.label, g.best_neglog10p, g.stopped_ratio, g.n_trials, g.n_papers
+ORDER BY g.stopped_ratio DESC, g.best_neglog10p DESC LIMIT 25;
 
 // Direction-conflict genes: GWAS effect directions disagree across studies
 MATCH (g:Gene)
 WHERE g.direction_agreement IS NOT NULL AND g.direction_agreement < 0.7 AND g.n_conflicting >= 2
-RETURN g.label, g.direction_agreement, g.n_conflicting, g.genetic_support
+RETURN g.label, g.direction_agreement, g.n_conflicting, g.best_neglog10p
 ORDER BY g.n_conflicting DESC, g.direction_agreement ASC LIMIT 25;
 
 // Recently-emerging loci: latest GWAS in the last ~3 years (CURRENT_YEAR-2)
@@ -751,11 +845,12 @@ WHERE v.latest_year >= 2024 AND v.n_recent >= 1
 RETURN v.label, v.latest_year, v.n_recent, v.n_associations, v.n_studies
 ORDER BY v.latest_year DESC, v.n_associations DESC LIMIT 25;
 
-// Under-translated pathways: high translation_gap yet never reached approval
+// Under-translated pathways (agent-composed): strong member-gene genetics +
+// broad literature but no trials — no shipped 0-1 gap score
 MATCH (p:Pathway)
-WHERE p.has_approval = false
-RETURN p.label, p.translation_gap, p.stopped_ratio, p.n_trials, p.n_drugs, p.n_recent_trials
-ORDER BY p.translation_gap DESC LIMIT 25;
+WHERE p.has_approval = false AND p.n_trials = 0 AND p.mean_best_neglog10p >= 15
+RETURN p.label, p.mean_best_neglog10p, p.n_papers, p.trials_per_gene, p.n_trials, p.n_drugs
+ORDER BY p.mean_best_neglog10p DESC LIMIT 25;
 ```
 
 The recency threshold in these examples (`latest_year >= 2024`, i.e.
@@ -917,3 +1012,105 @@ All three are public research APIs; requests carry a polite `User-Agent`
 (`common.USER_AGENT`) and back off/retry on transient failures. If a live call
 fails after retries, the pipeline reports the exact error and stops — it never
 fabricates records.
+
+---
+
+## 11. API-derived gene→pathway & drug→mechanism map (multi-valued capture)
+
+The `map/` layer is now **API-derived and multi-valued**: gene pathway
+membership comes from mygene.info + Reactome + Open Targets, and drug
+mechanism-of-action comes from Open Targets. The **full** captured annotation set
+is persisted per gene/drug (nothing is collapsed to a "voted winner" and
+discarded); the AD-mechanism buckets are a **list of signals**; and a single
+`primary` value is projected **only** for the two thin legacy CSVs. Full design
+in **[`map/README.md`](map/README.md)**.
+
+### Files
+
+| File | Role |
+| --- | --- |
+| `data/processed/translational-evidence/gene_pathways_api.jsonl` | rich per-gene capture (all GO/Reactome/OT + `ad_bucket_signals[]` + `buckets[]` + `primary_bucket`) |
+| `data/processed/translational-evidence/drug_mechanism_api.jsonl` | rich per-drug capture (all OT MoA rows + targets + `mechanism_signals[]` + `mechanisms[]` + `primary_mechanism`) |
+| `map/gene_pathway.csv` | **GENERATED** thin projection: `gene_symbol, pathway_group=primary_bucket, notes` |
+| `map/intervention_mechanism.csv` | **GENERATED** thin projection: `keyword, mechanism_group=primary_mechanism, notes` |
+
+> The trials-corpus-driven `drug_mechanism_api.jsonl` (singular) from
+> `intervention_mechanism_build.py` is authoritative and is what the CSV
+> projection and the drug_target trial linkage use. (A plural
+> `drug_mechanisms_api.jsonl` seeded-INN sidecar was previously emitted by
+> `gene_pathway_build.py`; that orphan is no longer produced.)
+
+### Capture richness (`2026-07-02` build, 523 genes)
+
+- **Avg per gene:** 17.8 GO terms (max 227), 2.6 Reactome pathways (max 78),
+  2.5 OT pathways (max 78). Source coverage: 436/523 genes have ≥1 GO term,
+  290 have ≥1 Reactome pathway, 287 have ≥1 OT pathway, 487 carry an OT
+  `approvedSymbol`. 87 genes had all three sources empty (unknown to the APIs);
+  their record is still stored (empty source lists, no fabricated data).
+- **Multi-valued richness:** **150 genes carry >1 AD-bucket signal** (distinct
+  buckets), i.e. genuinely multi-mechanism. Distribution of #buckets/gene:
+  0→220, 1→153, 2→70, 3→45, 4→20, 5→6, 6→4, 7→4, 8→1 (APOE).
+- **`unknown` genes:** **220 genes** got no keyword hit (empty `buckets[]`) yet
+  **retain their full raw GO/Reactome/OT annotations** in the JSONL — they are
+  simply omitted from the thin CSV. 303 genes have a `primary_bucket`; the CSV
+  has 304 rows (one extra row is a symbol that resolves to two gene records).
+- **Drug side:** 222 distinct ChEMBL drugs resolved from the trial corpus;
+  primary_mechanism distribution `other` 129, `synaptic_neuroprotection` 36,
+  `amyloid` 19, `cholinergic_symptomatic` 17, `vascular` 11, `lipid_metabolism`
+  6, `inflammation_microglia` 2, `tau` 2. Trial coverage: **983 / 2,450**
+  drug/biological trials (40.1%) are tag-able by the resolved keyword map.
+
+### Adversarial verification (VerifyDocs)
+
+Six genes (APOE, TREM2, MAPT, BIN1, APP + the multi-bucket **CLU**) and four
+drugs (donepezil, lecanemab, semaglutide, memantine) were **re-fetched live**
+(`TE_REFRESH=1`) and compared to the recorded sidecars:
+
+- **Genes — PASS (6/6).** For every gene the recorded GO / Reactome / OT sets
+  are **exactly equal** to the live API response (e.g. APP 227 GO / 20 Reactome /
+  20 OT; APOE 157 / 12 / 12), UniProt accessions match, and **every**
+  `ad_bucket_signal.matched_term` is a real captured term. Nothing dropped.
+- **Drugs — PASS (4/4).** Recorded MoA rows + target symbols exactly equal live
+  OT (donepezil→ACHE "Acetylcholinesterase inhibitor"; lecanemab "Amyloid-beta
+  A4 protein inhibitor"; memantine "Glutamate [NMDA] receptor…"; semaglutide
+  "Glucagon-like peptide 1 receptor agonist"). Every mechanism signal cites a
+  real MoA text.
+
+### Known limitations of the *primary projection* (not the capture)
+
+The rich capture is faithful and complete; these caveats apply only to the
+single-value projection and the hand keyword ruleset:
+
+1. **Primary ≠ old hand curation (19/41 agree).** Because the primary is the
+   *most-source-supported* bucket, it can differ from the retired hand CSV: e.g.
+   **APP → `endocytosis_endosomal`** (not amyloid), **MAPT → `synaptic_neuronal`**
+   (not tau), **SORL1 → amyloid** (not endocytosis). The amyloid/tau signals are
+   still present in `buckets[]`; consumers wanting a specific mechanism should
+   read the multi-valued list, not `primary_bucket` alone. 8 old-hand genes have
+   no primary: **5 are outside the current GWAS gene universe** (PSEN1, PSEN2,
+   TSPOAP1, WWOX, IQCK — never processed) and **3 are present but `unknown`**
+   (MS4A4A, MS4A6A, CASS4: sparse GO, no keyword hit; raw GO still stored).
+2. **`"a-beta"` keyword collides with `alpha-beta`.** The `amyloid` keyword list
+   (from the spec) includes `"a-beta"`, which matches the substring `alpha-beta`
+   in GO terms like "…CD8-positive, **alpha-beta** T cell activation",
+   mis-tagging **10 signals** across CCR2/HLA-DRB1/PSMA1/DAPL1/etc. as `amyloid`.
+   DAPL1's only amyloid signal is this false positive, so it gets a spurious
+   `amyloid` primary. **Recommended fix:** replace `"a-beta"` with the
+   word-boundary form (e.g. match `"aβ"`/`"a-beta "` with a trailing delimiter,
+   or drop it since `"amyloid"`/`"beta-amyloid"` already cover Aβ terms).
+3. **GLP-1 drugs project to `other`.** OT reports semaglutide/liraglutide MoA as
+   "Glucagon-like peptide 1 receptor agonist", which does not contain the literal
+   `"glp-1"` keyword, so they fall through to `other` (faithful, not data loss).
+   **Recommended fix:** add `"glucagon-like peptide"` to the `lipid_metabolism`
+   keyword list.
+4. **`pathways.jsonl` now has 7 groups (was 9).** No gene projects to `tau` or
+   `other` as its *primary* (tau signals are always outnumbered; `other` is not a
+   gene bucket), so those groups drop out of the projection even though tau
+   signals exist in the rich capture. Downstream pathway-level scoring therefore
+   has no standalone `tau` pathway today.
+
+**Remaining hand elements across Track B** (everything else is API-derived):
+the two **keyword rulesets** (`PATHWAY_BUCKET_KEYWORDS` /
+`TRIAL_MECHANISM_KEYWORDS`) and the **scoring weights** (`score/SCORING.md`,
+deferred by decision). `mesh_disease` is already API-derived via `map/mesh_tree.py`
+(MeSH SPARQL Dementia subtree); the old hand `mesh_disease.csv` was deleted.

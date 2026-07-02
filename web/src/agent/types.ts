@@ -35,11 +35,13 @@ export interface MapState {
  */
 export interface AgentController {
   selectPapers(paperIds: string[]): { selected: number };
-  highlightPapers(paperIds: string[]): { highlighted: number };
+  highlightPapers(paperIds: string[]): { highlighted: number; note?: string };
   clearSelection(): void;
   clearHighlight(): void;
-  zoomToPapers(paperIds: string[]): { zoomed: number };
-  zoomToCommunity(topicId: string): { topic_id: string; members: number } | { error: string };
+  zoomToPapers(paperIds: string[]): { zoomed: number; note?: string };
+  zoomToCommunity(
+    topicId: string
+  ): { topic_id: string; members: number; note?: string } | { error: string };
   setFilters(patch: FilterPatch): { pathway_groups: string[]; yearRange: [number, number] };
   resetView(): void;
   /** Resolve a gene symbol / rsID / pathway group to papers, then select+zoom. */

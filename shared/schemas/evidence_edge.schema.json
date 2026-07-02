@@ -20,7 +20,7 @@
     },
     "edge_type": {
       "type": "string",
-      "enum": ["variant_gene", "gene_pathway", "gene_disease", "drug_pathway", "trial_drug", "trial_pathway", "topic_gene", "topic_pathway", "topic_disease"]
+      "enum": ["variant_gene", "gene_pathway", "gene_disease", "drug_pathway", "drug_gene", "trial_drug", "trial_pathway", "topic_gene", "topic_pathway", "topic_disease"]
     },
     "score": {
       "type": ["number", "null"],

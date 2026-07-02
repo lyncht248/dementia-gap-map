@@ -24,11 +24,9 @@ papers (4780) — one row per paper on the map
   pathway_group, x, y, citation_count, relative_citation_ratio, is_clinical,
   genes (LIST of symbols, often empty), trials (LIST of trial titles), doi, url
 
-clusters (16) — the VISUAL communities drawn on the map (Louvain)
-  topic_id ('c0'..), label, pathway_group, color, paper_count, top_genes (LIST),
-  trials (LIST of titles), centroid_x, centroid_y, year_start, year_end,
-  score_emergence, score_genetic_support, score_functional_support,
-  score_clinical_translation, score_clinical_saturation
+clusters (46) — the theme-atlas communities on the map (Qwen embedding themes)
+  topic_id ('t0'..), label (e.g. "Prion Disease (CJD)"), pathway_group, color,
+  paper_count, top_genes (LIST), trials (LIST of titles), centroid_x, centroid_y
 
 genes (523)
   gene_id (Ensembl), symbol, name, pathway_group, disease_groups (LIST),
@@ -72,6 +70,12 @@ entity_metrics (~73k) — the FULL per-entity metric layer, LONG format: one row
   AND label='APOE' AND metric_key='clinical.n_trials'. Discover keys with
   SELECT DISTINCT metric_key FROM entity_metrics. This is THE source for gene-level
   clinical development and effect-direction disagreement.
+
+drugs (222) — drug -> mechanism/target capture (ChEMBL + Open Targets MoA)
+  chembl_id, name, ot_name, primary_mechanism, mechanisms (LIST),
+  mechanism_targets (LIST of gene symbols the drug acts on), moa_texts (LIST),
+  trial_count, trial_names (LIST). Use mechanism_targets for "which drugs hit
+  gene X" / repurposing questions.
 
 target_evidence (1499) — Open Targets per gene x disease association scores
   gene_id, target_label, approved_name, disease_group, disease_id, disease_label,
@@ -117,13 +121,16 @@ graph_nodes (~15k) / graph_edges (~11k) — pre-joined typed evidence graph.
 - "Back-trace a mechanism to its GWAS anchors": entity_metrics temporal.first_gwas_year per
   gene, or min(papers.year) via gwas.pmid -> papers.
 
-## Controlling the map
+## Controlling the map (Theme Atlas)
 - To show/point at papers: resolve to paper_ids with query_data (SELECT paper_id ...), then
-  call select_papers (updates the selection feed), highlight_papers (transient ring), and/or
-  zoom_to_papers. Keep sets meaningful — cap to a sensible number (e.g. <= 50) and say so.
-- zoom_to_community(topic_id) frames a visual community. set_filters restricts what's shown.
-- focus_entity(gene|variant|pathway_group) is a shortcut that resolves + selects + zooms.
-- get_state reports the current selection/filters/view.
+  call select_papers — this populates the SELECTION FEED (grouped by theme, with Track B
+  evidence). Keep sets meaningful — cap to a sensible number (e.g. <= 50) and say so.
+- The atlas canvas doesn't yet expose on-canvas highlight/zoom, so highlight_papers,
+  zoom_to_papers and zoom_to_community currently just populate the feed (their result
+  includes a "note" saying so) — describe the papers in text; don't claim you zoomed.
+- clear_selection / reset_view work. set_filters supports yearRange (disease-area filters are
+  user-only for now). focus_entity(gene|pathway_group) resolves + selects into the feed.
+- get_state reports the current selection.
 
 ## Gotchas
 - Two groupings exist: the 16 visual communities (clusters table, what's on screen) vs
