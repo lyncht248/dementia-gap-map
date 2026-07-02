@@ -37,7 +37,13 @@ const SUGGESTIONS = [
   "Top genes by genetic support — and how many trials target them?",
 ];
 
-export default function AgentPanel({ controller }: { controller: AgentController }) {
+export default function AgentPanel({
+  controller,
+  onMinimize,
+}: {
+  controller: AgentController;
+  onMinimize?: () => void;
+}) {
   const [convos, setConvos] = useState<Conversation[]>(() => [newConversation(1)]);
   const [activeId, setActiveId] = useState<string>(() => convos[0].id);
   const [input, setInput] = useState("");
@@ -151,8 +157,9 @@ export default function AgentPanel({ controller }: { controller: AgentController
 
   return (
     <div className="agent-panel">
-      <div className="agent-tabs" role="tablist">
-        {convos.map((c) => (
+      <div className="agent-header">
+        <div className="agent-tabs" role="tablist">
+          {convos.map((c) => (
           <button
             key={c.id}
             className={`agent-tab ${c.id === activeId ? "active" : ""}`}
@@ -169,9 +176,20 @@ export default function AgentPanel({ controller }: { controller: AgentController
             )}
           </button>
         ))}
-        <button className="agent-tab-new" onClick={addChat} title="New chat">
-          + New chat
-        </button>
+          <button className="agent-tab-new" onClick={addChat} title="New chat">
+            + New chat
+          </button>
+        </div>
+        {onMinimize && (
+          <button
+            className="agent-minimize"
+            onClick={onMinimize}
+            title="Minimize agent"
+            aria-label="Minimize agent"
+          >
+            ‹
+          </button>
+        )}
       </div>
 
       <div className="agent-messages" ref={scrollRef}>

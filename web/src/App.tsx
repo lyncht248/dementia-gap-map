@@ -23,6 +23,7 @@ export default function App() {
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
 
   // Split layout
+  const [agentOpen, setAgentOpen] = useState(true);
   const [agentWidth, setAgentWidth] = useState(400);
   const [dragging, setDragging] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -150,45 +151,35 @@ export default function App() {
   }
   if (!data) return <div className="loading">Loading map…</div>;
 
-  return (
-    <div className="workspace" ref={workspaceRef}>
-      <div className="agent-col" style={{ width: agentWidth }}>
-        <AgentPanel controller={controller} />
-      </div>
+  const mapPage = (
+    <div className="app">
+      <header className="hero">
+        <h1>Dementia Gap Map</h1>
+        <p>
+          Explore research papers matching &ldquo;Dementia AND GWAS&rdquo;,
+          clustered by topic. Drag to pan, scroll to zoom, then draw a region to
+          inspect a group of papers below.
+        </p>
+      </header>
 
-      <div
-        className={`divider ${dragging ? "dragging" : ""}`}
-        onPointerDown={() => setDragging(true)}
-        role="separator"
-        aria-orientation="vertical"
-      >
-        <span className="divider-grip" />
-      </div>
-
-      <div className="map-col">
-        <header className="map-topbar">
-          <div className="map-topbar-title">
-            <strong>Dementia Gap Map</strong>
-            <span className="map-topbar-sub">Dementia AND GWAS · {data.papers.length} papers</span>
-          </div>
-          <div className="map-topbar-actions">
-            <button
-              className={`btn ${selectMode ? "active" : ""}`}
-              onClick={() => setSelectMode((v) => !v)}
-            >
-              {selectMode ? "Drawing…" : "Select region"}
-            </button>
-            <button
-              className={`btn ${filtersOpen ? "active" : ""}`}
-              onClick={() => setFiltersOpen((v) => !v)}
-            >
-              Filters
-            </button>
-          </div>
-        </header>
+      <section className="map-panel">
+        <div className="toolbar toolbar-right">
+          <button
+            className={`btn ${selectMode ? "active" : ""}`}
+            onClick={() => setSelectMode((v) => !v)}
+          >
+            {selectMode ? "Drawing…" : "Select region"}
+          </button>
+          <button
+            className={`btn ${filtersOpen ? "active" : ""}`}
+            onClick={() => setFiltersOpen((v) => !v)}
+          >
+            Filters
+          </button>
+        </div>
 
         {filtersOpen && (
-          <div className="filters filters-bar">
+          <div className="filters">
             <div className="filters-row">
               <span className="filters-label">Pathway groups</span>
               <div className="filters-groups">
@@ -229,33 +220,72 @@ export default function App() {
           </div>
         )}
 
-        <div className="map-stage">
-          <MapCanvas
-            ref={mapRef}
-            papers={data.papers}
-            edges={data.edges ?? []}
-            clusters={data.clusters}
-            viewMode="clusters"
-            selectMode={selectMode}
-            isActive={isActive}
-            selectedIds={selectedIds}
-            highlightedIds={highlightedIds}
-            onSelect={(ids) => {
-              setSelectedIds(new Set(ids));
-              setSelectMode(false);
-            }}
-            onReset={resetAll}
-          />
-        </div>
+        <MapCanvas
+          ref={mapRef}
+          papers={data.papers}
+          edges={data.edges ?? []}
+          clusters={data.clusters}
+          viewMode="clusters"
+          selectMode={selectMode}
+          isActive={isActive}
+          selectedIds={selectedIds}
+          highlightedIds={highlightedIds}
+          onSelect={(ids) => {
+            setSelectedIds(new Set(ids));
+            setSelectMode(false);
+          }}
+          onReset={resetAll}
+        />
 
-        <div className="map-feed">
-          <NewsFeed
-            selected={selected}
-            clusters={data.clusters}
-            onClear={() => setSelectedIds(new Set())}
-          />
+        <div className="toolbar toolbar-bottom">
+          <span className="count-note">{data.papers.length} papers</span>
         </div>
-      </div>
+      </section>
+
+      <NewsFeed
+        selected={selected}
+        clusters={data.clusters}
+        onClear={() => setSelectedIds(new Set())}
+      />
+
+      <footer className="foot">
+        Prototype MVP · synthetic placeholder data · see PROTOTYPE_BUILD_SPEC.md
+      </footer>
+    </div>
+  );
+
+  return (
+    <div className="workspace" ref={workspaceRef}>
+      {agentOpen ? (
+        <>
+          <div className="agent-col" style={{ width: agentWidth }}>
+            <AgentPanel
+              controller={controller}
+              onMinimize={() => setAgentOpen(false)}
+            />
+          </div>
+          <div
+            className={`divider ${dragging ? "dragging" : ""}`}
+            onPointerDown={() => setDragging(true)}
+            role="separator"
+            aria-orientation="vertical"
+          >
+            <span className="divider-grip" />
+          </div>
+        </>
+      ) : (
+        <button
+          className="agent-reopen"
+          onClick={() => setAgentOpen(true)}
+          title="Show the research agent"
+          aria-label="Show the research agent"
+        >
+          <span className="agent-reopen-chevron">›</span>
+          <span className="agent-reopen-label">Agent</span>
+        </button>
+      )}
+
+      <div className="right-scroll">{mapPage}</div>
     </div>
   );
 }

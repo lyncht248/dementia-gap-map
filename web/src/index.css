@@ -537,6 +537,17 @@ body {
   overflow: hidden;
 }
 
+/* right side: the original full-page map layout, scrollable */
+.right-scroll {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+.right-scroll .app {
+  padding-top: 24px;
+}
+
 /* --- agent panel --- */
 .agent-panel {
   display: flex;
@@ -546,14 +557,70 @@ body {
   min-width: 0;
   background: var(--panel);
 }
+.agent-header {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.agent-minimize {
+  flex: 0 0 auto;
+  align-self: center;
+  margin: 0 6px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+.agent-minimize:hover {
+  background: #f2f2f0;
+  color: var(--ink);
+}
 .agent-tabs {
   display: flex;
   align-items: center;
   gap: 3px;
   padding: 8px 8px 0;
-  border-bottom: 1px solid var(--line);
   overflow-x: auto;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* collapsed-agent reopen tab (left edge) */
+.agent-reopen {
+  position: fixed;
+  left: 0;
+  top: 88px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 0 12px 12px 0;
+  padding: 14px 7px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  font-weight: 700;
+  font-size: 12.5px;
+}
+.agent-reopen:hover {
+  background: #285f4a;
+}
+.agent-reopen-chevron {
+  font-size: 15px;
+  line-height: 1;
+}
+.agent-reopen-label {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.08em;
 }
 .agent-tab {
   display: inline-flex;
@@ -1004,7 +1071,7 @@ body {
   .divider {
     display: none;
   }
-  .map-col {
-    height: 55%;
+  .right-scroll {
+    flex: 1 1 auto;
   }
 }
