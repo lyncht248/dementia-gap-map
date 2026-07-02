@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Offline build: force-directed layout + community detection over the coupling graph, joined with Track B evidence, emitting web/public/data/map_data.json",
   "scripts": {
-    "build-map": "node build-map-data.mjs"
+    "build-map": "node build-map-data.mjs && node label-clusters.mjs",
+    "build-embedding-map": "node build-embedding-map.mjs --model specter2 && node label-clusters.mjs",
+    "label-clusters": "node label-clusters.mjs"
   },
   "dependencies": {
     "graphology": "^0.26.0",

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Cluster, Paper } from "../types";
+import type { Cluster, CoarseCluster, Paper } from "../types";
 import {
   fitTransform,
   pointInPolygon,
@@ -12,7 +12,10 @@ interface Props {
   papers: Paper[];
   edges?: [number, number][];
   clusters: Cluster[];
+  coarseClusters?: CoarseCluster[];
   viewMode: "clusters" | "all";
+  /** uniform-size dots (for packed embedding maps) instead of citation-scaled */
+  uniformDots?: boolean;
   selectMode: boolean;
   isActive: (p: Paper) => boolean;
   selectedIds: Set<string>;
@@ -22,11 +25,18 @@ interface Props {
 
 const NEUTRAL = "#c8c8cc";
 
+// Fine (mechanism-level) labels fade in as you zoom past this scale; below it
+// only the coarse (theme-level) labels show, keeping the zoomed-out view clean.
+const FINE_LABEL_FADE_LO = 1.0;
+const FINE_LABEL_FADE_HI = 1.7;
+
 export default function MapCanvas({
   papers,
   edges = [],
   clusters,
+  coarseClusters = [],
   viewMode,
+  uniformDots = false,
   selectMode,
   isActive,
   selectedIds,
@@ -90,10 +100,11 @@ export default function MapCanvas({
 
   const radiusFor = useCallback(
     (p: Paper) => {
+      if (uniformDots) return 3 * Math.sqrt(transform.scale);
       const c = p.metrics.citation_count ?? 10;
       return Math.max(2.2, Math.min(8, 2.2 + Math.sqrt(c) * 0.35)) * Math.sqrt(transform.scale);
     },
-    [transform.scale]
+    [transform.scale, uniformDots]
   );
 
   // --- render ---------------------------------------------------------------
@@ -192,26 +203,61 @@ export default function MapCanvas({
     for (const p of selected) drawPoint(p, "selected");
     ctx.globalAlpha = 1;
 
-    // cluster labels
+    // two-tier cluster labels: coarse themes always on; fine mechanisms fade in
+    // as you zoom. Coarse labels are placed first and reserve space so fine
+    // labels don't draw on top of them.
     if (viewMode === "clusters") {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = "600 13px ui-sans-serif, system-ui, -apple-system, sans-serif";
-      for (const c of clusters) {
-        const s = toScreen(c.centroid, transform);
-        if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) continue;
-        const text = c.label;
+      const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+      const fits = (x: number, y: number, w: number, h: number) => {
+        const x0 = x - w / 2, x1 = x + w / 2, y0 = y - h / 2, y1 = y + h / 2;
+        for (const r of placed)
+          if (x0 < r.x1 && x1 > r.x0 && y0 < r.y1 && y1 > r.y0) return false;
+        placed.push({ x0, y0, x1, y1 });
+        return true;
+      };
+
+      // fine-label opacity ramps 0 -> 1 across the fade band
+      const fineAlpha = Math.max(
+        0,
+        Math.min(1, (transform.scale - FINE_LABEL_FADE_LO) / (FINE_LABEL_FADE_HI - FINE_LABEL_FADE_LO))
+      );
+
+      const drawLabel = (
+        text: string,
+        s: Point,
+        fontPx: number,
+        color: string,
+        alpha: number
+      ) => {
+        if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) return;
+        ctx.font = `600 ${fontPx}px ui-sans-serif, system-ui, -apple-system, sans-serif`;
         const tw = ctx.measureText(text).width;
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = "rgba(255,255,255,0.82)";
         const padX = 6;
-        const bh = 18;
+        const bh = fontPx + 6;
+        if (!fits(s.x, s.y, tw + padX * 2, bh)) return;
+        ctx.globalAlpha = 0.82 * alpha;
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
         roundRect(ctx, s.x - tw / 2 - padX, s.y - bh / 2, tw + padX * 2, bh, 5);
         ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = "#26262b";
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = color;
         ctx.fillText(text, s.x, s.y + 0.5);
-      }
+      };
+
+      // coarse tier first (bigger, tinted to its region, dims slightly on zoom-in)
+      const coarseAlpha = 0.95 - 0.35 * fineAlpha;
+      for (const c of coarseClusters)
+        drawLabel(c.label, toScreen(c.centroid, transform), 16, c.color, coarseAlpha);
+
+      // fine tier on top once zoomed in
+      if (fineAlpha > 0.01)
+        for (const c of clusters) {
+          if (c.topic_id === "other") continue;
+          drawLabel(c.label, toScreen(c.centroid, transform), 12, "#26262b", fineAlpha);
+        }
+      ctx.globalAlpha = 1;
     }
 
     // hovered paper's connections, drawn bright on top
@@ -268,6 +314,7 @@ export default function MapCanvas({
     indexById,
     adjacency,
     clusters,
+    coarseClusters,
     clusterById,
     transform,
     size,

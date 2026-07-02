@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { MapData, Paper } from "./types";
-import { loadMapData } from "./lib/data";
+import type { Cluster, LensFile, MapData, Paper } from "./types";
+import { loadLensFile, loadMapData } from "./lib/data";
 import MapCanvas from "./components/MapCanvas";
 import NewsFeed from "./components/NewsFeed";
 
+const lensFromHash = () => window.location.hash.replace(/^#\/?/, "").trim();
+
 export default function App() {
   const [data, setData] = useState<MapData | null>(null);
+  const [lensFile, setLensFile] = useState<LensFile | null>(null);
+  const [lensId, setLensId] = useState<string>(lensFromHash());
   const [error, setError] = useState<string | null>(null);
 
   const [selectMode, setSelectMode] = useState(false);
@@ -16,15 +20,50 @@ export default function App() {
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
 
   useEffect(() => {
-    loadMapData()
-      .then((d) => {
+    Promise.all([loadMapData(), loadLensFile()])
+      .then(([d, lf]) => {
         setData(d);
+        setLensFile(lf);
         setActiveGroups(new Set(d.clusters.map((c) => c.pathway_group)));
         const years = d.papers.map((p) => p.year);
         setYearRange([Math.min(...years), Math.max(...years)]);
       })
       .catch((e) => setError(String(e)));
   }, []);
+
+  // keep the selected lens in sync with the URL hash so each option is a
+  // shareable "page" (e.g. .../#pathway) on the Vercel preview.
+  useEffect(() => {
+    const onHash = () => setLensId(lensFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const lens = useMemo(() => {
+    if (!lensFile) return null;
+    return lensFile.lenses.find((l) => l.id === lensId) ?? lensFile.lenses.find((l) => l.id === lensFile.default) ?? lensFile.lenses[0] ?? null;
+  }, [lensFile, lensId]);
+
+  const selectLens = (id: string) => {
+    window.location.hash = id;
+    setLensId(id);
+  };
+
+  // apply the active lens's labels/coarse groups over the base clusters
+  const clusters = useMemo<Cluster[]>(() => {
+    if (!data) return [];
+    if (!lens) return data.clusters;
+    return data.clusters.map((c) => ({
+      ...c,
+      label: lens.fine[c.topic_id] ?? c.label,
+      coarse_id: lens.coarse_of[c.topic_id] ?? null,
+    }));
+  }, [data, lens]);
+
+  const coarseClusters = useMemo(
+    () => (lens ? lens.coarse_clusters : data?.coarse_clusters ?? []),
+    [lens, data]
+  );
 
   const yearBounds = useMemo<[number, number]>(() => {
     if (!data) return [2000, 2026];
@@ -91,6 +130,20 @@ export default function App() {
 
       <section className="map-panel">
         <div className="toolbar toolbar-right">
+          {lensFile && lensFile.lenses.length > 1 && (
+            <div className="segmented" role="group" aria-label="Label scheme">
+              {lensFile.lenses.map((l) => (
+                <button
+                  key={l.id}
+                  className={`seg ${(lens?.id ?? lensFile.default) === l.id ? "on" : ""}`}
+                  onClick={() => selectLens(l.id)}
+                  title={`Label scheme: ${l.name}`}
+                >
+                  {l.name}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             className={`btn ${selectMode ? "active" : ""}`}
             onClick={() => setSelectMode((v) => !v)}
@@ -155,8 +208,10 @@ export default function App() {
         <MapCanvas
           papers={data.papers}
           edges={data.edges ?? []}
-          clusters={data.clusters}
+          clusters={clusters}
+          coarseClusters={coarseClusters}
           viewMode="clusters"
+          uniformDots={data.layout === "embedding"}
           selectMode={selectMode}
           isActive={isActive}
           selectedIds={selectedIds}
@@ -174,7 +229,7 @@ export default function App() {
 
       <NewsFeed
         selected={selected}
-        clusters={data.clusters}
+        clusters={clusters}
         onClear={() => setSelectedIds(new Set())}
       />
 

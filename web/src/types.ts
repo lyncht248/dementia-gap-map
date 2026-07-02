@@ -14,6 +14,8 @@ export interface Paper {
   journal: string | null;
   authors: string[];
   cluster_id: string;
+  /** coarse (theme-level) group id, or null for unclustered papers */
+  coarse_id?: string | null;
   x: number;
   y: number;
   genes: string[];
@@ -47,6 +49,8 @@ export interface Cluster {
   topic_id: string;
   label: string;
   color: string;
+  /** coarse (theme-level) group id this fine cluster belongs to */
+  coarse_id?: string | null;
   pathway_group: string;
   top_genes: string[];
   trials: string[];
@@ -58,10 +62,42 @@ export interface Cluster {
   emergence?: ClusterEmergence | null;
 }
 
+/** A theme-level grouping of several fine clusters, used for the always-on
+ *  coarse label tier. Anchored on its largest member's centroid. */
+export interface CoarseCluster {
+  coarse_id: string;
+  label: string;
+  color: string;
+  centroid: { x: number; y: number };
+  paper_count: number;
+  fine_ids: string[];
+}
+
+/** One naming lens: the same clusters labelled under a different scheme
+ *  (theme / pathway / subtype). Overlaid on the base map at runtime. */
+export interface LabelLens {
+  id: string;
+  name: string;
+  coarse_clusters: CoarseCluster[];
+  /** fine cluster_id -> label */
+  fine: Record<string, string>;
+  /** fine cluster_id -> coarse_id */
+  coarse_of: Record<string, string>;
+}
+
+export interface LensFile {
+  default: string;
+  lenses: LabelLens[];
+}
+
 export interface MapData {
   generated_note?: string;
   disease?: string;
+  /** "embedding" (SPECTER2 UMAP, packed uniform dots) or undefined (co-citation) */
+  layout?: string;
   clusters: Cluster[];
+  /** Coarse theme groups (always-on labels); fine `clusters` reveal on zoom. */
+  coarse_clusters?: CoarseCluster[];
   papers: Paper[];
   /** Pruned coupling edges as [i, j] index pairs into `papers`. */
   edges?: [number, number][];
