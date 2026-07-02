@@ -59,7 +59,14 @@ const STOP = new Set((
   "associations risk role effect effects human cell cells clinical use used novel new via " +
   "case cases control controls cohort data model models level levels high low increased " +
   "expression protein proteins function functional related evidence potential findings " +
-  "identify identified identification investigate investigated assessment analyses"
+  "identify identified identification investigate investigated assessment analyses " +
+  // generic study/method/stats vocabulary — not topics
+  "genome-wide wide polygenic variant variants loci locus trait traits phenotype phenotypes " +
+  "score scores two-sample sample samples sparse multivariate bayesian epistasis summary " +
+  "statistics statistical quantitative prediction predicted regression machine learning " +
+  "cross-ethnic multicenter meta meta-analysis proteome proteomes large-scale genomewide " +
+  "significant significance approach approaches datasets dataset population populations " +
+  "sequencing whole-genome whole-exome exome heritability estimation estimates"
 ).split(" "));
 
 function tokenize(title) {
@@ -149,7 +156,9 @@ console.log(`  graph: ${graph.order} nodes, ${added} strong + ${anchored} anchor
 
 // --- communities (Louvain on the coupling graph) ----------------------------
 console.log(`detecting communities (resolution=${RESOLUTION})…`);
-louvain.assign(graph, { resolution: RESOLUTION, getEdgeWeight: "weight" });
+// seeded RNG so communities (and therefore labels/colours) are stable across runs
+const mulberry32 = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+louvain.assign(graph, { resolution: RESOLUTION, getEdgeWeight: "weight", rng: mulberry32(1234) });
 
 // merge sub-threshold communities into neighbour-majority large community; else "other"
 function communitySizes() {
@@ -285,17 +294,51 @@ for (const c of members.keys()) {
 const nComm = [...members.keys()].filter((c) => c !== "other").length || 1;
 const geneIdf = (s) => Math.log((nComm + 1) / ((geneCommDf.get(s) || 0) + 1)) + 1;
 
+// --- one distinctive single-word label per community (unique across all) -----
+// Rank each community's title terms by tf-idf where idf counts how many
+// communities use the term, so cross-cutting words ("alzheimer") don't win
+// everywhere. Then assign greedily: the community with the strongest claim on a
+// term takes it; the rest fall through to their next-best unused term. Result:
+// one word per cluster, no repeats.
+const geneSyms = new Set([...genePathway.keys(), ...geneScore.keys()].map((s) => s.toLowerCase()));
+const ACRONYMS = new Set(["qtls", "qtl", "gwas", "snp", "snps", "dna", "rna", "mri", "csf", "ftd", "als", "ad"]);
+const prettyLabel = (t) => {
+  const low = t.toLowerCase();
+  if (geneSyms.has(low) || ACRONYMS.has(low) || /\d/.test(t)) return t.toUpperCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+const realComms = ordered.filter((c) => c !== "other");
+const commTf = new Map();      // comm -> Map(term -> count)
+const termCommDf = new Map();  // term -> number of communities containing it
+for (const c of realComms) {
+  const tf = new Map();
+  for (const i of members.get(c)) for (const tok of paperTokens[i]) tf.set(tok, (tf.get(tok) || 0) + 1);
+  commTf.set(c, tf);
+  for (const tok of tf.keys()) termCommDf.set(tok, (termCommDf.get(tok) || 0) + 1);
+}
+const rankedTerms = new Map(realComms.map((c) => {
+  const tf = commTf.get(c), n = members.get(c).length || 1;
+  const ranked = [...tf.entries()]
+    .filter(([, f]) => f >= 2) // ignore one-off terms
+    .map(([t, f]) => [t, (f / n) * Math.log((realComms.length + 1) / ((termCommDf.get(t) || 0) + 1))])
+    .sort((a, b) => b[1] - a[1]);
+  return [c, ranked];
+}));
+const labelFor = new Map();
+const taken = new Set();
+for (const c of [...realComms].sort((a, b) => (rankedTerms.get(b)[0]?.[1] || 0) - (rankedTerms.get(a)[0]?.[1] || 0))) {
+  const pick = rankedTerms.get(c).find(([t]) => !taken.has(t));
+  const term = pick ? pick[0] : (rankedTerms.get(c)[0]?.[0] || c);
+  taken.add(term);
+  labelFor.set(c, prettyLabel(term));
+}
+labelFor.set("other", "Other");
+
 const communityMeta = new Map(); // community -> {cluster_id, label, color, pathway_group, ...}
 ordered.forEach((c, idx) => {
   const idxs = members.get(c);
   const isOther = c === "other";
-
-  // tf-idf label from member titles
-  const tf = new Map();
-  for (const i of idxs) for (const tok of paperTokens[i]) tf.set(tok, (tf.get(tok) || 0) + 1);
-  const label = isOther ? "other / unclustered" : ([...tf.entries()]
-    .map(([tok, f]) => [tok, f * Math.log(N / (df.get(tok) || 1))])
-    .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([tok]) => tok).join(" / ") || `topic ${idx}`);
+  const label = labelFor.get(c);
 
   // genes: aggregate per-paper gene attribution across members
   const geneCount = new Map();
