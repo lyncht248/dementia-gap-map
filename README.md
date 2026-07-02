@@ -34,3 +34,7 @@ docs/
 Track-specific work should stay inside either `topic-dynamics/` or `translational-evidence/` and the matching `data/*/{topic-dynamics,translational-evidence}` folder. Cross-track files should only be added under `shared/` or `data/processed/shared` when both tracks need them.
 
 See [PROTOTYPE_BUILD_SPEC.md](PROTOTYPE_BUILD_SPEC.md) for the full data-source and prototype handoff notes.
+
+## Inspiration
+
+The methodological lineage behind this project — using the citation/co-citation graph to detect research topics trending toward breakthroughs and drug approvals years in advance — is collected in [docs/inspiration/](docs/inspiration/README.md).

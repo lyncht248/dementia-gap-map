@@ -82,6 +82,11 @@ export default function App() {
     <div className="app">
       <header className="hero">
         <h1>Dementia Gap Map</h1>
+        <p>
+          Explore research papers matching &ldquo;Dementia AND GWAS&rdquo;,
+          clustered by topic. Drag to pan, scroll to zoom, then draw a region to
+          inspect a group of papers below.
+        </p>
       </header>
 
       <section className="map-panel">
