@@ -1,0 +1,90 @@
+# Agent panel — data + graph control
+
+An in-app research co-pilot for the Dementia Gap Map. It can **query** the
+translational-evidence data and **control** the graph (select / highlight / zoom /
+filter / focus an entity). UI mirrors the Claude Science layout: agent panel on
+the left, draggable divider, graph on the right, horizontal chat tabs with
+"New chat".
+
+Implements §5 of `docs/agent-graph-control-brief.md`.
+
+## Architecture
+
+```
+Browser (client-orchestrated tool loop)
+  AgentPanel ──user msg──▶ runConversation()  (src/agent/client.ts)
+       ▲                        │
+       │                   POST /api/agent  ── one model turn ──▶ OpenAI-compatible API
+       │                        │            (serverless proxy; key stays server-side)
+       │                   assistant + tool_calls
+       │                        ▼
+       │                 dispatchTool()  (src/agent/tools.ts)
+       │                   ├─ query_data  ─▶ DuckDB-Wasm over Parquet   (src/lib/duckdb.ts)
+       │                   └─ map control ─▶ AgentController             (src/agent/controller.ts)
+       └────────────────── final answer                                    │
+                                                                      React state + MapCanvas ref
+```
+
+The **browser** runs the tool loop: it asks the proxy for a single model turn,
+executes any tool calls locally (DuckDB queries + map control), feeds results
+back, and repeats until the model answers (`MAX_STEPS` in `client.ts`). The
+server is a **stateless proxy** — no DB, no session store.
+
+## Pieces
+
+| File | Role |
+|---|---|
+| `scripts/build-agent-parquet.py` | JSONL + `map_data.json` → 7 Parquet tables in `web/public/data/parquet/` |
+| `web/src/lib/duckdb.ts` | Lazy DuckDB-Wasm; registers Parquet as views; `runSql()` |
+| `web/src/agent/systemPrompt.ts` | Schema + join keys + scoring semantics + behavior |
+| `web/src/agent/tools.ts` | Tool schemas (`query_data` + map control) + dispatcher |
+| `web/src/agent/client.ts` | Client-side model/tool loop against `/api/agent` |
+| `web/src/agent/controller.ts` | Adapter: intents → React state setters + camera calls |
+| `web/src/agent/types.ts` | `AgentController`, `MapHandle`, `MapState` |
+| `web/src/components/AgentPanel.tsx` | Chat tabs, timeline, tool chips, input |
+| `web/src/components/MapCanvas.tsx` | `forwardRef` handle (`zoomToPapers`…) + highlight rendering |
+| `web/api/agent.ts` + `_agent-core.ts` | Vercel serverless proxy (shared core) |
+| `web/vite.config.ts` | Dev middleware serving `/api/agent` locally |
+
+## Data tables (DuckDB, SELECT-only, 200-row cap)
+
+`papers, clusters, genes, pathways, trials, gwas, functional_links` — see
+`systemPrompt.ts` for columns/joins. Anchored on stable IDs only (PMID, Ensembl
+`gene_id`/`symbol`, NCT, rsID, `disease_group`), per the brief — never on
+coordinates or community numbers. Regenerate after a data refresh:
+
+```bash
+cd web && npm run gen-parquet   # -> web/public/data/parquet/*.parquet (committed)
+```
+
+## Control API (`AgentController`)
+
+`selectPapers · highlightPapers · clearSelection · clearHighlight · zoomToPapers ·
+zoomToCommunity · setFilters · focusEntity · resetView · getState`. Entity
+resolution: prefer `query_data` (e.g. gene → `gwas.pmid` → `papers`) then
+`select_papers`/`zoom_to_papers`; `focus_entity` is a best-effort shortcut over
+in-memory paper attributes.
+
+## Running
+
+```bash
+cd web
+cp .env.example .env.local     # set OPENAI_API_KEY (OpenRouter: set OPENAI_BASE_URL/MODEL)
+npm install
+npm run dev                    # /api/agent served by Vite middleware
+```
+
+Deploy: Vercel project root = `web/`; it serves `api/agent.ts` as a function and
+the committed Parquet statically. Set the same env vars in Vercel settings.
+DuckDB-Wasm loads from the jsDelivr CDN at runtime.
+
+Dev-only: `window.mapAgent` exposes the controller for console debugging.
+
+## Extending / gotchas
+- **Two groupings**: 16 visual communities (`clusters`) vs analytic topics — the
+  map uses the visual ones. Don't assume a gene/pathway maps 1:1 to a community.
+- Track B evidence attaches to papers by **PMID**, robust to re-clustering.
+- New tool → add a schema in `tools.ts`, a `case` in `dispatchTool`, and (if it
+  controls the map) a method on `AgentController`.
+- If `map_data.json`/schemas change, rerun `gen-parquet` and update
+  `systemPrompt.ts`.

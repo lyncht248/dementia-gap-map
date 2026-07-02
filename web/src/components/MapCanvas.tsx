@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Cluster, Paper } from "../types";
 import {
   fitTransform,
@@ -7,6 +15,7 @@ import {
   type Point,
   type Transform,
 } from "../lib/geometry";
+import type { MapHandle } from "../agent/types";
 
 interface Props {
   papers: Paper[];
@@ -16,28 +25,40 @@ interface Props {
   selectMode: boolean;
   isActive: (p: Paper) => boolean;
   selectedIds: Set<string>;
+  /** Papers the agent has spotlighted (transient, distinct from selection). */
+  highlightedIds?: Set<string>;
   onSelect: (ids: string[]) => void;
   onReset?: () => void;
 }
 
 const NEUTRAL = "#c8c8cc";
+const HIGHLIGHT = "#f2a900";
 
-export default function MapCanvas({
-  papers,
-  edges = [],
-  clusters,
-  viewMode,
-  selectMode,
-  isActive,
-  selectedIds,
-  onSelect,
-  onReset,
-}: Props) {
+const MapCanvas = forwardRef<MapHandle, Props>(function MapCanvas(
+  {
+    papers,
+    edges = [],
+    clusters,
+    viewMode,
+    selectMode,
+    isActive,
+    selectedIds,
+    highlightedIds,
+    onSelect,
+    onReset,
+  },
+  ref
+) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 800, h: 560 });
   const [transform, setTransform] = useState<Transform>({ scale: 1, tx: 0, ty: 0 });
   const [fitted, setFitted] = useState(false);
+  const animRef = useRef<number | null>(null);
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+  const transformRef = useRef(transform);
+  transformRef.current = transform;
 
   const clusterById = useMemo(() => {
     const m = new Map<string, Cluster>();
@@ -88,6 +109,63 @@ export default function MapCanvas({
     setFitted(true);
   }, [fitted, papers, size.w, size.h]);
 
+  // --- eased camera moves (agent-driven zoom) -------------------------------
+  const animateTo = useCallback((target: Transform, ms = 420) => {
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    const start = transformRef.current;
+    const t0 = performance.now();
+    const ease = (u: number) => 1 - Math.pow(1 - u, 3);
+    const step = (now: number) => {
+      const u = Math.min(1, (now - t0) / ms);
+      const k = ease(u);
+      setTransform({
+        scale: start.scale + (target.scale - start.scale) * k,
+        tx: start.tx + (target.tx - start.tx) * k,
+        ty: start.ty + (target.ty - start.ty) * k,
+      });
+      if (u < 1) animRef.current = requestAnimationFrame(step);
+      else animRef.current = null;
+    };
+    animRef.current = requestAnimationFrame(step);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    },
+    []
+  );
+
+  // --- imperative handle for the agent control layer ------------------------
+  useImperativeHandle(
+    ref,
+    () => ({
+      zoomToPoints(points, padding = 80) {
+        if (!points.length) return;
+        animateTo(fitTransform(points, sizeRef.current.w, sizeRef.current.h, padding));
+      },
+      zoomToPapers(ids, padding = 90) {
+        const pts: Point[] = [];
+        for (const id of ids) {
+          const i = indexById.get(id);
+          if (i != null) pts.push(papers[i]);
+        }
+        if (!pts.length) return;
+        animateTo(fitTransform(pts, sizeRef.current.w, sizeRef.current.h, padding));
+      },
+      resetView() {
+        animateTo(fitTransform(papers, sizeRef.current.w, sizeRef.current.h));
+      },
+      getTransform() {
+        return transformRef.current;
+      },
+      getSize() {
+        return sizeRef.current;
+      },
+    }),
+    [animateTo, indexById, papers]
+  );
+
   const radiusFor = useCallback(
     (p: Paper) => {
       const c = p.metrics.citation_count ?? 10;
@@ -129,7 +207,8 @@ export default function MapCanvas({
 
     // coupling edges — faint web beneath the points (only between visible papers)
     const hoverIdx = hover ? indexById.get(hover.paper.paper_id) ?? -1 : -1;
-    const visible = (p: Paper) => isActive(p) || selectedIds.has(p.paper_id);
+    const visible = (p: Paper) =>
+      isActive(p) || selectedIds.has(p.paper_id) || (highlightedIds?.has(p.paper_id) ?? false);
     if (edges.length) {
       ctx.strokeStyle = "#9aa4b8";
       ctx.lineWidth = 0.8;
@@ -191,6 +270,28 @@ export default function MapCanvas({
     for (const p of active) drawPoint(p, "active");
     for (const p of selected) drawPoint(p, "selected");
     ctx.globalAlpha = 1;
+
+    // agent highlight — amber ring + soft glow on top of everything
+    if (highlightedIds && highlightedIds.size) {
+      for (const p of papers) {
+        if (!highlightedIds.has(p.paper_id)) continue;
+        const s = toScreen(p, transform);
+        if (s.x < -20 || s.x > size.w + 20 || s.y < -20 || s.y > size.h + 20) continue;
+        const r = radiusFor(p);
+        ctx.globalAlpha = 0.16;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r + 7, 0, Math.PI * 2);
+        ctx.fillStyle = HIGHLIGHT;
+        ctx.fill();
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r + 4, 0, Math.PI * 2);
+        ctx.lineWidth = 2.4;
+        ctx.strokeStyle = HIGHLIGHT;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
 
     // cluster labels
     if (viewMode === "clusters") {
@@ -277,6 +378,7 @@ export default function MapCanvas({
     radiusFor,
     lassoTick,
     hover,
+    highlightedIds,
   ]);
 
   // --- pointer handlers -----------------------------------------------------
@@ -290,7 +392,12 @@ export default function MapCanvas({
       let best: Paper | null = null;
       let bestD = 12 * 12;
       for (const p of papers) {
-        if (!isActive(p) && !selectedIds.has(p.paper_id)) continue;
+        if (
+          !isActive(p) &&
+          !selectedIds.has(p.paper_id) &&
+          !(highlightedIds?.has(p.paper_id) ?? false)
+        )
+          continue;
         const s = toScreen(p, transform);
         const dx = s.x - pos.x;
         const dy = s.y - pos.y;
@@ -302,7 +409,7 @@ export default function MapCanvas({
       }
       return best;
     },
-    [papers, transform, isActive, selectedIds]
+    [papers, transform, isActive, selectedIds, highlightedIds]
   );
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -416,7 +523,9 @@ export default function MapCanvas({
       )}
     </div>
   );
-}
+});
+
+export default MapCanvas;
 
 function roundRect(
   ctx: CanvasRenderingContext2D,

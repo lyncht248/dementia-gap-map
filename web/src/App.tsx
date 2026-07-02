@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MapData, Paper } from "./types";
 import { loadMapData } from "./lib/data";
+import { warmupDuckDb } from "./lib/duckdb";
 import MapCanvas from "./components/MapCanvas";
 import NewsFeed from "./components/NewsFeed";
+import AgentPanel from "./components/AgentPanel";
+import { createController } from "./agent/controller";
+import type { MapHandle } from "./agent/types";
+
+const EMPTY: MapData = { clusters: [], papers: [], edges: [] };
 
 export default function App() {
   const [data, setData] = useState<MapData | null>(null);
@@ -11,11 +17,19 @@ export default function App() {
   const [selectMode, setSelectMode] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
 
   const [activeGroups, setActiveGroups] = useState<Set<string>>(new Set());
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
 
+  // Split layout
+  const [agentWidth, setAgentWidth] = useState(400);
+  const [dragging, setDragging] = useState(false);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapHandle>(null);
+
   useEffect(() => {
+    warmupDuckDb();
     loadMapData()
       .then((d) => {
         setData(d);
@@ -26,6 +40,65 @@ export default function App() {
       .catch((e) => setError(String(e)));
   }, []);
 
+  // Refs so the (stable) controller always reads current state.
+  const dataRef = useRef<MapData | null>(null);
+  dataRef.current = data;
+  const selectedRef = useRef(selectedIds);
+  selectedRef.current = selectedIds;
+  const highlightedRef = useRef(highlightedIds);
+  highlightedRef.current = highlightedIds;
+  const groupsRef = useRef(activeGroups);
+  groupsRef.current = activeGroups;
+  const yearRef = useRef(yearRange);
+  yearRef.current = yearRange;
+
+  const controller = useMemo(
+    () =>
+      createController({
+        getData: () => dataRef.current ?? EMPTY,
+        getSelectedIds: () => selectedRef.current,
+        getHighlightedIds: () => highlightedRef.current,
+        getActiveGroups: () => groupsRef.current,
+        getYearRange: () => yearRef.current,
+        setSelectedIds,
+        setHighlightedIds,
+        setActiveGroups,
+        setYearRange,
+        map: () => mapRef.current,
+      }),
+    []
+  );
+
+  // Dev-only debug handle: drive the map from the console (window.mapAgent).
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      (window as unknown as { mapAgent?: typeof controller }).mapAgent = controller;
+    }
+  }, [controller]);
+
+  // Divider drag
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: PointerEvent) => {
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      const left = rect?.left ?? 0;
+      const w = e.clientX - left;
+      const max = (rect?.width ?? 1200) - 360;
+      setAgentWidth(Math.max(300, Math.min(Math.max(300, max), w)));
+    };
+    const onUp = () => setDragging(false);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [dragging]);
+
   const yearBounds = useMemo<[number, number]>(() => {
     if (!data) return [2000, 2026];
     const years = data.papers.map((p) => p.year);
@@ -34,16 +107,14 @@ export default function App() {
 
   const pathwayGroups = useMemo(() => {
     if (!data) return [];
-    const seen = new Map<string, string>(); // group -> color
+    const seen = new Map<string, string>();
     for (const c of data.clusters) if (!seen.has(c.pathway_group)) seen.set(c.pathway_group, c.color);
     return [...seen.entries()];
   }, [data]);
 
   const isActive = useCallback(
     (p: Paper) =>
-      activeGroups.has(p.pathway_group) &&
-      p.year >= yearRange[0] &&
-      p.year <= yearRange[1],
+      activeGroups.has(p.pathway_group) && p.year >= yearRange[0] && p.year <= yearRange[1],
     [activeGroups, yearRange]
   );
 
@@ -54,6 +125,7 @@ export default function App() {
 
   const resetAll = () => {
     setSelectedIds(new Set());
+    setHighlightedIds(new Set());
     setActiveGroups(new Set(data?.clusters.map((c) => c.pathway_group)));
     setYearRange(yearBounds);
     setSelectMode(false);
@@ -79,34 +151,44 @@ export default function App() {
   if (!data) return <div className="loading">Loading map…</div>;
 
   return (
-    <div className="app">
-      <header className="hero">
-        <h1>Dementia Gap Map</h1>
-        <p>
-          Explore research papers matching &ldquo;Dementia AND GWAS&rdquo;,
-          clustered by topic. Drag to pan, scroll to zoom, then draw a region to
-          inspect a group of papers below.
-        </p>
-      </header>
+    <div className="workspace" ref={workspaceRef}>
+      <div className="agent-col" style={{ width: agentWidth }}>
+        <AgentPanel controller={controller} />
+      </div>
 
-      <section className="map-panel">
-        <div className="toolbar toolbar-right">
-          <button
-            className={`btn ${selectMode ? "active" : ""}`}
-            onClick={() => setSelectMode((v) => !v)}
-          >
-            {selectMode ? "Drawing…" : "Select region"}
-          </button>
-          <button
-            className={`btn ${filtersOpen ? "active" : ""}`}
-            onClick={() => setFiltersOpen((v) => !v)}
-          >
-            Filters
-          </button>
-        </div>
+      <div
+        className={`divider ${dragging ? "dragging" : ""}`}
+        onPointerDown={() => setDragging(true)}
+        role="separator"
+        aria-orientation="vertical"
+      >
+        <span className="divider-grip" />
+      </div>
+
+      <div className="map-col">
+        <header className="map-topbar">
+          <div className="map-topbar-title">
+            <strong>Dementia Gap Map</strong>
+            <span className="map-topbar-sub">Dementia AND GWAS · {data.papers.length} papers</span>
+          </div>
+          <div className="map-topbar-actions">
+            <button
+              className={`btn ${selectMode ? "active" : ""}`}
+              onClick={() => setSelectMode((v) => !v)}
+            >
+              {selectMode ? "Drawing…" : "Select region"}
+            </button>
+            <button
+              className={`btn ${filtersOpen ? "active" : ""}`}
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              Filters
+            </button>
+          </div>
+        </header>
 
         {filtersOpen && (
-          <div className="filters">
+          <div className="filters filters-bar">
             <div className="filters-row">
               <span className="filters-label">Pathway groups</span>
               <div className="filters-groups">
@@ -123,19 +205,14 @@ export default function App() {
               </div>
             </div>
             <div className="filters-row">
-              <span className="filters-label">
-                From year: {yearRange[0]}
-              </span>
+              <span className="filters-label">From year: {yearRange[0]}</span>
               <input
                 type="range"
                 min={yearBounds[0]}
                 max={yearBounds[1]}
                 value={yearRange[0]}
                 onChange={(e) =>
-                  setYearRange(([, hi]) => [
-                    Math.min(Number(e.target.value), hi),
-                    hi,
-                  ])
+                  setYearRange(([, hi]) => [Math.min(Number(e.target.value), hi), hi])
                 }
               />
               <span className="filters-label">to {yearRange[1]}</span>
@@ -152,35 +229,33 @@ export default function App() {
           </div>
         )}
 
-        <MapCanvas
-          papers={data.papers}
-          edges={data.edges ?? []}
-          clusters={data.clusters}
-          viewMode="clusters"
-          selectMode={selectMode}
-          isActive={isActive}
-          selectedIds={selectedIds}
-          onSelect={(ids) => {
-            setSelectedIds(new Set(ids));
-            setSelectMode(false);
-          }}
-          onReset={resetAll}
-        />
-
-        <div className="toolbar toolbar-bottom">
-          <span className="count-note">{data.papers.length} papers</span>
+        <div className="map-stage">
+          <MapCanvas
+            ref={mapRef}
+            papers={data.papers}
+            edges={data.edges ?? []}
+            clusters={data.clusters}
+            viewMode="clusters"
+            selectMode={selectMode}
+            isActive={isActive}
+            selectedIds={selectedIds}
+            highlightedIds={highlightedIds}
+            onSelect={(ids) => {
+              setSelectedIds(new Set(ids));
+              setSelectMode(false);
+            }}
+            onReset={resetAll}
+          />
         </div>
-      </section>
 
-      <NewsFeed
-        selected={selected}
-        clusters={data.clusters}
-        onClear={() => setSelectedIds(new Set())}
-      />
-
-      <footer className="foot">
-        Prototype MVP · synthetic placeholder data · see PROTOTYPE_BUILD_SPEC.md
-      </footer>
+        <div className="map-feed">
+          <NewsFeed
+            selected={selected}
+            clusters={data.clusters}
+            onClear={() => setSelectedIds(new Set())}
+          />
+        </div>
+      </div>
     </div>
   );
 }
