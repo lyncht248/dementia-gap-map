@@ -21,6 +21,8 @@ export interface Paper {
   trials: string[];
   metrics: PaperMetrics;
   url?: string;
+  /** Per-paper colour (clean/gradient map); when absent the cluster colour is used. */
+  color?: string;
 }
 
 export interface ClusterScores {
@@ -65,4 +67,8 @@ export interface MapData {
   papers: Paper[];
   /** Pruned coupling edges as [i, j] index pairs into `papers`. */
   edges?: [number, number][];
+  /** Rendering style: "default" (dots sized by citations) or "clean" (uniform packed dots). */
+  style?: "default" | "clean";
+  /** For "clean" style: dot radius in world units so packed dots tile without overlap. */
+  point_radius?: number;
 }

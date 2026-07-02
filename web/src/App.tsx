@@ -4,7 +4,7 @@ import { loadMapData, SOURCE_LABEL, type MapSource } from "./lib/data";
 import MapCanvas from "./components/MapCanvas";
 import NewsFeed from "./components/NewsFeed";
 
-const SOURCES: MapSource[] = ["cocitation", "specter2"];
+const SOURCES: MapSource[] = ["cocitation", "specter2", "specter2_clean"];
 
 export default function App() {
   const [data, setData] = useState<MapData | null>(null);
@@ -183,6 +183,8 @@ export default function App() {
           edges={data.edges ?? []}
           clusters={data.clusters}
           viewMode="clusters"
+          style={data.style ?? "default"}
+          pointRadius={data.point_radius}
           selectMode={selectMode}
           isActive={isActive}
           selectedIds={selectedIds}
@@ -205,9 +207,11 @@ export default function App() {
       />
 
       <footer className="foot">
-        {source === "specter2"
-          ? "SPECTER2 semantic map (title + abstract embeddings, UMAP + HDBSCAN)"
-          : "Co-citation map"}{" "}
+        {source === "cocitation"
+          ? "Co-citation map"
+          : source === "specter2_clean"
+          ? "SPECTER2 “cleaned” map (packed bubbles, positional colour gradient)"
+          : "SPECTER2 semantic map (title + abstract embeddings, UMAP + HDBSCAN)"}{" "}
         of dementia &amp; GWAS literature · data from PubMed / NIH iCite, GWAS
         Catalog, Open Targets &amp; ClinicalTrials.gov
       </footer>

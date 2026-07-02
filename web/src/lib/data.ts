@@ -1,16 +1,18 @@
 import type { MapData } from "../types";
 
 /** Which embedding/layout backs the map. */
-export type MapSource = "cocitation" | "specter2";
+export type MapSource = "cocitation" | "specter2" | "specter2_clean";
 
 const FILE: Record<MapSource, string> = {
   cocitation: "map_data.json",
   specter2: "map_data.specter2.json",
+  specter2_clean: "map_data.specter2_clean.json",
 };
 
 export const SOURCE_LABEL: Record<MapSource, string> = {
   cocitation: "Co-citation",
   specter2: "SPECTER2 (semantic)",
+  specter2_clean: "SPECTER2 (cleaned)",
 };
 
 // Base path aware fetch so it works under any Vercel deployment URL.

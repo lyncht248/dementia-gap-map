@@ -13,6 +13,10 @@ interface Props {
   edges?: [number, number][];
   clusters: Cluster[];
   viewMode: "clusters" | "all";
+  /** "default" = dots sized by citations; "clean" = uniform packed dots + gradient. */
+  style?: "default" | "clean";
+  /** For "clean": dot radius in world units (packed dots tile without overlap). */
+  pointRadius?: number;
   selectMode: boolean;
   isActive: (p: Paper) => boolean;
   selectedIds: Set<string>;
@@ -27,12 +31,15 @@ export default function MapCanvas({
   edges = [],
   clusters,
   viewMode,
+  style = "default",
+  pointRadius,
   selectMode,
   isActive,
   selectedIds,
   onSelect,
   onReset,
 }: Props) {
+  const clean = style === "clean";
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 800, h: 560 });
@@ -90,10 +97,13 @@ export default function MapCanvas({
 
   const radiusFor = useCallback(
     (p: Paper) => {
+      // Clean mode: every dot the same size, scaled so packed dots tile the
+      // plane without overlap (radius is in world units).
+      if (clean && pointRadius) return pointRadius * transform.scale;
       const c = p.metrics.citation_count ?? 10;
       return Math.max(2.2, Math.min(8, 2.2 + Math.sqrt(c) * 0.35)) * Math.sqrt(transform.scale);
     },
-    [transform.scale]
+    [clean, pointRadius, transform.scale]
   );
 
   // --- render ---------------------------------------------------------------
@@ -110,7 +120,8 @@ export default function MapCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
-    // subtle grid
+    // subtle grid (skipped in clean mode for the continuous "continent" look)
+    if (!clean) {
     ctx.strokeStyle = "rgba(0,0,0,0.035)";
     ctx.lineWidth = 1;
     const step = 80;
@@ -125,6 +136,7 @@ export default function MapCanvas({
       ctx.moveTo(0, y);
       ctx.lineTo(size.w, y);
       ctx.stroke();
+    }
     }
 
     // coupling edges — faint web beneath the points (only between visible papers)
@@ -154,13 +166,18 @@ export default function MapCanvas({
       const s = toScreen(p, transform);
       if (s.x < -20 || s.x > size.w + 20 || s.y < -20 || s.y > size.h + 20) return;
       const isOther = p.cluster_id === "other";
-      const r = radiusFor(p) * (isOther ? 0.65 : 1);
+      // Clean mode: uniform dot size (no shrink for the noise/"other" tail).
+      const r = radiusFor(p) * (!clean && isOther ? 0.65 : 1);
       const cluster = clusterById.get(p.cluster_id);
       let color = NEUTRAL;
       let alpha = 0.25;
       if (mode === "inactive") {
         color = NEUTRAL;
-        alpha = 0.18;
+        alpha = clean ? 0.1 : 0.18;
+      } else if (clean) {
+        // Per-paper positional gradient colour; every dot reads equally.
+        color = p.color ?? cluster?.color ?? NEUTRAL;
+        alpha = mode === "selected" ? 1 : 0.95;
       } else if (viewMode === "clusters") {
         color = cluster?.color ?? NEUTRAL;
         alpha = mode === "selected" ? 1 : isOther ? 0.4 : 0.82;
@@ -196,22 +213,44 @@ export default function MapCanvas({
     if (viewMode === "clusters") {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = "600 13px ui-sans-serif, system-ui, -apple-system, sans-serif";
+      // Greedy de-overlap by text bounding box: clusters come largest-first, so a
+      // label is skipped if its box would intersect one already placed — keeps the
+      // dense centre legible.
+      const boxes: { x0: number; x1: number; y0: number; y1: number }[] = [];
+      ctx.font = clean
+        ? "700 15px ui-sans-serif, system-ui, -apple-system, sans-serif"
+        : "600 13px ui-sans-serif, system-ui, -apple-system, sans-serif";
       for (const c of clusters) {
         if (!c.label) continue; // coloured-but-unlabelled clusters (semantic map tail)
         const s = toScreen(c.centroid, transform);
         if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) continue;
+        const hw = ctx.measureText(c.label).width / 2 + 4;
+        const box = { x0: s.x - hw, x1: s.x + hw, y0: s.y - 11, y1: s.y + 11 };
+        if (boxes.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0))
+          continue;
+        boxes.push(box);
         const text = c.label;
-        const tw = ctx.measureText(text).width;
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = "rgba(255,255,255,0.82)";
-        const padX = 6;
-        const bh = 18;
-        roundRect(ctx, s.x - tw / 2 - padX, s.y - bh / 2, tw + padX * 2, bh, 5);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = "#26262b";
-        ctx.fillText(text, s.x, s.y + 0.5);
+        if (clean) {
+          // Reference-style: bold coloured text on a soft white halo, no box.
+          ctx.font = "700 15px ui-sans-serif, system-ui, -apple-system, sans-serif";
+          ctx.globalAlpha = 1;
+          ctx.lineJoin = "round";
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = "rgba(255,255,255,0.9)";
+          ctx.strokeText(text, s.x, s.y + 0.5);
+          ctx.fillStyle = c.color;
+          ctx.fillText(text, s.x, s.y + 0.5);
+        } else {
+          ctx.font = "600 13px ui-sans-serif, system-ui, -apple-system, sans-serif";
+          const tw = ctx.measureText(text).width;
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle = "rgba(255,255,255,0.82)";
+          roundRect(ctx, s.x - tw / 2 - 6, s.y - 9, tw + 12, 18, 5);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = "#26262b";
+          ctx.fillText(text, s.x, s.y + 0.5);
+        }
       }
     }
 
