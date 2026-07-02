@@ -120,6 +120,17 @@ body {
   top: 14px;
   right: 14px;
 }
+.toolbar-split {
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
 .toolbar-bottom {
   left: 14px;
   bottom: 14px;

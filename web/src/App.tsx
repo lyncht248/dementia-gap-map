@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MapData, Paper } from "./types";
-import { loadMapData } from "./lib/data";
+import { loadMapData, SOURCE_LABEL, type MapSource } from "./lib/data";
 import MapCanvas from "./components/MapCanvas";
 import NewsFeed from "./components/NewsFeed";
+
+const SOURCES: MapSource[] = ["cocitation", "specter2"];
 
 export default function App() {
   const [data, setData] = useState<MapData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<MapSource>("cocitation");
 
   const [selectMode, setSelectMode] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -16,15 +19,24 @@ export default function App() {
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
 
   useEffect(() => {
-    loadMapData()
+    let cancelled = false;
+    setData(null);
+    setError(null);
+    // Clear any selection/filters that referenced the previous layout.
+    setSelectedIds(new Set());
+    loadMapData(source)
       .then((d) => {
+        if (cancelled) return;
         setData(d);
         setActiveGroups(new Set(d.clusters.map((c) => c.pathway_group)));
         const years = d.papers.map((p) => p.year);
         setYearRange([Math.min(...years), Math.max(...years)]);
       })
-      .catch((e) => setError(String(e)));
-  }, []);
+      .catch((e) => !cancelled && setError(String(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [source]);
 
   const yearBounds = useMemo<[number, number]>(() => {
     if (!data) return [2000, 2026];
@@ -90,7 +102,19 @@ export default function App() {
       </header>
 
       <section className="map-panel">
-        <div className="toolbar toolbar-right">
+        <div className="toolbar toolbar-split">
+          <div className="segmented" title="Choose how papers are laid out and clustered">
+            {SOURCES.map((s) => (
+              <button
+                key={s}
+                className={`seg ${source === s ? "on" : ""}`}
+                onClick={() => setSource(s)}
+              >
+                {SOURCE_LABEL[s]}
+              </button>
+            ))}
+          </div>
+          <div className="toolbar-actions">
           <button
             className={`btn ${selectMode ? "active" : ""}`}
             onClick={() => setSelectMode((v) => !v)}
@@ -103,6 +127,7 @@ export default function App() {
           >
             Filters
           </button>
+          </div>
         </div>
 
         {filtersOpen && (
@@ -153,6 +178,7 @@ export default function App() {
         )}
 
         <MapCanvas
+          key={source}
           papers={data.papers}
           edges={data.edges ?? []}
           clusters={data.clusters}
@@ -179,8 +205,11 @@ export default function App() {
       />
 
       <footer className="foot">
-        Co-citation map of dementia &amp; GWAS literature · data from PubMed / NIH
-        iCite, GWAS Catalog, Open Targets &amp; ClinicalTrials.gov
+        {source === "specter2"
+          ? "SPECTER2 semantic map (title + abstract embeddings, UMAP + HDBSCAN)"
+          : "Co-citation map"}{" "}
+        of dementia &amp; GWAS literature · data from PubMed / NIH iCite, GWAS
+        Catalog, Open Targets &amp; ClinicalTrials.gov
       </footer>
     </div>
   );

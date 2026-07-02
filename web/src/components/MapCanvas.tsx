@@ -198,6 +198,7 @@ export default function MapCanvas({
       ctx.textBaseline = "middle";
       ctx.font = "600 13px ui-sans-serif, system-ui, -apple-system, sans-serif";
       for (const c of clusters) {
+        if (!c.label) continue; // coloured-but-unlabelled clusters (semantic map tail)
         const s = toScreen(c.centroid, transform);
         if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) continue;
         const text = c.label;
