@@ -1,0 +1,32 @@
+{
+  "id": "pathway",
+  "name": "Pathway → GWAS Gene",
+  "_lens": "molecular pathway (coarse) -> dominant GWAS gene (fine)",
+  "_prompt": "Name each dementia-genetics cluster. Every COARSE label is a molecular pathway (peers: 'Lipid Metabolism', 'Endocytosis', ...). Every FINE label is the single most distinctive GWAS gene/target of that cluster, a peer of the others. Labels within a tier must be mutually exclusive. Note: APOE recurs across clusters and several clusters share top genes, so fine gene labels are the least clean of the three lenses — this is expected.",
+  "coarse": [
+    { "coarse_id": "immune",   "label": "Immune & Microglia",    "members": ["c1", "c4", "c14"] },
+    { "coarse_id": "lipid",    "label": "Lipid Metabolism",      "members": ["c0", "c5", "c11"] },
+    { "coarse_id": "endo",     "label": "Endocytosis",           "members": ["c3", "c8"] },
+    { "coarse_id": "amytau",   "label": "Amyloid & Tau",         "members": ["c2", "c9", "c13"] },
+    { "coarse_id": "prot",     "label": "Proteinopathy Spectrum","members": ["c6", "c7", "c10"] },
+    { "coarse_id": "other",    "label": "Other Loci",            "members": ["c12", "c15"] }
+  ],
+  "fine": {
+    "c0":  "APOE",
+    "c1":  "TREM2",
+    "c2":  "ADAM10",
+    "c3":  "CR1",
+    "c4":  "MS4A4A",
+    "c5":  "ABCA7",
+    "c6":  "TMEM106B",
+    "c7":  "SNCA",
+    "c8":  "PICALM",
+    "c9":  "ABCG1",
+    "c10": "IL6R",
+    "c11": "CCR2",
+    "c12": "CHRNA7",
+    "c13": "PCSK5",
+    "c14": "HLA-DRB1",
+    "c15": "Longevity Loci"
+  }
+}

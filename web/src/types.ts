@@ -73,6 +73,23 @@ export interface CoarseCluster {
   fine_ids: string[];
 }
 
+/** One naming lens: the same clusters labelled under a different scheme
+ *  (theme / pathway / subtype). Overlaid on the base map at runtime. */
+export interface LabelLens {
+  id: string;
+  name: string;
+  coarse_clusters: CoarseCluster[];
+  /** fine cluster_id -> label */
+  fine: Record<string, string>;
+  /** fine cluster_id -> coarse_id */
+  coarse_of: Record<string, string>;
+}
+
+export interface LensFile {
+  default: string;
+  lenses: LabelLens[];
+}
+
 export interface MapData {
   generated_note?: string;
   disease?: string;
