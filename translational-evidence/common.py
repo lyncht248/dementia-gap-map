@@ -366,36 +366,47 @@ def pick_gene_id(ensembl_ids, entrez_ids, symbol):
 #
 # Every Track B record is tagged with a `disease_group` drawn from a small
 # controlled vocabulary so downstream views can split Alzheimer disease from the
-# related dementias. Classification is a pure, offline, case-insensitive keyword
-# match over free text (a GWAS trait, a trial condition, an Open Targets disease
-# label, etc.).
+# related dementias. Classification is ONTOLOGY-DERIVED: it delegates to
+# ``map/mesh_tree.classify_disease_text``, which matches the input free text (a
+# GWAS trait, a trial condition, an Open Targets disease label, etc.) against the
+# preferred labels AND entry-term synonyms of every MeSH descriptor in the
+# Dementia subtree (branches C10.228.140.380 and F03.615.400), read live from the
+# NLM MeSH SPARQL endpoint. The old hand-curated keyword lists have been retired:
+# the vocabulary is now whatever MeSH says today.
 #
-# Controlled vocabulary (exact string values):
-#   alzheimer                -> Alzheimer disease (incl. late/early onset, AD)
-#   vascular_dementia        -> vascular dementia / vascular cognitive impairment
-#   frontotemporal_dementia  -> FTD / FTLD / primary progressive aphasia
-#   lewy_body_dementia       -> dementia with Lewy bodies / PD dementia
-#   mixed_dementia           -> explicitly mixed (e.g. AD + vascular)
-#   dementia_unspecified     -> bare "dementia", all-cause dementia, MCI
-#   other                    -> neurodegenerative but none of the above / unclear
+# Controlled vocabulary (exact string values returned):
+#   alzheimer                -> Alzheimer Disease (incl. late/early/focal onset)
+#   vascular_dementia        -> Dementia, Vascular (Binswanger, multi-infarct, ...)
+#   frontotemporal_dementia  -> FTLD / FTD / primary progressive aphasia / Pick
+#   lewy_body_dementia       -> Lewy Body Disease
+#   mixed_dementia           -> Mixed Dementias, or AD + a specific subtype
+#   dementia_unspecified     -> bare "Dementia" and other Dementia-branch nodes
+#                               (AIDS dementia, Creutzfeldt-Jakob, Huntington, ...)
+#   None                     -> no Dementia label/synonym matched (e.g. mild
+#                               cognitive impairment / cognitive dysfunction,
+#                               which are NOT under the MeSH Dementia tree)
 #
-# Precedence when the text matches several groups:
+# NOTE: this replaces the old behaviour of returning "other" for unmatched text.
+# Non-dementia text now returns None (schema allows null), which is consistent
+# with the topic bridge's MeSH-tree classifier. "other" remains a listed
+# vocabulary value but is no longer produced by the classifier.
+#
+# Precedence when the text matches several groups (unchanged):
 #   mixed_dementia
-#     > (specific subtype: vascular_dementia / frontotemporal_dementia /
-#        lewy_body_dementia)
+#     > vascular_dementia / frontotemporal_dementia / lewy_body_dementia
 #     > alzheimer
 #     > dementia_unspecified
-#     > other
 #
 # Examples:
 #   "Alzheimer's disease and vascular dementia" -> mixed_dementia
 #   "Alzheimer's disease"                        -> alzheimer
 #   "Alzheimer's disease or related dementias"   -> alzheimer
-#       (bare "related dementias" is not a specific subtype, and alzheimer
-#        outranks dementia_unspecified)
 #   "Dementia"                                   -> dementia_unspecified
+#   "Mild cognitive impairment"                  -> None
 
 # Controlled-vocabulary constant so callers can reference values symbolically.
+# "other" is retained for backward compatibility but is no longer emitted; the
+# MeSH-driven classifier returns None instead of "other" for unmatched text.
 DISEASE_GROUPS = (
     "alzheimer",
     "vascular_dementia",
@@ -406,132 +417,47 @@ DISEASE_GROUPS = (
     "other",
 )
 
-# Keyword lists per specific subtype. Each entry is a lowercase substring that,
-# if found in the lowercased text, flags that subtype. Kept deliberately
-# readable so the rules can be audited and extended.
-_VASCULAR_KEYWORDS = (
-    "vascular dementia",
-    "vascular cognitive impairment",
-    "vascular cognitive",
-    "subcortical ischemic vascular",
-    "post-stroke dementia",
-    "poststroke dementia",
-    "multi-infarct dementia",
-    "multi infarct dementia",
-)
-_FRONTOTEMPORAL_KEYWORDS = (
-    "frontotemporal dementia",
-    "frontotemporal lobar degeneration",
-    "frontotemporal",
-    "ftld",
-    "ftd",
-    "primary progressive aphasia",
-    "semantic dementia",
-    "pick's disease",
-    "picks disease",
-    "pick disease",
-)
-_LEWY_KEYWORDS = (
-    "lewy body",
-    "lewy bodies",
-    "dlb",
-    "parkinson's disease dementia",
-    "parkinsons disease dementia",
-    "parkinson disease dementia",
-    "pdd",
-)
-
-# Alzheimer keywords. "adrd" / "alzheimer's disease and related dementias" are
-# treated as Alzheimer here: the "related dementias" part is unspecified, so by
-# precedence alzheimer wins (mixed_dementia requires a *specific* co-subtype).
-_ALZHEIMER_KEYWORDS = (
-    "alzheimer",       # covers "Alzheimer disease", "Alzheimer's disease"
-    "alzheimer’s",     # curly apostrophe variant (substring of "alzheimer" too)
-    "late-onset ad",
-    "early-onset ad",
-    "adrd",
-)
-
-# Generic dementia / cognitive-decline keywords with no specific subtype.
-_DEMENTIA_UNSPEC_KEYWORDS = (
-    "dementia",                 # bare "dementia", "all-cause dementia"
-    "all-cause dementia",
-    "cognitive decline",
-    "cognitive impairment",
-    "mild cognitive impairment",
-    "mci",
-    "memory loss",
-    "amnestic",
-)
+# Lazily-imported handle on the MeSH-tree module. Imported on first use (not at
+# module load) to avoid a circular import: map/mesh_tree.py imports this module.
+_MESH_TREE = None
 
 
-def _contains_any(text_lower, keywords):
-    """True if any keyword substring occurs in the already-lowercased text."""
-    for kw in keywords:
-        if kw in text_lower:
-            return True
-    return False
+def _mesh_tree():
+    """Import and cache map/mesh_tree, resolving it from this file's location.
+
+    The import is deferred so that ``import common`` never triggers a circular
+    import (mesh_tree imports common). We add TE_DIR/map to sys.path and import
+    by module name so it works regardless of how ``common`` was first imported.
+    """
+    global _MESH_TREE
+    if _MESH_TREE is None:
+        map_dir = str(TE_DIR / "map")
+        if map_dir not in sys.path:
+            sys.path.insert(0, map_dir)
+        import mesh_tree  # noqa: E402  (deferred, path set just above)
+        _MESH_TREE = mesh_tree
+    return _MESH_TREE
 
 
 def classify_disease_group(text):
-    """Classify free text into ONE controlled disease_group value.
+    """Classify free text into ONE disease_group value, or None.
 
-    Case-insensitive keyword match honoring the precedence:
+    Delegates to the MeSH-label-driven ``mesh_tree.classify_disease_text``: the
+    input is matched, as whole phrases, against the preferred labels and entry
+    terms of the MeSH Dementia subtree, resolved by the precedence:
+
         mixed_dementia
           > vascular_dementia / frontotemporal_dementia / lewy_body_dementia
           > alzheimer
           > dementia_unspecified
-          > other
 
-    ``mixed_dementia`` is returned when the text explicitly says "mixed" OR when
-    it names Alzheimer together with at least one specific non-Alzheimer subtype
-    (e.g. "Alzheimer's disease and vascular dementia").
-
-    None / empty / whitespace-only input returns "other".
+    Returns None when no Dementia label matches (including None / empty /
+    whitespace-only input). This is ontology-derived: there are no hand keyword
+    lists.
     """
-    if not text:
-        return "other"
-    text_lower = str(text).lower()
-    if not text_lower.strip():
-        return "other"
-
-    # Which specific subtypes are present?
-    has_vascular = _contains_any(text_lower, _VASCULAR_KEYWORDS)
-    has_ftd = _contains_any(text_lower, _FRONTOTEMPORAL_KEYWORDS)
-    has_lewy = _contains_any(text_lower, _LEWY_KEYWORDS)
-    has_alzheimer = _contains_any(text_lower, _ALZHEIMER_KEYWORDS)
-
-    specific_subtypes = [has_vascular, has_ftd, has_lewy]
-    n_specific = sum(1 for present in specific_subtypes if present)
-
-    # 1) mixed_dementia: explicit "mixed", OR Alzheimer + >=1 specific subtype,
-    #    OR two or more distinct specific subtypes named together.
-    if "mixed dementia" in text_lower or "mixed-dementia" in text_lower:
-        return "mixed_dementia"
-    if has_alzheimer and n_specific >= 1:
-        return "mixed_dementia"
-    if n_specific >= 2:
-        return "mixed_dementia"
-
-    # 2) a single specific subtype (order here is a tiebreak but by the branch
-    #    above only one of these can be true at this point).
-    if has_vascular:
-        return "vascular_dementia"
-    if has_ftd:
-        return "frontotemporal_dementia"
-    if has_lewy:
-        return "lewy_body_dementia"
-
-    # 3) alzheimer (outranks bare dementia_unspecified).
-    if has_alzheimer:
-        return "alzheimer"
-
-    # 4) generic dementia / cognitive decline with no subtype.
-    if _contains_any(text_lower, _DEMENTIA_UNSPEC_KEYWORDS):
-        return "dementia_unspecified"
-
-    # 5) nothing matched.
-    return "other"
+    if not text or not str(text).strip():
+        return None
+    return _mesh_tree().classify_disease_text(text)
 
 
 def classify_disease_groups(texts):
@@ -540,14 +466,17 @@ def classify_disease_groups(texts):
     Useful for records that span several traits / conditions (e.g. a gene
     aggregated across many GWAS traits, or a trial with several conditions).
     Each string is classified independently with ``classify_disease_group`` and
-    the distinct results are returned sorted. None / non-string members are
-    tolerated (they contribute "other"). An empty / falsy iterable returns [].
+    the distinct NON-NULL results are returned sorted. None / non-string members
+    and texts that match no Dementia label contribute nothing. An empty / falsy
+    iterable returns [].
     """
     if not texts:
         return []
     groups = set()
     for text in texts:
-        groups.add(classify_disease_group(text))
+        group = classify_disease_group(text)
+        if group is not None:
+            groups.add(group)
     return sorted(groups)
 
 

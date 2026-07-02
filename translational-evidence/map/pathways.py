@@ -38,11 +38,29 @@ GROUP_LABELS = {
 }
 
 
+def _skip_leading_comments(fh):
+    """Advance past any leading ``#`` comment lines and return the file handle.
+
+    ``gene_pathway.csv`` is now a GENERATED thin projection whose first line is a
+    ``# GENERATED ... do not hand-edit`` provenance comment (written by
+    gene_pathway_build.py). Skip such comment lines so the DictReader sees the
+    real ``gene_symbol,pathway_group,notes`` header. A hand-authored CSV with no
+    comment line is handled identically (nothing to skip).
+    """
+    pos = fh.tell()
+    line = fh.readline()
+    while line and line.lstrip().startswith("#"):
+        pos = fh.tell()
+        line = fh.readline()
+    fh.seek(pos)
+    return fh
+
+
 def load_rows(csv_path):
     """Read the curated CSV into a list of dict rows, skipping blank lines."""
     rows = []
     with pathlib.Path(csv_path).open("r", encoding="utf-8", newline="") as fh:
-        reader = csv.DictReader(fh)
+        reader = csv.DictReader(_skip_leading_comments(fh))
         required = {"gene_symbol", "pathway_group", "notes"}
         missing = required - set(reader.fieldnames or [])
         if missing:

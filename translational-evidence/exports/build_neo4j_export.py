@@ -163,6 +163,7 @@ EDGE_TYPE_RELS = {
     "trial_drug": "TRIAL_DRUG",
     "trial_pathway": "TRIAL_PATHWAY",
     "drug_pathway": "DRUG_PATHWAY",
+    "drug_gene": "DRUG_GENE",
     "topic_gene": "TOPIC_GENE",
     "topic_pathway": "TOPIC_PATHWAY",
     "topic_disease": "TOPIC_DISEASE",
