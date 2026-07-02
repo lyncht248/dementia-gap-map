@@ -44,6 +44,14 @@ MODEL_CONFIG = {
         "max_seq_length": 1024,
         "title": "Qwen3-Embedding-8B",
     },
+    "specter2": {
+        "model_id": "allenai/specter2",
+        "base_model_id": "allenai/specter2_base",
+        "dimension": 768,
+        "batch_size": {"mps": 16, "cuda": 128, "cpu": 16},
+        "max_seq_length": 512,
+        "title": "SPECTER2",
+    },
 }
 
 
@@ -161,6 +169,60 @@ def encode_qwen(
         mmap[start:end] = batch.astype(np.float16)
         mmap.flush()
         print(f"[embed] {end}/{len(docs)}", flush=True)
+
+    del mmap
+    tmp_path.replace(out_path)
+    return np.load(out_path)
+
+
+def encode_specter2(
+    papers: list[dict[str, Any]],
+    out_path: Path,
+    *,
+    batch_size: int,
+    device: str,
+    max_seq_length: int,
+) -> np.ndarray:
+    import torch
+    from adapters import AutoAdapterModel
+    from transformers import AutoTokenizer
+
+    config = MODEL_CONFIG["specter2"]
+    tokenizer = AutoTokenizer.from_pretrained(config["base_model_id"])
+    model = AutoAdapterModel.from_pretrained(config["base_model_id"])
+    model.load_adapter(config["model_id"], source="hf", load_as="specter2", set_active=True)
+    model.to(device)
+    model.eval()
+
+    dim = config["dimension"]
+    tmp_path = out_path.with_suffix(".tmp.npy")
+    mmap = np.lib.format.open_memmap(tmp_path, mode="w+", dtype=np.float16, shape=(len(papers), dim))
+    texts = [
+        (paper.get("title") or "").strip()
+        + tokenizer.sep_token
+        + (paper.get("abstract") or "").strip()
+        for paper in papers
+    ]
+
+    for start in range(0, len(texts), batch_size):
+        end = min(start + batch_size, len(texts))
+        inputs = tokenizer(
+            texts[start:end],
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+            return_token_type_ids=False,
+            max_length=max_seq_length,
+        )
+        inputs = {key: value.to(device) for key, value in inputs.items()}
+        with torch.no_grad():
+            output = model(**inputs)
+            batch = output.last_hidden_state[:, 0, :].detach().cpu().numpy()
+        if batch.shape[1] != dim:
+            raise RuntimeError(f"Expected embedding dimension {dim}, got {batch.shape[1]}")
+        mmap[start:end] = batch.astype(np.float16)
+        mmap.flush()
+        print(f"[embed] {end}/{len(texts)}", flush=True)
 
     del mmap
     tmp_path.replace(out_path)
@@ -424,6 +486,14 @@ def main() -> None:
             device=device,
             max_seq_length=config["max_seq_length"],
         )
+    elif args.model == "specter2":
+        vectors = encode_specter2(
+            papers,
+            vectors_path,
+            batch_size=batch_size,
+            device=device,
+            max_seq_length=config["max_seq_length"],
+        )
     else:
         raise AssertionError(args.model)
 
@@ -467,9 +537,12 @@ def main() -> None:
             "umap-learn": package_version("umap-learn"),
             "hdbscan": package_version("hdbscan"),
             "matplotlib": package_version("matplotlib"),
+            "adapters": package_version("adapters"),
+            "pandas": package_version("pandas"),
             "plotly": package_version("plotly"),
             "scikit-learn": package_version("scikit-learn"),
             "scipy": package_version("scipy"),
+            "transformers": package_version("transformers"),
         },
         "wall_clock_seconds": round(elapsed, 3),
         "device": device,
