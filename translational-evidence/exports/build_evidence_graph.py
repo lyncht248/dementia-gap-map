@@ -1169,8 +1169,25 @@ def main():
     disease_nodes = build_disease_nodes(disease_groups, target_evidence)
     topic_nodes = build_topic_nodes(rollup)
 
+    # Track A Theme Atlas (45 embedding themes): a parallel taxonomy with the
+    # same node/edge shape. node_ids are namespaced "topic:atlas:<n>" so they
+    # never collide with the topic:NNN handoff; tagged taxonomy=theme_atlas so
+    # consumers can filter one taxonomy or the other.
+    atlas_rollup_path = (common.SHARED_PROCESSED_DIR
+                         / "atlas_evidence_rollup.jsonl")
+    atlas_links_path = (common.SHARED_PROCESSED_DIR
+                        / "atlas_evidence_links.jsonl")
+    atlas_rollup = (common.read_jsonl(atlas_rollup_path)
+                    if atlas_rollup_path.exists() else [])
+    atlas_links = (common.read_jsonl(atlas_links_path)
+                   if atlas_links_path.exists() else [])
+    atlas_topic_nodes = build_topic_nodes(atlas_rollup)
+    for n in atlas_topic_nodes:
+        n["provenance"]["source"] = "atlas_evidence_rollup"
+        n["provenance"]["taxonomy"] = "theme_atlas"
+
     nodes = (variant_nodes + gene_nodes + pathway_nodes + drug_nodes
-             + trial_nodes + disease_nodes + topic_nodes)
+             + trial_nodes + disease_nodes + topic_nodes + atlas_topic_nodes)
     node_ids = {n["node_id"] for n in nodes}
 
     common.log("building edges")
@@ -1183,6 +1200,7 @@ def main():
     edges += build_drug_pathway_edges(drug_agg, trial_mech_to_pathway)
     edges += build_drug_gene_edges(drug_agg, drug_target_map, symbol_to_gene_id)
     edges += build_topic_edges(topic_links, node_ids)
+    edges += build_topic_edges(atlas_links, node_ids)
 
     edges, dropped = drop_dangling_edges(edges, node_ids)
     if dropped:

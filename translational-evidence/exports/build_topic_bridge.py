@@ -128,6 +128,19 @@ LINKS_OUT = common.SHARED_PROCESSED_DIR / "topic_evidence_links.jsonl"
 ROLLUP_OUT = common.SHARED_PROCESSED_DIR / "topic_evidence_rollup.jsonl"
 MANIFEST_OUT = common.SHARED_PROCESSED_DIR / "topic_bridge_manifest.json"
 
+# Track A's Theme Atlas (PR #17): a richer embedding-based taxonomy (Qwen3-8B).
+# points.jsonl maps every paper (paper_id="pmid:...") to one theme; clusters.jsonl
+# gives each theme a label + top_terms. Because it is PMID-anchored just like the
+# topic_clusters handoff, the SAME linking logic runs against it unchanged, so we
+# emit a parallel rollup keyed by "atlas:<n>". Optional: skipped if absent.
+ATLAS_DIR = (common.REPO_ROOT / "data" / "exports" / "visual"
+             / "embeddings" / "qwen3-8b")
+ATLAS_POINTS = ATLAS_DIR / "points.jsonl"
+ATLAS_CLUSTERS = ATLAS_DIR / "clusters.jsonl"
+ATLAS_LINKS_OUT = common.SHARED_PROCESSED_DIR / "atlas_evidence_links.jsonl"
+ATLAS_ROLLUP_OUT = common.SHARED_PROCESSED_DIR / "atlas_evidence_rollup.jsonl"
+ATLAS_MANIFEST_OUT = common.SHARED_PROCESSED_DIR / "atlas_bridge_manifest.json"
+
 
 # ---------------------------------------------------------------------------
 # regex_symbol_match config (FALLBACK ONLY)
@@ -1096,6 +1109,38 @@ def build_rollup(topic_id, label, linked_genes, paper_overlap_syms,
 # Main
 # ---------------------------------------------------------------------------
 
+def load_atlas_clusters():
+    """Synthesize cluster records from Track A's Theme Atlas (PR #17).
+
+    Groups atlas points by theme and attaches each theme's label/top_terms, so
+    the result is shaped exactly like a topic_clusters record ({topic_id, label,
+    top_terms, paper_ids}) and can be fed straight into build_topic(). topic_id
+    is namespaced "atlas:<n>" to stay distinct from the "topic:..." handoff.
+    Returns [] if the atlas artifacts are not present.
+    """
+    if not (ATLAS_POINTS.exists() and ATLAS_CLUSTERS.exists()):
+        return []
+    meta = {c.get("cluster"): c for c in common.read_jsonl(ATLAS_CLUSTERS)}
+    members = defaultdict(list)
+    for pt in common.read_jsonl(ATLAS_POINTS):
+        cid = pt.get("cluster")
+        pid = pt.get("paper_id")
+        # cid == -1 is the HDBSCAN noise/outlier bucket, not a real theme.
+        if cid is None or cid < 0 or not pid:
+            continue
+        members[cid].append(pid)
+    clusters = []
+    for cid in sorted(members, key=lambda c: (-len(members[c]), str(c))):
+        m = meta.get(cid, {})
+        clusters.append({
+            "topic_id": "atlas:%s" % cid,
+            "label": m.get("label"),
+            "top_terms": m.get("top_terms") or [],
+            "paper_ids": members[cid],
+        })
+    return clusters
+
+
 def main():
     # --- load inputs -------------------------------------------------------
     clusters = common.read_jsonl(TOPIC_CLUSTERS)
@@ -1242,6 +1287,44 @@ def main():
     common.log("wrote %d links -> %s" % (n_links, LINKS_OUT))
     common.log("wrote %d rollups -> %s" % (n_rollups, ROLLUP_OUT))
     common.log("wrote manifest -> %s" % MANIFEST_OUT)
+
+    # --- also link to Track A's Theme Atlas (45 embedding themes) -----------
+    # Same indexes, same linking logic, richer taxonomy. Emits parallel
+    # atlas_evidence_{links,rollup}.jsonl keyed by "atlas:<n>", leaving the
+    # 10-topic contract that the map consumes untouched.
+    atlas_clusters = load_atlas_clusters()
+    if atlas_clusters:
+        atlas_ctx = dict(ctx)
+        atlas_ctx["track_a_clusters"] = len(atlas_clusters)
+        atlas_ctx["track_a_papers"] = sum(
+            len(c["paper_ids"]) for c in atlas_clusters)
+        atlas_links, atlas_rollups = [], []
+        for cluster in atlas_clusters:
+            links, rollup = build_topic(cluster, atlas_ctx)
+            atlas_links.extend(links)
+            atlas_rollups.append(rollup)
+        n_al = common.write_jsonl(ATLAS_LINKS_OUT, atlas_links)
+        n_ar = common.write_jsonl(ATLAS_ROLLUP_OUT, atlas_rollups)
+        atlas_manifest = {
+            "taxonomy": "theme_atlas_qwen3-8b",
+            "source": "data/exports/visual/embeddings/qwen3-8b (Track A PR #17)",
+            "n_themes": len(atlas_clusters),
+            "n_atlas_papers": atlas_ctx["track_a_papers"],
+            "n_links": n_al,
+            "n_rollups": n_ar,
+            "link_methods": _count_by(atlas_links, "method"),
+            "link_types": _count_by(atlas_links, "link_type"),
+            "link_confidence": _count_by(atlas_links, "confidence"),
+            "generated_from": "theme_atlas",
+        }
+        with ATLAS_MANIFEST_OUT.open("w", encoding="utf-8") as fh:
+            json.dump(atlas_manifest, fh, indent=2, ensure_ascii=False,
+                      sort_keys=True)
+            fh.write("\n")
+        common.log("atlas: %d links + %d rollups over %d themes -> %s"
+                   % (n_al, n_ar, len(atlas_clusters), ATLAS_ROLLUP_OUT))
+    else:
+        common.log("atlas: no artifacts at %s (skipped)" % ATLAS_DIR)
 
     # --- report ------------------------------------------------------------
     print_report(all_links, all_rollups, per_topic_links)

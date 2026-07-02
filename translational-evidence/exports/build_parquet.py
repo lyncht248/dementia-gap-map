@@ -31,6 +31,8 @@ DATASETS = {
     "drug_mechanism_api": "data/processed/translational-evidence/drug_mechanism_api.jsonl",
     "topic_evidence_links": "data/processed/shared/topic_evidence_links.jsonl",
     "topic_evidence_rollup": "data/processed/shared/topic_evidence_rollup.jsonl",
+    "atlas_evidence_links": "data/processed/shared/atlas_evidence_links.jsonl",
+    "atlas_evidence_rollup": "data/processed/shared/atlas_evidence_rollup.jsonl",
     "nodes": "data/exports/graph/nodes.jsonl",
     "edges": "data/exports/graph/edges.jsonl",
 }

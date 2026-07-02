@@ -587,7 +587,8 @@ def write_intervention_csv(records):
     INTERVENTION_CSV.parent.mkdir(parents=True, exist_ok=True)
     tmp = INTERVENTION_CSV.with_name(INTERVENTION_CSV.name + ".tmp")
     with tmp.open("w", encoding="utf-8", newline="") as fh:
-        fh.write(CSV_HEADER_COMMENT + "\n")
+        # Header FIRST (no leading '#' comment) so csv.DictReader consumers
+        # (normalize/clinicaltrials.py, the graph export) read all rows.
         writer = csv.DictWriter(
             fh, fieldnames=["keyword", "mechanism_group", "notes"]
         )

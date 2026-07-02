@@ -66,10 +66,13 @@ DOWNSTREAM_STEPS = [
     # APIs (mygene/Reactome/OT) via the cached data/raw layer, so they respect
     # --skip-ingest / TE_REFRESH exactly like the ingest steps. gene_pathway_build
     # regenerates gene_pathway.csv; intervention_mechanism_build regenerates
-    # intervention_mechanism.csv (consumed by normalize/clinicaltrials.py, so a
-    # full re-run should be executed twice, or run these before normalize).
+    # intervention_mechanism.csv from the now-normalized trials.
     "map/gene_pathway_build.py",
     "map/intervention_mechanism_build.py",
+    # Re-normalize trials AFTER the mechanism map is rebuilt, so trials.jsonl /
+    # pathways / scores use the current run's mechanism map (not the prior run's).
+    # Fixes the one-command ordering: normalize -> build map -> re-normalize.
+    "normalize/clinicaltrials.py",
     "map/pathways.py",
     "score/scores.py",
     "validate.py",
