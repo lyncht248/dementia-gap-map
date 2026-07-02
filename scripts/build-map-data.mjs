@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import Graph from "graphology";
 import louvain from "graphology-communities-louvain";
 import forceAtlas2 from "graphology-layout-forceatlas2";
+import { computeEmergence } from "./emergence.mjs";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const P = (...p) => path.join(ROOT, ...p);
@@ -456,6 +457,8 @@ graph.forEachNode((node) => {
 });
 const outEdges = [...keep].map((k) => k.split("|").map(Number));
 console.log(`  ${outEdges.length} edges kept for drawing`);
+
+computeEmergence(outPapers, outClusters); // per-cluster burst/growth/RCR emergence score
 
 const nGeneP = outPapers.filter((p) => p.genes.length).length;
 const data = {
