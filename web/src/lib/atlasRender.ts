@@ -59,6 +59,12 @@ export interface AtlasHandle {
   clearSelection: () => void;
   resetView: () => void;
   setFilter: (hiddenMajors: string[], yearRange: [number, number]) => void;
+  /** Agent control: select papers by id (updates the feed), spotlight with a
+   * ring, or animate the camera to their bounding box. */
+  selectByIds: (ids: string[]) => number;
+  highlightByIds: (ids: string[]) => number;
+  clearHighlight: () => void;
+  zoomToIds: (ids: string[], pad?: number) => number;
 }
 
 type Pt = { x: number; y: number };
@@ -99,6 +105,16 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   let DPR = Math.min(window.devicePixelRatio || 1, 2);
 
   const P = DATA.points;
+  const idIndex = new Map<string, number>();
+  DATA.ids.forEach((id, i) => idIndex.set(id, i));
+  const idsToIdx = (ids: string[]): number[] => {
+    const out: number[] = [];
+    for (const id of ids) {
+      const i = idIndex.get(id);
+      if (i !== undefined) out.push(i);
+    }
+    return out;
+  };
   let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
   for (const p of P) {
     if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0];
@@ -161,6 +177,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   let selecting = false;
   let lasso: Pt[] = [];
   let selSet = new Set<number>();
+  let hlSet = new Set<number>(); // agent spotlight (amber ring), distinct from selection
   let selAnchor = -1; // the clicked paper (draws citation lines), -1 for lasso
 
   const rowFor = (i: number): SelectedPaper => ({
@@ -276,6 +293,22 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
         if (m.count < 40 && zoom < 3) continue;
         drawLabel(m.label, wx(m.x), wy(m.y), 16, "#22222a", a, false);
       }
+    }
+
+    // agent spotlight — amber rings on highlighted papers
+    if (hlSet.size) {
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = "#f2a900";
+      for (const i of hlSet) {
+        if (!visible(i)) continue;
+        const X = wx(P[i][0]), Y = wy(P[i][1]);
+        if (X < -6 || X > w + 6 || Y < -6 || Y > h + 6) continue;
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        ctx.arc(X, Y, r + 4, 0, 6.2832);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
 
     // lasso path
@@ -442,6 +475,40 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     },
     clearSelection() { selSet = new Set(); selAnchor = -1; draw(); },
     resetView() { fit(); baseS = view.s; draw(); },
+    selectByIds(ids: string[]) {
+      const idx = idsToIdx(ids);
+      selSet = new Set(idx);
+      selAnchor = idx.length === 1 ? idx[0] : -1;
+      const rows = idx.map(rowFor).sort((a, b) => b.degree - a.degree || b.year - a.year);
+      opts.onSelect?.(rows);
+      draw();
+      return idx.length;
+    },
+    highlightByIds(ids: string[]) {
+      const idx = idsToIdx(ids);
+      hlSet = new Set(idx);
+      draw();
+      return idx.length;
+    },
+    clearHighlight() { hlSet = new Set(); draw(); },
+    zoomToIds(ids: string[], pad = 60) {
+      const idx = idsToIdx(ids);
+      if (!idx.length) return 0;
+      let mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
+      for (const i of idx) {
+        const p = P[i];
+        if (p[0] < mnx) mnx = p[0]; if (p[0] > mxx) mxx = p[0];
+        if (p[1] < mny) mny = p[1]; if (p[1] > mxy) mxy = p[1];
+      }
+      const bw = Math.max(mxx - mnx, 1e-6), bh = Math.max(mxy - mny, 1e-6);
+      const w = cw(), h = ch();
+      const s = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh);
+      view.s = Math.max(baseS * 0.6, Math.min(baseS * 40, s));
+      view.tx = w / 2 - ((mnx + mxx) / 2) * view.s;
+      view.ty = h / 2 - ((mny + mxy) / 2) * view.s;
+      draw();
+      return idx.length;
+    },
     setFilter(hm: string[], yr: [number, number]) {
       hiddenMajors.clear();
       for (const id of hm) hiddenMajors.add(id);

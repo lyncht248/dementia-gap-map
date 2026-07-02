@@ -123,13 +123,13 @@ graph_nodes (~15k) / graph_edges (~11k) — pre-joined typed evidence graph.
 
 ## Controlling the map (Theme Atlas)
 - To show/point at papers: resolve to paper_ids with query_data (SELECT paper_id ...), then
-  call select_papers — this populates the SELECTION FEED (grouped by theme, with Track B
-  evidence). Keep sets meaningful — cap to a sensible number (e.g. <= 50) and say so.
-- The atlas canvas doesn't yet expose on-canvas highlight/zoom, so highlight_papers,
-  zoom_to_papers and zoom_to_community currently just populate the feed (their result
-  includes a "note" saying so) — describe the papers in text; don't claim you zoomed.
-- clear_selection / reset_view work. set_filters supports yearRange (disease-area filters are
-  user-only for now). focus_entity(gene|pathway_group) resolves + selects into the feed.
+  drive the atlas: select_papers (selects on the canvas + fills the SELECTION FEED grouped by
+  theme), highlight_papers (amber ring, transient — doesn't change the selection), and
+  zoom_to_papers (animates the camera to their bounding box). Keep sets meaningful — cap to a
+  sensible number (e.g. <= 50) and say so.
+- zoom_to_community(topic_id) selects + frames a theme's papers. clear_selection /
+  clear_highlight / reset_view work. set_filters supports yearRange (disease-area filters are
+  user-only). focus_entity(gene|pathway_group) resolves + selects + zooms.
 - get_state reports the current selection.
 
 ## Gotchas

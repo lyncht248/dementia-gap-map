@@ -103,6 +103,7 @@ export default function App() {
         },
         resetView: () => atlasRef.current?.resetView(),
         setYearRange: (r) => setYearRange(r),
+        atlas: () => atlasRef.current,
       }),
     []
   );

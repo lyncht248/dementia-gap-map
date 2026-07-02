@@ -4,6 +4,7 @@
 // + reset today; on-canvas highlight/zoom are noted as not-yet-supported until
 // AtlasMap grows an imperative API.
 import type { Cluster, Paper } from "../types";
+import type { AtlasMapHandle } from "../components/AtlasMap";
 import type { AgentController, FilterPatch, MapState } from "./types";
 
 export interface ControllerDeps {
@@ -11,14 +12,14 @@ export interface ControllerDeps {
   getClusters: () => Cluster[];
   getSelectedIds: () => string[];
   getYearRange: () => [number, number];
-  /** Resolve paper_ids -> full records and set the selection feed. */
+  /** Fallback (atlas not ready): resolve paper_ids -> records into the feed. */
   setSelectedByIds: (ids: string[]) => void;
   clearSelection: () => void;
   resetView: () => void;
   setYearRange: (r: [number, number]) => void;
+  /** The atlas canvas handle for on-screen select / highlight / zoom by id. */
+  atlas: () => AtlasMapHandle | null;
 }
-
-const NO_CANVAS = "shown in the selection feed (on-canvas highlight/zoom not yet supported on the theme atlas)";
 
 export function createController(deps: ControllerDeps): AgentController {
   const knownIds = () => new Set(deps.getPapers().map((p) => p.paper_id));
@@ -30,14 +31,16 @@ export function createController(deps: ControllerDeps): AgentController {
   return {
     selectPapers(paperIds) {
       const valid = validIds(paperIds);
-      deps.setSelectedByIds(valid);
+      const a = deps.atlas();
+      if (a) a.selectByIds(valid);
+      else deps.setSelectedByIds(valid);
       return { selected: valid.length };
     },
 
     highlightPapers(paperIds) {
       const valid = validIds(paperIds);
-      deps.setSelectedByIds(valid);
-      return { highlighted: valid.length, note: NO_CANVAS };
+      deps.atlas()?.highlightByIds(valid);
+      return { highlighted: valid.length };
     },
 
     clearSelection() {
@@ -45,13 +48,13 @@ export function createController(deps: ControllerDeps): AgentController {
     },
 
     clearHighlight() {
-      deps.clearSelection();
+      deps.atlas()?.clearHighlight();
     },
 
     zoomToPapers(paperIds) {
       const valid = validIds(paperIds);
-      deps.setSelectedByIds(valid);
-      return { zoomed: valid.length, note: NO_CANVAS };
+      deps.atlas()?.zoomToPapers(valid);
+      return { zoomed: valid.length };
     },
 
     zoomToCommunity(topicId) {
@@ -61,8 +64,12 @@ export function createController(deps: ControllerDeps): AgentController {
         .getPapers()
         .filter((p) => p.cluster_id === topicId)
         .map((p) => p.paper_id);
-      deps.setSelectedByIds(members);
-      return { topic_id: topicId, members: members.length, note: NO_CANVAS };
+      const a = deps.atlas();
+      if (a) {
+        a.selectByIds(members);
+        a.zoomToPapers(members);
+      } else deps.setSelectedByIds(members);
+      return { topic_id: topicId, members: members.length };
     },
 
     setFilters(patch: FilterPatch) {
@@ -102,7 +109,13 @@ export function createController(deps: ControllerDeps): AgentController {
       } else if (entity.variant) {
         by = "unsupported_use_query_data";
       }
-      if (ids.length) deps.setSelectedByIds(ids);
+      if (ids.length) {
+        const a = deps.atlas();
+        if (a) {
+          a.selectByIds(ids);
+          a.zoomToPapers(ids);
+        } else deps.setSelectedByIds(ids);
+      }
       return { resolved: ids.length, paperIds: ids.slice(0, 200), by };
     },
 
