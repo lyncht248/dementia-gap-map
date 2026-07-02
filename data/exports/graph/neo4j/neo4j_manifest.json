@@ -1,15 +1,14 @@
 {
   "edges_csv": {
     "by_type": {
-      "drug_pathway": 174,
-      "gene_disease": 535,
-      "gene_pathway": 36,
-      "topic_disease": 32,
-      "topic_gene": 316,
-      "topic_pathway": 29,
+      "drug_gene": 477,
+      "gene_disease": 1947,
+      "topic_disease": 30,
+      "topic_gene": 1490,
+      "topic_pathway": 40,
       "trial_drug": 3350,
-      "trial_pathway": 5271,
-      "variant_gene": 1274
+      "trial_pathway": 371,
+      "variant_gene": 1433
     },
     "dangling_endpoints": 0,
     "edge_id_collisions_uniquified": 0,
@@ -24,18 +23,18 @@
       "confidence"
     ],
     "path": "data/exports/graph/neo4j/edges.csv",
-    "rows": 11017
+    "rows": 9138
   },
   "generated_by": "translational-evidence/exports/build_neo4j_export.py",
-  "generated_on": "2026-07-01",
+  "generated_on": "2026-07-02",
   "load_cypher": "data/exports/graph/neo4j/load.cypher",
   "nodes_csv": {
     "by_type": {
-      "disease": 7,
+      "disease": 6,
       "drug": 2111,
-      "gene": 523,
-      "pathway": 9,
-      "topic": 17,
+      "gene": 1484,
+      "pathway": 8,
+      "topic": 10,
       "trial": 6841,
       "variant": 5786
     },
@@ -53,6 +52,7 @@
       "n_conflicting",
       "n_trials",
       "n_drugs",
+      "n_papers",
       "n_associations",
       "n_studies",
       "first_gwas_year",
@@ -66,7 +66,10 @@
       "n_recent",
       "stopped_ratio",
       "direction_agreement",
-      "metrics_translation_gap",
+      "best_neglog10p",
+      "max_l2g",
+      "mean_best_neglog10p",
+      "trials_per_gene",
       "has_approval",
       "provenance"
     ],
@@ -77,12 +80,16 @@
       "float": [
         "stopped_ratio",
         "direction_agreement",
-        "metrics_translation_gap"
+        "best_neglog10p",
+        "max_l2g",
+        "mean_best_neglog10p",
+        "trials_per_gene"
       ],
       "int": [
         "n_conflicting",
         "n_trials",
         "n_drugs",
+        "n_papers",
         "n_associations",
         "n_studies",
         "first_gwas_year",
@@ -96,12 +103,10 @@
         "n_recent"
       ],
       "note": "flat per-entity metrics hoisted from entity_metrics.jsonl; blank column == Cypher null for node types that do not carry that metric",
-      "renamed": {
-        "metrics_translation_gap": "translation_gap"
-      }
+      "renamed": {}
     },
     "path": "data/exports/graph/neo4j/nodes.csv",
-    "rows": 15294
+    "rows": 16246
   },
   "source": {
     "edges_jsonl": "data/exports/graph/edges.jsonl",

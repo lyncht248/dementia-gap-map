@@ -24,6 +24,7 @@ SET n.node_type          = row.node_type,
     n.n_conflicting        = toInteger(row.n_conflicting),
     n.n_trials             = toInteger(row.n_trials),
     n.n_drugs              = toInteger(row.n_drugs),
+    n.n_papers             = toInteger(row.n_papers),
     n.n_associations       = toInteger(row.n_associations),
     n.n_studies            = toInteger(row.n_studies),
     n.first_gwas_year      = toInteger(row.first_gwas_year),
@@ -37,7 +38,10 @@ SET n.node_type          = row.node_type,
     n.n_recent             = toInteger(row.n_recent),
     n.stopped_ratio        = toFloat(row.stopped_ratio),
     n.direction_agreement  = toFloat(row.direction_agreement),
-    n.metrics_translation_gap = toFloat(row.metrics_translation_gap),
+    n.best_neglog10p       = toFloat(row.best_neglog10p),
+    n.max_l2g              = toFloat(row.max_l2g),
+    n.mean_best_neglog10p  = toFloat(row.mean_best_neglog10p),
+    n.trials_per_gene      = toFloat(row.trials_per_gene),
     n.has_approval         = toBoolean(row.has_approval);
 
 // --- 2. Per-type label passes (APOC-free: one static SET per node_type). ---
@@ -78,10 +82,10 @@ SET n:Variant;
 
 // --- 3. Typed relationships (CREATE, so parallel evidence is preserved; one static pass per edge_type). ---
 LOAD CSV WITH HEADERS FROM 'file:///edges.csv' AS row
-WITH row WHERE row.edge_type = 'drug_pathway'
+WITH row WHERE row.edge_type = 'drug_gene'
 MATCH (s:Entity {node_id: row.source_id})
 MATCH (t:Entity {node_id: row.target_id})
-CREATE (s)-[r:DRUG_PATHWAY {edge_id: row.edge_id}]->(t)
+CREATE (s)-[r:DRUG_GENE {edge_id: row.edge_id}]->(t)
 SET r.score      = toFloat(row.score),
     r.evidence   = row.evidence,
     r.edge_type  = row.edge_type,
@@ -94,18 +98,6 @@ WITH row WHERE row.edge_type = 'gene_disease'
 MATCH (s:Entity {node_id: row.source_id})
 MATCH (t:Entity {node_id: row.target_id})
 CREATE (s)-[r:GENE_DISEASE {edge_id: row.edge_id}]->(t)
-SET r.score      = toFloat(row.score),
-    r.evidence   = row.evidence,
-    r.edge_type  = row.edge_type,
-    // Track A<->B bridge edges carry how (method) + how confident (confidence); null on Track-B-internal edges.
-    r.method     = row.method,
-    r.confidence = row.confidence;
-
-LOAD CSV WITH HEADERS FROM 'file:///edges.csv' AS row
-WITH row WHERE row.edge_type = 'gene_pathway'
-MATCH (s:Entity {node_id: row.source_id})
-MATCH (t:Entity {node_id: row.target_id})
-CREATE (s)-[r:GENE_PATHWAY {edge_id: row.edge_id}]->(t)
 SET r.score      = toFloat(row.score),
     r.evidence   = row.evidence,
     r.edge_type  = row.edge_type,
@@ -201,13 +193,14 @@ MATCH ()-[r]->() RETURN type(r) AS rel, count(*) AS n ORDER BY n DESC;
 // These are read-only illustrations; the metrics are transparent signals -
 // compose your own verdicts from them. All are commented out; copy one to run.
 
-// 5a. Genetically supported but clinically stalled genes:
-//     strong genetic support yet a high share of stopped/terminated trials
-//     in their mechanism. (No verdict baked in - just the metrics side by side.)
+// 5a. Strong genetics but clinically stalled genes: high raw
+//     genetic signal (best_neglog10p) yet a high share of stopped/terminated
+//     trials in their mechanism. (No verdict baked in - the raw metrics side
+//     by side; the old 0-1 translation_gap composite was removed.)
 // MATCH (g:Gene)
-// WHERE g.genetic_support >= 0.7 AND g.stopped_ratio >= 0.3 AND g.n_trials >= 5
-// RETURN g.label, g.genetic_support, g.stopped_ratio, g.n_trials, g.metrics_translation_gap
-// ORDER BY g.stopped_ratio DESC, g.genetic_support DESC LIMIT 25;
+// WHERE g.best_neglog10p >= 20 AND g.stopped_ratio >= 0.3 AND g.n_trials >= 5
+// RETURN g.label, g.best_neglog10p, g.stopped_ratio, g.n_trials, g.n_papers
+// ORDER BY g.stopped_ratio DESC, g.best_neglog10p DESC LIMIT 25;
 
 // 5b. Recently-emerging loci: variants whose latest GWAS is in the last ~3 years
 //     (latest_year >= 2024, i.e. CURRENT_YEAR-2) with a strong association.
@@ -216,18 +209,20 @@ MATCH ()-[r]->() RETURN type(r) AS rel, count(*) AS n ORDER BY n DESC;
 // RETURN v.label, v.latest_year, v.n_recent, v.n_associations, v.n_studies
 // ORDER BY v.latest_year DESC, v.n_associations DESC LIMIT 25;
 
-// 5c. Under-translated pathways: high genetic/functional translation_gap yet
-//     never reached approval. Also surface stopped_ratio and the drug count.
+// 5c. Under-translated pathways (agent-composed): strong member-gene genetics
+//     (mean_best_neglog10p) + broad literature (n_papers) but few/no trials
+//     (trials_per_gene low) and no approval. No shipped 0-1 gap score - compose
+//     the verdict from these raw counts/ratios yourself.
 // MATCH (p:Pathway)
-// WHERE p.has_approval = false
-// RETURN p.label, p.translation_gap, p.stopped_ratio, p.n_trials, p.n_drugs, p.n_recent_trials
-// ORDER BY p.translation_gap DESC LIMIT 25;
+// WHERE p.has_approval = false AND p.n_trials = 0 AND p.mean_best_neglog10p >= 15
+// RETURN p.label, p.mean_best_neglog10p, p.n_papers, p.trials_per_gene, p.n_trials, p.n_drugs, p.n_recent_trials
+// ORDER BY p.mean_best_neglog10p DESC LIMIT 25;
 
 // 5d. Direction-conflict genes: GWAS effect directions disagree across studies
 //     (low direction_agreement with real conflicting evidence).
 // MATCH (g:Gene)
 // WHERE g.direction_agreement IS NOT NULL AND g.direction_agreement < 0.7 AND g.n_conflicting >= 2
-// RETURN g.label, g.direction_agreement, g.n_conflicting, g.genetic_support
+// RETURN g.label, g.direction_agreement, g.n_conflicting, g.best_neglog10p
 // ORDER BY g.n_conflicting DESC, g.direction_agreement ASC LIMIT 25;
 
 // 5e. Track A<->B bridge: which literature topics map to which disease groups,

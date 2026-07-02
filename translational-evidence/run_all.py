@@ -15,9 +15,12 @@ Order:
     6. normalize/clinicaltrials.py
     7. normalize/open_targets.py
     8. normalize/open_targets_l2g.py
-    9. map/pathways.py
-    10. score/scores.py
-    11. validate.py
+    9. normalize/merge_genes.py             (union GWAS genes + OT targets)
+    10. map/gene_pathway_build.py            (API capture -> gene_pathway.csv)
+    11. map/intervention_mechanism_build.py (API capture -> intervention_mechanism.csv)
+    12. map/pathways.py
+    13. score/scores.py
+    14. validate.py
 
 Usage:
     python3 translational-evidence/run_all.py            # full pipeline
@@ -53,6 +56,20 @@ DOWNSTREAM_STEPS = [
     "normalize/clinicaltrials.py",
     "normalize/open_targets.py",
     "normalize/open_targets_l2g.py",
+    # Union the GWAS-derived gene list with Open Targets associated targets so
+    # known/Mendelian AD genes (PSEN1/PSEN2/GRN, ...) that GWAS misses are present
+    # and queryable BEFORE scoring enriches them. Must run after both
+    # normalize/gwas_catalog.py (builds genes.jsonl) and normalize/open_targets.py
+    # (builds target_evidence.jsonl), and before score/scores.py.
+    "normalize/merge_genes.py",
+    # API-derived, multi-valued capture -> thin projection CSVs. These call the
+    # APIs (mygene/Reactome/OT) via the cached data/raw layer, so they respect
+    # --skip-ingest / TE_REFRESH exactly like the ingest steps. gene_pathway_build
+    # regenerates gene_pathway.csv; intervention_mechanism_build regenerates
+    # intervention_mechanism.csv (consumed by normalize/clinicaltrials.py, so a
+    # full re-run should be executed twice, or run these before normalize).
+    "map/gene_pathway_build.py",
+    "map/intervention_mechanism_build.py",
     "map/pathways.py",
     "score/scores.py",
     "validate.py",

@@ -62,6 +62,9 @@ EDGES_PATH = OUT_DIR / "edges.jsonl"
 MANIFEST_PATH = OUT_DIR / "graph_manifest.json"
 
 ENTITY_METRICS_PATH = common.PROCESSED_DIR / "entity_metrics.jsonl"
+# Rich per-drug Open Targets MoA capture (targets[] per drug) for drug_gene
+# edges. Written by map/intervention_mechanism_build.py.
+DRUG_MECHANISM_API_PATH = common.PROCESSED_DIR / "drug_mechanism_api.jsonl"
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +183,43 @@ def match_intervention_mechanism(name, entries):
         if kw in low:
             return mg, kw
     return None, None
+
+
+def load_drug_target_map():
+    """Return {drug_name_slug: {"drug": display, "targets": [gene_symbols]}}.
+
+    Each Open Targets MoA capture record carries ``sources.opentargets[].targets``
+    (target gene SYMBOLS) plus the name spellings the drug appears under (``name``,
+    ``ot_name``, ``query_names``, ``trial_names``). We slug EVERY spelling (the
+    same slugging drug NODES use, from trial intervention names) -> the drug's
+    de-duplicated target symbol list, so a drug node can be joined to its target
+    gene node(s). First slug-owner wins on collision.
+    """
+    if not DRUG_MECHANISM_API_PATH.exists():
+        return {}
+    out = {}
+    for r in common.read_jsonl(DRUG_MECHANISM_API_PATH):
+        targets = set()
+        for ot in (r.get("sources") or {}).get("opentargets", []) or []:
+            for sym in (ot.get("targets") or []):
+                if sym:
+                    targets.add(sym)
+        if not targets:
+            continue
+        display = r.get("name") or r.get("ot_name")
+        entry = {"drug": display, "targets": sorted(targets)}
+        spellings = set()
+        for key in ("name", "ot_name"):
+            if r.get(key):
+                spellings.add(r[key])
+        for key in ("query_names", "trial_names"):
+            for n in (r.get(key) or []):
+                spellings.add(n)
+        for sp in spellings:
+            s = common.slug(sp)
+            if s:
+                out.setdefault(s, entry)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -734,6 +774,47 @@ def build_drug_pathway_edges(drug_agg, trial_mech_to_pathway):
     return edges
 
 
+def build_drug_gene_edges(drug_agg, drug_target_map, symbol_to_gene_id):
+    """drug_gene: drug -> its Open Targets target gene(s).
+
+    Connects the clinical layer to the SPECIFIC gene (and thence, via the
+    existing variant_gene / gene_pathway edges, to the variant and pathway
+    layers). Only drugs that are graph nodes (in ``drug_agg``) and target genes
+    that are graph nodes (in ``symbol_to_gene_id``) are connected; anything else
+    is skipped (never fabricated). De-duplicated on (drug_slug, gene_id).
+    """
+    edges = []
+    seen = set()
+    for s in sorted(drug_agg):
+        entry = drug_target_map.get(s)
+        if not entry:
+            continue
+        drug_name = drug_agg[s].get("name") or entry.get("drug")
+        for sym in entry["targets"]:
+            gid = symbol_to_gene_id.get(sym)
+            if not gid:
+                continue
+            key = (s, gid)
+            if key in seen:
+                continue
+            seen.add(key)
+            edges.append({
+                "edge_id": "e:dg:%s:%s" % (s, gid),
+                "source_id": drug_node_id(s),
+                "target_id": gene_node_id(gid),
+                "edge_type": "drug_gene",
+                "score": None,
+                "evidence": "open_targets_moa_target",
+                "provenance": {
+                    "source": "drug_mechanism_api.sources.opentargets.targets",
+                    "drug_name": drug_name,
+                    "target_gene": sym,
+                    "gene_id": gid,
+                },
+            })
+    return edges
+
+
 def build_topic_edges(topic_links, node_ids):
     """topic_gene / topic_pathway / topic_disease from topic_evidence_links.
 
@@ -893,14 +974,18 @@ def assign_layout(nodes):
 FLAT_METRIC_KEYS = {
     "gene": {
         "stopped_ratio": "clinical.stopped_ratio",
-        "direction_agreement": "genetic.direction_agreement",
+        "direction_agreement": "genetic.direction_agreement_ratio",
         "n_conflicting": "genetic.n_conflicting",
         "n_trials": "clinical.n_trials",
         "first_gwas_year": "temporal.first_gwas_year",
         "latest_gwas_year": "temporal.latest_gwas_year",
         "n_recent_gwas": "temporal.n_recent_gwas",
         "has_approval": "clinical.has_approval",
-        "translation_gap": "composite.translation_gap",
+        # translation_gap composite was removed; hoist its raw components so an
+        # agent / Cypher query can form its own genetics-vs-clinical gap.
+        "best_neglog10p": "genetic.best_neglog10p",
+        "n_papers": "literature.n_papers",
+        "max_l2g": "functional.max_l2g",
     },
     "pathway": {
         "stopped_ratio": "clinical.stopped_ratio",
@@ -910,7 +995,10 @@ FLAT_METRIC_KEYS = {
         "first_trial_year": "temporal.first_trial_year",
         "latest_trial_year": "temporal.latest_trial_year",
         "n_recent_trials": "temporal.n_recent_trials",
-        "translation_gap": "composite.translation_gap",
+        # translation_gap composite removed; hoist raw components instead.
+        "mean_best_neglog10p": "support.mean_best_neglog10p",
+        "trials_per_gene": "ratios.trials_per_gene",
+        "n_papers": "literature.n_papers",
     },
     "variant": {
         "n_associations": "genetic.n_associations",
@@ -918,7 +1006,7 @@ FLAT_METRIC_KEYS = {
         "first_year": "temporal.first_year",
         "latest_year": "temporal.latest_year",
         "n_recent": "temporal.n_recent",
-        "direction_agreement": "genetic.direction_agreement",
+        "direction_agreement": "genetic.direction_agreement_ratio",
     },
 }
 
@@ -1038,6 +1126,7 @@ def main():
 
     gene_pathway_map = load_gene_pathway_map()
     intervention_entries = load_intervention_mechanism_map()
+    drug_target_map = load_drug_target_map()
 
     # symbol -> gene_id (for GWAS reported_genes, which are symbols).
     symbol_to_gene_id = {}
@@ -1092,6 +1181,7 @@ def main():
     edges += build_trial_drug_edges(trials)
     edges += build_trial_pathway_edges(trials, trial_mech_to_pathway)
     edges += build_drug_pathway_edges(drug_agg, trial_mech_to_pathway)
+    edges += build_drug_gene_edges(drug_agg, drug_target_map, symbol_to_gene_id)
     edges += build_topic_edges(topic_links, node_ids)
 
     edges, dropped = drop_dangling_edges(edges, node_ids)

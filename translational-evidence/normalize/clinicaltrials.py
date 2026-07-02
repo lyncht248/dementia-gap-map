@@ -48,6 +48,24 @@ LIFESTYLE_KEYWORDS = (
 # Curated mechanism map
 # ---------------------------------------------------------------------------
 
+def _skip_leading_comments(fh):
+    """Advance past any leading ``#`` comment lines and return the file handle.
+
+    The GENERATED intervention_mechanism.csv (written by
+    map/intervention_mechanism_build.py) starts with a ``# GENERATED ...``
+    provenance comment. Skip such comment lines so the DictReader sees the real
+    header row first. A hand-edited CSV with no leading comment is handled
+    identically (nothing to skip). Mirrors map/pathways.py.
+    """
+    pos = fh.tell()
+    line = fh.readline()
+    while line and line.lstrip().startswith("#"):
+        pos = fh.tell()
+        line = fh.readline()
+    fh.seek(pos)
+    return fh
+
+
 def load_mechanism_map(path):
     """Load the curated keyword->mechanism map as an ordered list of pairs.
 
@@ -56,7 +74,7 @@ def load_mechanism_map(path):
     """
     pairs = []  # list of (keyword_lower, mechanism_group)
     with pathlib.Path(path).open("r", encoding="utf-8", newline="") as fh:
-        reader = csv.DictReader(fh)
+        reader = csv.DictReader(_skip_leading_comments(fh))
         for row in reader:
             keyword = (row.get("keyword") or "").strip().lower()
             group = (row.get("mechanism_group") or "").strip()

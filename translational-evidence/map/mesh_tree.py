@@ -42,13 +42,48 @@ Fallback: if SPARQL fails, per-UI descriptor JSON from
 
 The path actually used is logged.
 
+Free-text classification
+------------------------
+``classify_disease_text(text)`` extends the same MeSH-derived idea to arbitrary
+free text (a GWAS trait, a trial condition, an Open Targets disease label). It
+REPLACES the old hand-curated keyword lists that used to live in ``common.py``:
+the vocabulary is now driven entirely by MeSH descriptor preferred labels AND
+their concept entry terms (synonyms), read live for the Dementia subtree.
+
+For every descriptor under the two Dementia branches we fetch its preferred
+label plus all concept term labels (prefLabel/altLabel) via SPARQL (cached under
+RAW_DIR/mesh/dementia_subtree_labels_{branch}_{stamp}.json). Each label/synonym
+is bucketed to a ``disease_group`` by the SAME tree-branch anchor rule used for
+UIs, then normalized into a phrase index. Because MeSH labels are stored in the
+inverted form ("Dementia, Vascular"), we ALSO index the de-inverted natural form
+("Vascular Dementia") so ordinary free text matches.
+
+``classify_disease_text`` finds every MeSH label/synonym that occurs as a whole
+contiguous phrase in the (normalized) input and returns ONE group by the same
+precedence the hand list used:
+
+    mixed_dementia
+      > vascular_dementia / frontotemporal_dementia / lewy_body_dementia
+      > alzheimer
+      > dementia_unspecified
+
+``mixed_dementia`` is returned for an explicit "Mixed Dementias" match, for
+alzheimer co-occurring with a specific non-alzheimer subtype, or for two or more
+distinct specific subtypes. It returns ``None`` when NO dementia label matches
+(e.g. "mild cognitive impairment" / "cognitive dysfunction", which are NOT under
+the Dementia tree -- consistent with the topic bridge).
+
 Public API
 ----------
     fetch_dementia_subtree()          -> list[{ui, tree_number, label}]
     classify_mesh_ui(ui)              -> {disease_group, tree_number, label} | None
     DERIVED_MESH_DISEASE              -> {ui: {disease_group, tree_number, label}}
+    classify_disease_text(text)       -> disease_group | None
+    build_label_phrase_index()        -> {phrase: disease_group}
+    LABEL_PHRASE_GROUP                -> {normalized_phrase: disease_group}
 
 None from ``classify_mesh_ui`` means the UI is not under a Dementia branch.
+None from ``classify_disease_text`` means no Dementia label/synonym matched.
 
 STDLIB-only Python 3.9. Run directly to print the classified table and write a
 gitignored debug CSV to INTERIM_DIR/mesh_disease_derived.csv:
@@ -57,6 +92,7 @@ gitignored debug CSV to INTERIM_DIR/mesh_disease_derived.csv:
 """
 
 import csv
+import re
 import sys
 import pathlib
 
@@ -218,6 +254,147 @@ def _fetch_subtree_sparql():
     if not rows:
         raise RuntimeError("MeSH SPARQL returned no rows for any Dementia branch")
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Labels + synonyms for free-text classification
+# ---------------------------------------------------------------------------
+
+def _sparql_labels_query(branch_prefix):
+    """Build the label+entry-terms SPARQL query for one branch prefix.
+
+    Returns, for every descriptor whose tree number is under ``branch_prefix``,
+    its tree number, preferred label, and each of its concepts' term labels
+    (prefLabel and altLabel entry terms / synonyms) via an OPTIONAL join. A
+    descriptor with no synonyms still yields one row (altlabel unbound).
+    """
+    return (
+        "PREFIX meshv: <http://id.nlm.nih.gov/mesh/vocab#>\n"
+        "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
+        "SELECT ?d ?tn ?dlabel ?altlabel WHERE {\n"
+        "  ?d meshv:treeNumber ?t . ?d rdfs:label ?dlabel .\n"
+        "  BIND(STRAFTER(STR(?t),\"http://id.nlm.nih.gov/mesh/\") AS ?tn)\n"
+        "  FILTER(STRSTARTS(?tn,\"%s\"))\n"
+        "  OPTIONAL {\n"
+        "    ?d meshv:concept ?c . ?c meshv:term ?term .\n"
+        "    ?term meshv:prefLabel|meshv:altLabel ?altlabel .\n"
+        "  }\n"
+        "} ORDER BY ?tn" % branch_prefix
+    )
+
+
+def fetch_label_synonym_rows():
+    """Fetch (tree_number, label, synonym) rows for the whole Dementia subtree.
+
+    One row per (descriptor tree number, term label); a descriptor's preferred
+    label is carried on every one of its rows, and ``synonym`` is the concept
+    term label (or None when the descriptor has no entry terms). Cached per
+    branch under RAW_DIR/mesh/dementia_subtree_labels_{branch}_{stamp}.json.
+    Raises on failure so callers can decide how to degrade.
+    """
+    stamp = common.today_stamp()
+    rows = []
+    for branch in DEMENTIA_BRANCHES:
+        cache = (common.RAW_DIR / "mesh"
+                 / ("dementia_subtree_labels_%s_%s.json"
+                    % (branch.replace(".", "_"), stamp)))
+        data = common.get_json(
+            MESH_SPARQL_URL,
+            params={"query": _sparql_labels_query(branch), "format": "JSON"},
+            cache_path=cache,
+        )
+        bindings = (data.get("results") or {}).get("bindings") or []
+        for b in bindings:
+            tn = (b.get("tn") or {}).get("value")
+            dlabel = (b.get("dlabel") or {}).get("value")
+            altlabel = (b.get("altlabel") or {}).get("value")
+            if tn and dlabel:
+                rows.append({
+                    "tree_number": tn,
+                    "label": dlabel,
+                    "synonym": altlabel,
+                })
+        common.log("MeSH SPARQL labels branch %s -> %d rows"
+                   % (branch, len(bindings)))
+    if not rows:
+        raise RuntimeError(
+            "MeSH SPARQL returned no label rows for any Dementia branch"
+        )
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Normalization + phrase index
+# ---------------------------------------------------------------------------
+
+# Possessive 's / ’s (e.g. "Alzheimer's") -> stripped so it matches the MeSH
+# preferred form ("Alzheimer Disease"). Anything else non-alphanumeric becomes a
+# token separator.
+_POSSESSIVE_RE = re.compile(r"[’']s\b")
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _normalize_tokens(text):
+    """Lowercase, strip possessive 's, split on punctuation -> token list."""
+    if not text:
+        return []
+    s = str(text).lower()
+    s = _POSSESSIVE_RE.sub("", s)
+    s = _NON_ALNUM_RE.sub(" ", s)
+    return s.split()
+
+
+def _deinvert_forms(label):
+    """Return the label plus its comma-de-inverted natural form(s).
+
+    MeSH stores labels inverted ("Dementia, Vascular"); free text uses the
+    natural order ("Vascular Dementia"). For a comma-separated label we also
+    yield the reversed-parts join so ordinary text matches as a whole phrase.
+    """
+    forms = [label]
+    parts = [p.strip() for p in label.split(",") if p.strip()]
+    if len(parts) >= 2:
+        forms.append(" ".join(reversed(parts)))
+    return forms
+
+
+def build_label_phrase_index(rows=None):
+    """Build {normalized_phrase -> disease_group} from label/synonym rows.
+
+    Each descriptor label and each entry-term synonym (and their de-inverted
+    natural forms) is normalized to a whitespace-joined token phrase and mapped
+    to the disease_group of its tree number (via ``tree_number_group``). When
+    the same phrase would map to several groups the MOST SPECIFIC one wins (a
+    concrete subtype over dementia_unspecified). Also populates the module-level
+    ``LABEL_TOKEN_VOCAB`` used to de-pluralize input tokens.
+    """
+    if rows is None:
+        rows = fetch_label_synonym_rows()
+    index = {}
+    vocab = set()
+    for row in rows:
+        group = tree_number_group(row.get("tree_number"))
+        if group is None:
+            continue
+        candidates = []
+        if row.get("label"):
+            candidates.extend(_deinvert_forms(row["label"]))
+        if row.get("synonym"):
+            candidates.extend(_deinvert_forms(row["synonym"]))
+        for phrase in candidates:
+            tokens = _normalize_tokens(phrase)
+            if not tokens:
+                continue
+            vocab.update(tokens)
+            key = " ".join(tokens)
+            existing = index.get(key)
+            if existing is None or _GROUP_RANK.get(group, 0) > _GROUP_RANK.get(
+                existing, 0
+            ):
+                index[key] = group
+    global LABEL_TOKEN_VOCAB
+    LABEL_TOKEN_VOCAB = vocab
+    return index
 
 
 # ---------------------------------------------------------------------------
@@ -389,9 +566,147 @@ def classify_mesh_ui(ui):
     return _ensure_derived().get(ui)
 
 
-# Build eagerly on import so ``DERIVED_MESH_DISEASE`` is a populated dict for
-# callers that read the constant directly (per the task's public API contract).
+# ---------------------------------------------------------------------------
+# Free-text classifier (MeSH-label driven) -- replaces the hand keyword lists
+# ---------------------------------------------------------------------------
+
+# The three concrete non-alzheimer subtypes: any of these co-occurring with
+# alzheimer (or with each other) implies mixed_dementia, matching the old rule.
+_SPECIFIC_SUBTYPES = frozenset((
+    "vascular_dementia",
+    "frontotemporal_dementia",
+    "lewy_body_dementia",
+))
+
+LABEL_PHRASE_GROUP = {}   # {normalized_phrase: disease_group}, built lazily
+LABEL_TOKEN_VOCAB = set()  # set of tokens seen in any indexed phrase
+LABELS_FETCH_PATH = None   # "sparql" | None
+_LABELS_BUILT = False
+
+
+def _ensure_label_index():
+    """Build LABEL_PHRASE_GROUP once (idempotent).
+
+    On SPARQL failure the index is left EMPTY (never guessed); classification
+    then returns None for every input rather than fabricating a group.
+    """
+    global LABEL_PHRASE_GROUP, _LABELS_BUILT, LABELS_FETCH_PATH
+    if _LABELS_BUILT:
+        return LABEL_PHRASE_GROUP
+    try:
+        rows = fetch_label_synonym_rows()
+        LABEL_PHRASE_GROUP = build_label_phrase_index(rows)
+        LABELS_FETCH_PATH = "sparql"
+        common.log("MeSH label phrase index: %d phrases (path=sparql)"
+                   % len(LABEL_PHRASE_GROUP))
+    except Exception as err:  # noqa: BLE001 broad on purpose
+        LABEL_PHRASE_GROUP = {}
+        LABELS_FETCH_PATH = None
+        common.log("MeSH label phrase index build FAILED (%s); "
+                   "classify_disease_text will return None for all input" % err)
+    _LABELS_BUILT = True
+    return LABEL_PHRASE_GROUP
+
+
+def _input_tokens(text):
+    """Normalize input text to tokens, de-pluralizing against the MeSH vocab.
+
+    A token ending in 's' whose singular is a known MeSH label token (and which
+    is not itself a known token) is de-pluralized, so "Alzheimers" -> "alzheimer"
+    matches the MeSH preferred form "Alzheimer Disease". "bodies" stays "bodies"
+    because "bodie" is not in the vocab -- the rule is conservative on purpose.
+    """
+    out = []
+    for tok in _normalize_tokens(text):
+        # Drop an orphaned lone "s": upstream cleaning of a possessive apostrophe
+        # sometimes leaves "Alzheimer's" as "Alzheimer s". A bare "s" is never a
+        # MeSH token, so dropping it only ever HELPS a phrase match.
+        if tok == "s":
+            continue
+        if (tok.endswith("s") and tok not in LABEL_TOKEN_VOCAB
+                and tok[:-1] in LABEL_TOKEN_VOCAB):
+            out.append(tok[:-1])
+        else:
+            out.append(tok)
+    return out
+
+
+def _matched_groups(text):
+    """Return the set of disease_groups whose MeSH phrase occurs in ``text``.
+
+    A phrase matches when its normalized token sequence appears as a whole
+    contiguous run inside the normalized input tokens.
+    """
+    index = _ensure_label_index()
+    if not index:
+        return set()
+    tokens = _input_tokens(text)
+    n = len(tokens)
+    if n == 0:
+        return set()
+    groups = set()
+    for i in range(n):
+        for j in range(i + 1, n + 1):
+            phrase = " ".join(tokens[i:j])
+            group = index.get(phrase)
+            if group is not None:
+                groups.add(group)
+    return groups
+
+
+def classify_disease_text(text):
+    """Classify free text into ONE disease_group via MeSH labels, or None.
+
+    Finds every MeSH descriptor label / entry-term synonym (Dementia subtree)
+    that occurs as a whole phrase in the normalized input and resolves to one
+    group by precedence:
+
+        mixed_dementia
+          > vascular_dementia / frontotemporal_dementia / lewy_body_dementia
+          > alzheimer
+          > dementia_unspecified
+
+    ``mixed_dementia`` is returned for an explicit "Mixed Dementias" match, for
+    alzheimer + a specific subtype, or for two or more distinct specific
+    subtypes. Returns None when no Dementia label matches (e.g. MCI / cognitive
+    dysfunction, which are not under the Dementia tree).
+    """
+    if not text:
+        return None
+    groups = _matched_groups(text)
+    if not groups:
+        return None
+
+    # 1) mixed_dementia: explicit, OR alzheimer + a specific subtype, OR two or
+    #    more distinct specific subtypes.
+    present_specific = groups & _SPECIFIC_SUBTYPES
+    if "mixed_dementia" in groups:
+        return "mixed_dementia"
+    if "alzheimer" in groups and present_specific:
+        return "mixed_dementia"
+    if len(present_specific) >= 2:
+        return "mixed_dementia"
+
+    # 2) a single specific subtype.
+    if present_specific:
+        return next(iter(present_specific))
+
+    # 3) alzheimer outranks bare dementia_unspecified.
+    if "alzheimer" in groups:
+        return "alzheimer"
+
+    # 4) generic dementia with no subtype.
+    if DISEASE_GROUP_UNSPECIFIED in groups:
+        return DISEASE_GROUP_UNSPECIFIED
+
+    # 5) any other Dementia-branch group (defensive; anchors cover all today).
+    return sorted(groups)[0]
+
+
+# Build eagerly on import so ``DERIVED_MESH_DISEASE`` and the phrase index are
+# populated for callers that read the constants directly (public API contract).
 _ensure_derived()
+_ensure_label_index()
 
 
 # ---------------------------------------------------------------------------

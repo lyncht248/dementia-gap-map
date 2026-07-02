@@ -51,6 +51,26 @@ LINK METHODS, in PRIORITY order (structured joins first, regex demoted last):
       whole-word symbol match in title+abstract, with MIN_SYMBOL_LEN /
       AMBIGUOUS_SYMBOLS safeguards. Clearly the lowest-confidence signal.
 
+  (6) drug_target          link_type=model_inference      confidence=high
+      SPECIFIC trial attachment. Each trial's DRUG/BIOLOGICAL interventions are
+      matched (by exact normalised name) to the Open Targets MoA capture
+      (drug_mechanism_api.jsonl) -> its target gene symbol(s) -> those genes'
+      gene_ids. A trial is attached to EXACTLY the topics that are ALREADY linked
+      (via any method above) to one of its drug's target genes, i.e. the trial
+      rides its drug's target gene into the topic. Emits a topic->trial link
+      (evidence_type="trial", evidence_id=nct_id) with provenance carrying every
+      supporting {nct_id, drug, target_gene, gene_id}. This is target-specific,
+      NOT bulk-by-mechanism, so link counts vary per trial instead of being
+      uniform/generic.
+
+  (7) trial_mechanism      link_type=model_inference      confidence=low
+      FALLBACK ONLY, for trials whose drug has NO resolved Open Targets target
+      (so method (6) cannot fire). The trial's coarse mechanism_group is mapped
+      (via each pathway's mapped_trial_mechanism crosswalk) to a pathway_group,
+      and the trial is attached to the topics whose DOMINANT pathway_group is
+      that group. Clearly coarse/generic, hence low confidence; kept only so
+      target-less trials are not orphaned.
+
 Dedup key is (topic, evidence_type, evidence_id, link_type). When the same
 (topic, gene) is found by several methods, the HIGHEST-confidence link is kept
 and the others' methods are recorded in provenance.also_found_by.
@@ -93,6 +113,9 @@ GENES = common.PROCESSED_DIR / "genes.jsonl"
 GWAS = common.PROCESSED_DIR / "gwas_associations.jsonl"
 PATHWAYS = common.PROCESSED_DIR / "pathways.jsonl"
 TRIALS = common.PROCESSED_DIR / "trials.jsonl"
+# Rich per-drug Open Targets MoA capture (targets[] per drug). Authoritative,
+# trials-corpus-driven, written by map/intervention_mechanism_build.py.
+DRUG_MECHANISM_API = common.PROCESSED_DIR / "drug_mechanism_api.jsonl"
 
 # Curated crosswalks (authoritative, structured join tables).
 # NOTE: mesh_ui -> disease_group is NO LONGER a hand CSV. It is derived live from
@@ -133,10 +156,29 @@ AMBIGUOUS_SYMBOLS = {
 # Loading / indexing
 # ---------------------------------------------------------------------------
 
+def _skip_leading_comments(fh):
+    """Advance past leading ``#`` comment lines and return the file handle.
+
+    The API-derived crosswalks (e.g. the GENERATED gene_pathway.csv written by
+    map/gene_pathway_build.py) begin with a ``# GENERATED ...`` provenance
+    comment. Skipping such lines lets the DictReader see the real header row
+    (``gene_symbol,pathway_group,notes``) first. A hand-authored CSV with no
+    leading comment (e.g. chemical_gene.csv) is handled identically (nothing to
+    skip). Mirrors map/pathways.py and normalize/clinicaltrials.py.
+    """
+    pos = fh.tell()
+    line = fh.readline()
+    while line and line.lstrip().startswith("#"):
+        pos = fh.tell()
+        line = fh.readline()
+    fh.seek(pos)
+    return fh
+
+
 def _read_csv_rows(csv_path):
-    """Yield DictReader rows for a CSV file (utf-8)."""
+    """Yield DictReader rows for a CSV file (utf-8), skipping leading comments."""
     with pathlib.Path(csv_path).open("r", encoding="utf-8", newline="") as fh:
-        for row in csv.DictReader(fh):
+        for row in csv.DictReader(_skip_leading_comments(fh)):
             yield row
 
 
@@ -225,6 +267,98 @@ def index_trials_by_mechanism(trials):
         if mech:
             by_mech[mech].append(t)
     return by_mech
+
+
+def _norm_drug_name(name):
+    """Normalise a drug / intervention name for exact matching."""
+    return (name or "").strip().lower()
+
+
+def index_drug_targets_by_name(drug_records):
+    """Return {normalised_drug_name: {"drug": display, "targets": [symbols]}}.
+
+    Each Open Targets MoA capture record (drug_mechanism_api.jsonl) carries
+    ``sources.opentargets[].targets`` (a list of target gene SYMBOLS) plus the
+    several name spellings the drug appears under (``name``, ``ot_name``,
+    ``query_names``, ``trial_names``). We index EVERY spelling -> the drug's
+    de-duplicated target symbol list so a trial intervention name can be matched
+    by exact (normalised) string. First spelling-owner wins on collision.
+    """
+    by_name = {}
+    for r in drug_records:
+        targets = set()
+        for ot in (r.get("sources") or {}).get("opentargets", []) or []:
+            for sym in (ot.get("targets") or []):
+                if sym:
+                    targets.add(sym)
+        display = r.get("name") or r.get("ot_name")
+        entry = {"drug": display, "targets": sorted(targets)}
+        names = set()
+        for key in ("name", "ot_name"):
+            if r.get(key):
+                names.add(_norm_drug_name(r[key]))
+        for key in ("query_names", "trial_names"):
+            for n in (r.get(key) or []):
+                nn = _norm_drug_name(n)
+                if nn:
+                    names.add(nn)
+        for nn in names:
+            by_name.setdefault(nn, entry)
+    return by_name
+
+
+def resolve_trial_drug_targets(trial, drug_by_name, sym_to_gene):
+    """Resolve a trial -> its drug(s) -> Track-B target genes.
+
+    Returns a list of dicts {nct_id, drug, target_gene, gene_id}, one per
+    (matched drug, target gene present in Track B genes.jsonl). A trial can
+    contribute several rows (multiple drug arms / multiple targets per drug).
+    De-duplicated on (drug, gene_id).
+    """
+    nct_id = trial.get("nct_id")
+    out = []
+    seen = set()
+    for iv in (trial.get("interventions") or []):
+        if iv.get("type") not in ("DRUG", "BIOLOGICAL"):
+            continue
+        entry = drug_by_name.get(_norm_drug_name(iv.get("name")))
+        if not entry:
+            continue
+        drug = entry["drug"]
+        for sym in entry["targets"]:
+            gene = sym_to_gene.get(sym)
+            if gene is None:
+                continue   # target not in Track B evidence; record nothing
+            gene_id = gene["gene_id"]
+            key = (drug, gene_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({
+                "nct_id": nct_id,
+                "drug": drug,
+                "target_gene": sym,
+                "gene_id": gene_id,
+            })
+    return out
+
+
+def index_trial_targets_by_gene(trials, drug_by_name, sym_to_gene):
+    """Build gene_id -> [ {nct_id, drug, target_gene, gene_id} ] over all trials.
+
+    Also returns, as a second value, the set of nct_ids that resolved to at
+    least one Track-B target gene (so the mechanism fallback can be limited to
+    trials WITHOUT a resolved target).
+    """
+    by_gene = defaultdict(list)
+    trials_with_target = set()
+    for t in trials:
+        rows = resolve_trial_drug_targets(t, drug_by_name, sym_to_gene)
+        if rows:
+            trials_with_target.add(t.get("nct_id"))
+        for row in rows:
+            by_gene[row["gene_id"]].append(row)
+    return by_gene, trials_with_target
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +538,8 @@ def build_topic(cluster, ctx):
             "confidence": "high",
             "provenance": {
                 "join_key": "pmid",
-                "reported_symbol": symbol,
+                "gene_symbol": symbol,        # consumer-facing key (Track A joins on this)
+                "reported_symbol": symbol,    # kept for provenance clarity
                 "pmids": pmids,
                 "study_accessions": sorted(gene_accessions[symbol]),
                 "n_pmids": len(pmids),
@@ -688,6 +823,108 @@ def build_topic(cluster, ctx):
         linked_genes.setdefault(symbol, gene)
         regex_gene_syms.add(symbol)
 
+    # =====================================================================
+    # (6) drug_target  ->  trial (model_inference, high)  [SPECIFIC]
+    # =====================================================================
+    # A trial attaches to THIS topic iff its drug's Open Targets target gene is
+    # one of the topic's already-linked genes. Emit ONE topic->trial link per
+    # trial, accumulating every supporting (drug, target_gene, gene_id) tuple.
+    trial_targets_by_gene = ctx["trial_targets_by_gene"]
+    trials_by_nct = ctx["trials_by_nct"]
+    linked_gene_ids = {g["gene_id"] for g in linked_genes.values()}
+    # nct_id -> list of {drug, target_gene, gene_id} supporting this topic.
+    trial_support = defaultdict(list)
+    for gene_id in linked_gene_ids:
+        for row in trial_targets_by_gene.get(gene_id, []):
+            trial_support[row["nct_id"]].append({
+                "drug": row["drug"],
+                "target_gene": row["target_gene"],
+                "gene_id": row["gene_id"],
+            })
+    n_drug_target_trials = 0
+    for nct_id in sorted(trial_support):
+        support = trial_support[nct_id]
+        # Deterministic ordering of the supporting tuples.
+        support = sorted(support, key=lambda s: (s["target_gene"], s["drug"] or "",
+                                                 s["gene_id"]))
+        trial = trials_by_nct.get(nct_id) or {}
+        drugs = sorted({s["drug"] for s in support if s["drug"]})
+        target_genes = sorted({s["target_gene"] for s in support})
+        emitted = add_link({
+            "topic_id": topic_id,
+            "evidence_type": "trial",
+            "evidence_id": nct_id,
+            "link_type": "model_inference",
+            "supporting_paper_ids": [],
+            # score = share of the topic's linked genes that this trial targets.
+            "score": (round(len({s["gene_id"] for s in support})
+                            / len(linked_gene_ids), 4)
+                      if linked_gene_ids else None),
+            "method": "drug_target",
+            "confidence": "high",
+            "provenance": {
+                "join_key": "drug_name->ot_target->gene_id",
+                "nct_id": nct_id,
+                "brief_title": trial.get("brief_title"),
+                "drugs": drugs,
+                "target_genes": target_genes,
+                "supports": support,
+                "n_supports": len(support),
+            },
+            "notes": ("trial %s attached via drug target gene(s) %s "
+                      "(drug(s): %s) that are linked to this topic"
+                      % (nct_id, target_genes, drugs)),
+        })
+        if emitted:
+            n_drug_target_trials += 1
+
+    # =====================================================================
+    # (7) trial_mechanism  ->  trial (model_inference, low)  [FALLBACK ONLY]
+    # =====================================================================
+    # ONLY for trials whose drug has NO resolved Open Targets target (so (6)
+    # cannot fire). Attach the trial to THIS topic iff the trial's coarse
+    # mechanism_group maps (via mapped_trial_mechanism) to the topic's DOMINANT
+    # pathway_group. Coarse/generic -> low confidence.
+    trials_with_target = ctx["trials_with_target"]
+    trials_by_mech = ctx["trials_by_mech"]
+    pathway_to_trial_mech = ctx["pathway_to_trial_mech"]
+    n_mechanism_fallback_trials = 0
+    if dominant_group:
+        mapped_mech = pathway_to_trial_mech.get(dominant_group)
+        if mapped_mech:
+            for trial in trials_by_mech.get(mapped_mech, []):
+                nct_id = trial.get("nct_id")
+                if not nct_id or nct_id in trials_with_target:
+                    continue   # target-specific link already available -> skip
+                emitted = add_link({
+                    "topic_id": topic_id,
+                    "evidence_type": "trial",
+                    "evidence_id": nct_id,
+                    "link_type": "model_inference",
+                    "supporting_paper_ids": [],
+                    "score": None,
+                    "method": "trial_mechanism",
+                    "confidence": "low",
+                    "provenance": {
+                        "join_key": ("dominant_pathway_group->"
+                                     "mapped_trial_mechanism->mechanism_group"),
+                        "nct_id": nct_id,
+                        "brief_title": trial.get("brief_title"),
+                        "pathway_group": dominant_group,
+                        "trial_mechanism_group": mapped_mech,
+                        "fallback": True,
+                        "note": ("coarse mechanism attachment; used only "
+                                 "because the trial's drug has no resolved "
+                                 "Open Targets target gene"),
+                    },
+                    "notes": ("trial %s attached by coarse mechanism_group "
+                              "'%s' (dominant pathway '%s') - low-confidence "
+                              "fallback (no resolved drug target)"
+                              % (nct_id, mapped_mech, dominant_group)),
+                })
+                if emitted:
+                    n_mechanism_fallback_trials += 1
+
     # -----------------------------------------------------------------------
     # Rollup record
     # -----------------------------------------------------------------------
@@ -707,6 +944,9 @@ def build_topic(cluster, ctx):
         n_gwas_assoc=n_gwas_assoc,
         n_pathways=n_pathways,
         disease_rollup=disease_rollup,
+        trial_links=[lk for lk in links if lk["evidence_type"] == "trial"],
+        n_drug_target_trials=n_drug_target_trials,
+        n_mechanism_fallback_trials=n_mechanism_fallback_trials,
         ctx=ctx,
     )
 
@@ -716,9 +956,10 @@ def build_topic(cluster, ctx):
 def build_rollup(topic_id, label, linked_genes, paper_overlap_syms,
                  chemical_gene_syms, regex_gene_syms, overlap_pmids,
                  pmid_to_assocs, dominant_group, group_to_pathway,
-                 n_gwas_assoc, n_pathways, disease_rollup, ctx):
+                 n_gwas_assoc, n_pathways, disease_rollup, trial_links,
+                 n_drug_target_trials, n_mechanism_fallback_trials, ctx):
     """Assemble the Track B half of the frontend record for one topic."""
-    trials_by_mech = ctx["trials_by_mech"]
+    trials_by_nct = ctx["trials_by_nct"]
 
     # top_genes: up to 8 linked genes ranked by genetic_support.
     genes_sorted = sorted(
@@ -756,24 +997,39 @@ def build_rollup(topic_id, label, linked_genes, paper_overlap_syms,
         if len(top_gwas) >= 8:
             break
 
-    # Dominant pathway record + its trial-mechanism crosswalk.
+    # Dominant pathway record (kept for the aggregated pathway scores below).
     dominant_pathway = (group_to_pathway.get(dominant_group)
                         if dominant_group else None)
     pathway_scores = (dominant_pathway or {}).get("scores") or {}
 
-    # trials: up to 10 whose mechanism_group == the dominant pathway's mapped
-    # trial mechanism (via the pathway record's crosswalk).
+    # trials: up to 10, from the SPECIFIC topic->trial links built above.
+    # drug_target (high, target-specific) trials are surfaced FIRST, then the
+    # low-confidence trial_mechanism fallback trials. This replaces the old
+    # generic "all trials for the dominant mechanism" listing so the rollup
+    # reflects the same specificity as the links file.
+    def _link_rank(lk):
+        # drug_target (high) before trial_mechanism (low); higher score first.
+        method_rank = 0 if lk.get("method") == "drug_target" else 1
+        score = lk.get("score")
+        return (method_rank, -(score if score is not None else -1.0),
+                lk.get("evidence_id") or "")
+
     trials_out = []
-    mapped_trial_mech = pathway_scores.get("mapped_trial_mechanism")
-    if mapped_trial_mech:
-        for t in trials_by_mech.get(mapped_trial_mech, [])[:10]:
-            phases = t.get("phases") or []
-            trials_out.append({
-                "nct_id": t.get("nct_id"),
-                "brief_title": t.get("brief_title"),
-                "phase": phases[-1] if phases else None,
-                "mechanism_group": t.get("mechanism_group"),
-            })
+    for lk in sorted(trial_links, key=_link_rank)[:10]:
+        nct_id = lk.get("evidence_id")
+        t = trials_by_nct.get(nct_id) or {}
+        phases = t.get("phases") or []
+        prov = lk.get("provenance") or {}
+        trials_out.append({
+            "nct_id": nct_id,
+            "brief_title": t.get("brief_title"),
+            "phase": phases[-1] if phases else None,
+            "mechanism_group": t.get("mechanism_group"),
+            "link_method": lk.get("method"),
+            "link_confidence": lk.get("confidence"),
+            "target_genes": prov.get("target_genes"),
+            "drugs": prov.get("drugs"),
+        })
 
     # Aggregated scores.
     mean_genetic = _mean([_genetic_support(g) for g in linked_genes.values()])
@@ -808,13 +1064,16 @@ def build_rollup(topic_id, label, linked_genes, paper_overlap_syms,
         "n_gwas_assoc": n_gwas_assoc,
         "n_pathways": n_pathways,
         "n_diseases": len(disease_rollup),
+        "n_trials": len(trial_links),
+        "n_trials_drug_target": n_drug_target_trials,
+        "n_trials_mechanism_fallback": n_mechanism_fallback_trials,
     }
 
     provenance = (
         "Track A cluster + Track B evidence structured-first join "
         "(pmid_join > mesh_ui_join > chemical_ui_crosswalk > "
-        "gene_pathway_curated > regex_symbol_match) on the track_a_snapshot "
-        "(%d papers / %d clusters)."
+        "gene_pathway_curated > regex_symbol_match > drug_target > "
+        "trial_mechanism) on the track_a_snapshot (%d papers / %d clusters)."
         % (ctx["track_a_papers"], ctx["track_a_clusters"])
     )
 
@@ -845,6 +1104,8 @@ def main():
     gwas = common.read_jsonl(GWAS)
     pathways = common.read_jsonl(PATHWAYS)
     trials = common.read_jsonl(TRIALS)
+    drug_records = (common.read_jsonl(DRUG_MECHANISM_API)
+                    if DRUG_MECHANISM_API.exists() else [])
 
     track_a_papers = len(papers)
     track_a_clusters = len(clusters)
@@ -861,6 +1122,7 @@ def main():
     gwas_pmids, pmid_to_assocs = index_gwas(gwas)
     group_to_pathway = index_pathways(pathways)
     trials_by_mech = index_trials_by_mechanism(trials)
+    trials_by_nct = {t.get("nct_id"): t for t in trials if t.get("nct_id")}
     sym_to_group = load_gene_pathway_map(GENE_PATHWAY_CSV)
     chemical_gene = load_chemical_gene_map(CHEMICAL_GENE_CSV)
     # API-derived MeSH -> disease_group map (built on import of mesh_tree).
@@ -869,6 +1131,28 @@ def main():
                "mesh->disease=%d (API-derived via mesh_tree, path=%s)"
                % (len(sym_to_group), len(chemical_gene), len(mesh_disease),
                   mesh_tree.FETCH_PATH))
+
+    # --- drug_target (trial specificity) crosswalks ------------------------
+    # trial intervention name -> drug's OT target gene symbols, then trial ->
+    # Track-B target genes, indexed by gene_id for per-topic attachment.
+    drug_by_name = index_drug_targets_by_name(drug_records)
+    trial_targets_by_gene, trials_with_target = index_trial_targets_by_gene(
+        trials, drug_by_name, sym_to_gene)
+    # pathway_group -> trial-side mechanism_group (mapped_trial_mechanism), for
+    # the low-confidence mechanism fallback.
+    pathway_to_trial_mech = {}
+    for p in pathways:
+        mg = p.get("mechanism_group")
+        mtm = (p.get("scores") or {}).get("mapped_trial_mechanism")
+        if mg and mtm:
+            pathway_to_trial_mech[mg] = mtm
+    n_target_rows = sum(len(v) for v in trial_targets_by_gene.values())
+    common.log("drug_target: %d drug records, %d name spellings indexed; "
+               "%d trials resolved to a Track-B target gene "
+               "(%d trial<->gene target rows across %d genes)"
+               % (len(drug_records), len(drug_by_name),
+                  len(trials_with_target), n_target_rows,
+                  len(trial_targets_by_gene)))
 
     # Precompile a case-sensitive whole-word regex per eligible symbol
     # (regex_symbol_match fallback only).
@@ -906,6 +1190,10 @@ def main():
         "chemical_gene": chemical_gene,
         "group_to_pathway": group_to_pathway,
         "trials_by_mech": trials_by_mech,
+        "trials_by_nct": trials_by_nct,
+        "trial_targets_by_gene": trial_targets_by_gene,
+        "trials_with_target": trials_with_target,
+        "pathway_to_trial_mech": pathway_to_trial_mech,
         "symbol_patterns": symbol_patterns,
         "track_a_papers": track_a_papers,
         "track_a_clusters": track_a_clusters,
@@ -982,12 +1270,13 @@ def print_report(all_links, rollups, per_topic_links):
     # Per-topic summary.
     print("\n=== per-topic link summary ===")
     header = ("topic_id", "label", "links", "gwas", "genes",
-              "disease", "pathway", "pathway_group")
+              "disease", "pathway", "trials", "trg", "mech", "pathway_group")
     rows = []
     rollup_by_id = {r["topic_id"]: r for r in rollups}
     for topic_id in sorted(per_topic_links):
         links = per_topic_links[topic_id]
         r = rollup_by_id.get(topic_id, {})
+        trial_links = [lk for lk in links if lk["evidence_type"] == "trial"]
         rows.append((
             topic_id,
             (r.get("label") or "")[:30],
@@ -997,6 +1286,11 @@ def print_report(all_links, rollups, per_topic_links):
             str(sum(1 for lk in links if lk["evidence_type"] == "gene")),
             str(sum(1 for lk in links if lk["evidence_type"] == "disease")),
             str(sum(1 for lk in links if lk["evidence_type"] == "pathway")),
+            str(len(trial_links)),
+            str(sum(1 for lk in trial_links
+                    if lk.get("method") == "drug_target")),
+            str(sum(1 for lk in trial_links
+                    if lk.get("method") == "trial_mechanism")),
             str(r.get("pathway_group")),
         ))
     widths = [max(len(header[i]), max((len(row[i]) for row in rows),
@@ -1005,6 +1299,9 @@ def print_report(all_links, rollups, per_topic_links):
     print("  ".join("-" * widths[i] for i in range(len(header))))
     for row in rows:
         print("  ".join(row[i].ljust(widths[i]) for i in range(len(header))))
+
+    # --- trial specificity report (the point of the drug_target change) ----
+    print_trial_specificity(all_links)
 
     # One sample of each NEW link type (method/confidence/provenance).
     print("\n=== sample of each link type ===")
@@ -1022,6 +1319,60 @@ def print_report(all_links, rollups, per_topic_links):
             print(json.dumps(samples[lt], indent=2, ensure_ascii=False,
                              sort_keys=True))
             seen_types.add(lt)
+
+    # Trial links share link_type=model_inference, so sample BY METHOD.
+    trial_samples = {}
+    for lk in all_links:
+        if lk["evidence_type"] != "trial":
+            continue
+        m = lk.get("method")
+        if m not in trial_samples:
+            trial_samples[m] = lk
+    for m in ("drug_target", "trial_mechanism"):
+        if m in trial_samples:
+            print("\n--- trial link (method=%s) ---" % m)
+            print(json.dumps(trial_samples[m], indent=2, ensure_ascii=False,
+                             sort_keys=True))
+
+
+def print_trial_specificity(all_links):
+    """Report drug_target vs mechanism-fallback trial counts + per-trial dist."""
+    from collections import Counter
+    trial_links = [lk for lk in all_links if lk["evidence_type"] == "trial"]
+    by_method = _count_by(trial_links, "method")
+
+    # A trial is "specific" if it has >=1 drug_target link (in any topic);
+    # "fallback-only" if it appears solely via trial_mechanism.
+    methods_per_nct = defaultdict(set)
+    links_per_nct = Counter()
+    for lk in trial_links:
+        nct = lk["evidence_id"]
+        methods_per_nct[nct].add(lk.get("method"))
+        links_per_nct[nct] += 1
+    specific = sum(1 for m in methods_per_nct.values() if "drug_target" in m)
+    fallback_only = sum(1 for m in methods_per_nct.values()
+                        if "drug_target" not in m and "trial_mechanism" in m)
+
+    print("\n=== trial link specificity ===")
+    print("  total topic->trial links: %d" % len(trial_links))
+    print("  by method: %s" % by_method)
+    print("  distinct trials linked: %d" % len(methods_per_nct))
+    print("    - with a SPECIFIC drug_target link: %d" % specific)
+    print("    - mechanism-fallback ONLY:          %d" % fallback_only)
+
+    # Distribution of #links-per-trial (should NOT be uniform/generic).
+    dist = Counter(links_per_nct.values())
+    print("  #topic-links-per-trial distribution (n_links: n_trials):")
+    for n_links in sorted(dist):
+        print("    %2d: %d" % (n_links, dist[n_links]))
+    if links_per_nct:
+        vals = sorted(links_per_nct.values())
+        mid = len(vals) // 2
+        median = (vals[mid] if len(vals) % 2 else
+                  (vals[mid - 1] + vals[mid]) / 2)
+        print("    min=%d median=%s mean=%.2f max=%d distinct_values=%d"
+              % (min(vals), median, sum(vals) / len(vals), max(vals),
+                 len(dist)))
 
 
 if __name__ == "__main__":

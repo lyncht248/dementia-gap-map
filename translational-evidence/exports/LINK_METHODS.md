@@ -21,8 +21,15 @@ Regex symbol matching is **demoted**: it runs only as a labelled, low-confidence
 ## Method priority (highest → lowest)
 
 ```
-pmid_join  >  mesh_ui_join  >  chemical_ui_crosswalk  >  gene_pathway_curated  >  regex_symbol_match
+pmid_join  >  mesh_ui_join  >  chemical_ui_crosswalk  >  gene_pathway_curated  >  regex_symbol_match  >  drug_target  >  trial_mechanism
 ```
+
+`drug_target` (topic→trial, high) and `trial_mechanism` (topic→trial, low
+fallback) attach clinical trials. `drug_target` rides a trial's drug through its
+Open Targets **target gene** into exactly the topics that gene is already linked
+to (target-specific, so per-trial link counts vary); `trial_mechanism` is the
+coarse mechanism_group fallback kept ONLY for trials whose drug has no resolved
+target.
 
 When the same (topic, gene) is discovered by several methods, the
 **highest-confidence** link wins the dedup key
@@ -157,6 +164,13 @@ lost.
 | `chemical_ui_crosswalk` | `chemical_annotation` | gene | `topic_gene` | high | `chemical_ui` |
 | `gene_pathway_curated` | `pathway_mapping` | pathway | `topic_pathway` | medium | `gene_symbol->pathway_group` |
 | `regex_symbol_match` | `gene_mention` | gene | `topic_gene` | low | `case_sensitive_whole_word_symbol` |
+| `drug_target` | `model_inference` | trial | (trial not a topic edge) | high | `drug_name->ot_target->gene_id` |
+| `trial_mechanism` | `model_inference` | trial | (trial not a topic edge) | low | `dominant_pathway_group->mapped_trial_mechanism->mechanism_group` |
+
+The clinical layer also gains a **`drug_gene`** edge in the evidence graph
+(`edges.jsonl`): a drug node → its Open Targets target gene node
+(`evidence: open_targets_moa_target`), so trial → drug → **gene** → variant /
+pathway is fully traversable.
 
 ## Curated crosswalks (the structured join tables)
 
