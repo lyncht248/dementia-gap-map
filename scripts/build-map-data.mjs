@@ -23,7 +23,7 @@ const P = (...p) => path.join(ROOT, ...p);
 
 // --- tunables ---------------------------------------------------------------
 const RESOLUTION = Number(process.env.RESOLUTION ?? 1.2); // higher => more communities
-const EDGE_MIN_WEIGHT = Number(process.env.EDGE_MIN_WEIGHT ?? 0.12); // drop weak coupling edges (hairball) before clustering/layout
+const COSINE_MIN = Number(process.env.COSINE_MIN ?? 0.25); // keep co-citation edges with cosine >= this
 const MIN_COMMUNITY = 30; // communities smaller than this are merged into neighbours / "other"
 const FA2_ITERATIONS = 600;
 const EDGES_PER_NODE = 3; // strongest neighbours kept per node for drawing
@@ -79,8 +79,17 @@ function tokenize(title) {
 // --- load Track A -----------------------------------------------------------
 console.log("reading Track A…");
 const papers = readJsonl("data/processed/topic-dynamics/papers.jsonl");
-const edgesRaw = readJsonl("data/processed/topic-dynamics/paper_edges.jsonl");
-console.log(`  ${papers.length} papers, ${edgesRaw.length} edges`);
+// Primary network: cosine-similarity co-citation edges (the paper's weighting).
+// Fallback: bibliographic coupling, used only to place papers co-citation can't
+// reach yet (recent/frontier papers not co-cited by later work).
+const COCITE_FILE = "data/interim/topic-dynamics/paper_edges_cocite_cosine.jsonl";
+const cociteRaw = fs.existsSync(P(COCITE_FILE)) ? readJsonl(COCITE_FILE) : [];
+const couplingRaw = readJsonl("data/processed/topic-dynamics/paper_edges.jsonl").filter((e) => e.edge_type === "bibliographic_coupling");
+console.log(`  ${papers.length} papers, ${cociteRaw.length} cosine co-citation + ${couplingRaw.length} coupling edges`);
+// iCite metrics (RCR / is_clinical / citation_count) — Track A's were null
+const icite = new Map();
+if (fs.existsSync(P("data/interim/topic-dynamics/icite_citedby.jsonl")))
+  for (const r of readJsonl("data/interim/topic-dynamics/icite_citedby.jsonl")) icite.set(String(r.pmid), r);
 
 // --- load Track B -----------------------------------------------------------
 console.log("reading Track B…");
@@ -132,27 +141,32 @@ papers.forEach((p, i) => {
   const r = 10 * Math.sqrt(i + 1);
   graph.addNode(p.paper_id, { x: r * Math.cos(a), y: r * Math.sin(a) });
 });
-let added = 0;
-const bestEdge = new Map(); // node -> [weight, other] strongest incident edge across ALL edges
+// strongest coupling edge per node (for the fallback / anchoring)
+const bestEdge = new Map();
 const noteBest = (a, b, w) => { const cur = bestEdge.get(a); if (!cur || w > cur[0]) bestEdge.set(a, [w, b]); };
-for (const e of edgesRaw) {
+for (const e of couplingRaw) {
   const s = e.source_paper_id, t = e.target_paper_id, w = e.weight || 0;
   if (s === t || !graph.hasNode(s) || !graph.hasNode(t)) continue;
   noteBest(s, t, w); noteBest(t, s, w);
-  if (w < EDGE_MIN_WEIGHT || graph.hasEdge(s, t)) continue;
-  graph.addEdge(s, t, { weight: w, w0: w }); // w0 = true weight (kept for pruning); weight is tuned for layout
+}
+// primary edges: cosine co-citation (>= COSINE_MIN)
+let added = 0;
+for (const e of cociteRaw) {
+  const s = e.source_paper_id, t = e.target_paper_id, w = e.weight || 0;
+  if (w < COSINE_MIN || s === t || !graph.hasNode(s) || !graph.hasNode(t) || graph.hasEdge(s, t)) continue;
+  graph.addEdge(s, t, { weight: w, w0: w });
   added++;
 }
-// anchor edgeless papers to their single strongest link so nothing is orphaned
-let anchored = 0;
+// fallback: attach papers co-citation didn't reach via their strongest coupling edge
+let fb = 0;
 graph.forEachNode((n) => {
   if (graph.degree(n) > 0) return;
   const b = bestEdge.get(n);
-  if (b && !graph.hasEdge(n, b[1])) { graph.addEdge(n, b[1], { weight: b[0], w0: b[0] }); anchored++; }
+  if (b && !graph.hasEdge(n, b[1])) { graph.addEdge(n, b[1], { weight: b[0], w0: b[0] }); fb++; }
 });
 let isolated = 0;
 graph.forEachNode((n) => { if (graph.degree(n) === 0) isolated++; });
-console.log(`  graph: ${graph.order} nodes, ${added} strong + ${anchored} anchor edges, ${isolated} still isolated`);
+console.log(`  graph: ${graph.order} nodes, ${added} co-citation + ${fb} coupling-fallback edges, ${isolated} isolated`);
 
 // --- communities (Louvain on the coupling graph) ----------------------------
 console.log(`detecting communities (resolution=${RESOLUTION})…`);
@@ -383,6 +397,7 @@ const outPapers = papers.map((p, i) => {
   const meta = communityMeta.get(c);
   idToIndex.set(p.paper_id, i);
   const m = p.metrics || {};
+  const im = icite.get(String(p.pmid)) || {};
   return {
     paper_id: p.paper_id,
     pmid: p.pmid ?? null,
@@ -398,10 +413,10 @@ const outPapers = papers.map((p, i) => {
     pathway_group: meta.pathway_group,
     trials: [],
     metrics: {
-      citation_count: m.citation_count ?? null,
-      relative_citation_ratio: m.relative_citation_ratio ?? null,
+      citation_count: im.citation_count ?? m.citation_count ?? null,
+      relative_citation_ratio: im.rcr ?? m.relative_citation_ratio ?? null,
       apt: m.apt ?? null,
-      is_clinical: m.is_clinical ?? null,
+      is_clinical: im.is_clinical ?? m.is_clinical ?? null,
     },
     url: p.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/` : null,
   };
@@ -444,11 +459,11 @@ console.log(`  ${outEdges.length} edges kept for drawing`);
 
 const nGeneP = outPapers.filter((p) => p.genes.length).length;
 const data = {
-  generated_note: `Real coupling-graph map: ForceAtlas2 layout + Louvain communities over ${added} edges. ` +
+  generated_note: `Co-citation map (cosine-weighted, per Davis et al. 2025): ForceAtlas2 layout + Louvain communities over ${added} co-citation edges (coupling fallback for uncited-yet papers). ` +
     `${outPapers.length} papers, ${outClusters.filter((c) => c.topic_id !== "other").length} communities; ` +
     `${nGeneP} papers with gene links. Built by scripts/build-map-data.mjs from Track A + Track B.`,
   disease: "Alzheimer disease / dementia (ADRD)",
-  coordinate_space: "ForceAtlas2 layout of the bibliographic-coupling graph (auto-fit by the app)",
+  coordinate_space: "ForceAtlas2 layout of the cosine-weighted co-citation graph (auto-fit by the app)",
   clusters: outClusters,
   papers: outPapers,
   edges: outEdges,
