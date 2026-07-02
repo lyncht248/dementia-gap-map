@@ -10,6 +10,7 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .venv/
+.venv-embed/
 venv/
 
 # Node, if a visual layer is added later
