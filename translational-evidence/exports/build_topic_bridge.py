@@ -404,7 +404,8 @@ def build_topic(cluster, ctx):
             "confidence": "high",
             "provenance": {
                 "join_key": "pmid",
-                "reported_symbol": symbol,
+                "gene_symbol": symbol,        # consumer-facing key (Track A joins on this)
+                "reported_symbol": symbol,    # kept for provenance clarity
                 "pmids": pmids,
                 "study_accessions": sorted(gene_accessions[symbol]),
                 "n_pmids": len(pmids),

@@ -10,27 +10,27 @@
   },
   "generated_from": "track_a_snapshot",
   "link_confidence": {
-    "high": 6708,
-    "low": 164,
-    "medium": 29
+    "high": 7965,
+    "low": 178,
+    "medium": 46
   },
   "link_methods": {
-    "chemical_ui_crosswalk": 69,
-    "gene_pathway_curated": 29,
-    "mesh_ui_join": 32,
-    "pmid_join": 6607,
-    "regex_symbol_match": 164
+    "chemical_ui_crosswalk": 99,
+    "gene_pathway_curated": 46,
+    "mesh_ui_join": 30,
+    "pmid_join": 7836,
+    "regex_symbol_match": 178
   },
   "link_types": {
-    "chemical_annotation": 69,
-    "gene_mention": 164,
-    "mesh_annotation": 32,
-    "paper_overlap": 6607,
-    "pathway_mapping": 29
+    "chemical_annotation": 99,
+    "gene_mention": 178,
+    "mesh_annotation": 30,
+    "paper_overlap": 7836,
+    "pathway_mapping": 46
   },
-  "n_links": 6901,
-  "n_rollups": 17,
-  "track_a_clusters": 17,
-  "track_a_papers": 2507,
+  "n_links": 8189,
+  "n_rollups": 10,
+  "track_a_clusters": 10,
+  "track_a_papers": 4780,
   "track_b_genes": 523
 }

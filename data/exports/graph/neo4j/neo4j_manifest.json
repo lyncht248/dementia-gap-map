@@ -4,9 +4,9 @@
       "drug_pathway": 174,
       "gene_disease": 535,
       "gene_pathway": 36,
-      "topic_disease": 32,
-      "topic_gene": 316,
-      "topic_pathway": 29,
+      "topic_disease": 30,
+      "topic_gene": 875,
+      "topic_pathway": 46,
       "trial_drug": 3350,
       "trial_pathway": 5271,
       "variant_gene": 1274
@@ -24,10 +24,10 @@
       "confidence"
     ],
     "path": "data/exports/graph/neo4j/edges.csv",
-    "rows": 11017
+    "rows": 11591
   },
   "generated_by": "translational-evidence/exports/build_neo4j_export.py",
-  "generated_on": "2026-07-01",
+  "generated_on": "2026-07-02",
   "load_cypher": "data/exports/graph/neo4j/load.cypher",
   "nodes_csv": {
     "by_type": {
@@ -35,7 +35,7 @@
       "drug": 2111,
       "gene": 523,
       "pathway": 9,
-      "topic": 17,
+      "topic": 10,
       "trial": 6841,
       "variant": 5786
     },
@@ -101,7 +101,7 @@
       }
     },
     "path": "data/exports/graph/neo4j/nodes.csv",
-    "rows": 15294
+    "rows": 15287
   },
   "source": {
     "edges_jsonl": "data/exports/graph/edges.jsonl",
