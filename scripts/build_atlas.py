@@ -2,12 +2,14 @@
 """Build the interactive "theme atlas" web view from the Qwen3-Embedding-8B run.
 
 Reads the bake-off artifacts produced by ``scripts/embed_map.py`` for the
-``qwen3-8b`` model and turns them into a self-contained, pan/zoom canvas atlas
-(``web/atlas/index.html``) styled after a Nomic-Atlas-style theme map:
+``qwen3-8b`` model and writes the layout the web app renders
+(``web/public/atlas/atlas.json``, drawn by ``web/src/lib/atlasRender.ts``),
+a Nomic-Atlas-style theme map:
 
-  * one hex-packed dot per paper (4,780 dots), no overlaps;
+  * one hex-tiled dot per paper (4,780 dots), no overlaps;
   * a two-tier topic hierarchy — a handful of **major** topics shown when zoomed
-    out, and the fine-grained **minor** topics revealed as you zoom in.
+    out, and the fine-grained **minor** topics revealed as you zoom in;
+  * hover a dot to trace the papers it cites / is cited by.
 
 Key design decision — *how we choose topics*
 --------------------------------------------
@@ -140,17 +142,19 @@ for _c in MINOR_LABELS:
     CLUSTER_TO_MAJOR.setdefault(_c, "alzheimer")
 
 
-def pack_force(xy, groups, spacing, iters=220):
-    """Compress the cloud into dense, no-overlap disease blobs.
+def pack_force(xy, groups, spacing, iters=240):
+    """Tighten the UMAP layout into dense, overlap-free disease regions while
+    keeping each region a distinct, cohesive shape (not one fused blob).
 
-    Combines three forces, settled iteratively from the UMAP layout:
-      * **collision** — push any two points closer than one dot apart away from
-        each other (guarantees the no-overlap tiling look);
-      * **group gravity** — pull each point gently toward its disease-major
-        centroid, squeezing out the diffuse whitespace so each region reads as a
-        solid colour mass while staying a separate island;
-      * **anchor** — a faint pull to the point's own UMAP position, so the
-        internal ordering of sub-topics survives.
+    Forces, settled from the UMAP layout:
+      * **region gravity** — a modest pull toward the region centroid fills the
+        diffuse whitespace so each disease reads as a solid mass. Kept low so the
+        region keeps an organic outline rather than collapsing to a circle.
+      * **global gravity** — a gentle pull toward the whole-map centroid brings
+        the islands in closer without merging them.
+      * **anchor** — a pull back to the point's own UMAP position, preserving the
+        continent's real shape and the internal ordering of its sub-topics.
+      * **collision** — no two dots closer than one diameter (clean tiling).
     Deterministic (fixed initial positions, no RNG).
     """
     import numpy as np
@@ -160,15 +164,12 @@ def pack_force(xy, groups, spacing, iters=220):
     anchor = pos.copy()
     groups = np.asarray(groups)
     r = spacing / 2.0
-
-    # per-group centroids (recomputed each iter as blobs move)
     gids = np.unique(groups)
     for it in range(iters):
-        # cool the packing forces over time for a clean settle
         t = it / iters
-        g_grav = 0.05 * (1 - 0.5 * t)   # compact each region
-        g_glob = 0.03 * (1 - 0.4 * t)   # draw regions together (close whitespace)
-        g_anch = 0.01                   # retain internal sub-topic ordering
+        g_grav = 0.045 * (1 - 0.5 * t)  # fill each region (low = organic shape)
+        g_glob = 0.04 * (1 - 0.3 * t)   # bring islands closer (not fused)
+        g_anch = 0.016                  # preserve the UMAP continent shape
 
         gcen = pos.mean(0)
         cen = {g: pos[groups == g].mean(0) for g in gids}
@@ -178,9 +179,7 @@ def pack_force(xy, groups, spacing, iters=220):
         pos += g_glob * (gcen - pos)
         pos += g_anch * (anchor - pos)
 
-        # collision resolution
-        tree = cKDTree(pos)
-        pairs = tree.query_pairs(2 * r, output_type="ndarray")
+        pairs = cKDTree(pos).query_pairs(2 * r, output_type="ndarray")
         if len(pairs):
             a, b = pairs[:, 0], pairs[:, 1]
             d = pos[a] - pos[b]
@@ -284,30 +283,20 @@ def main() -> None:
     manifest = json.loads((SRC / "manifest.json").read_text())
 
     # Re-pack for a dense, no-overlap "theme atlas" look: squeeze whitespace out
-    # of each disease region while keeping regions as separate islands. Write the
-    # packed coords back onto each point as px/py (used for dots + label
-    # centroids). Noise points ride along with their nearest disease major.
-    grp_key = {**CLUSTER_TO_MAJOR}
-    fallback_major = "alzheimer"
+    # centroids). Each point's region = its fine cluster's disease major (noise
+    # points ride with their nearest non-noise neighbour's major).
     grp_idx = {g: i for i, g in enumerate(MAJORS)}
-    groups = []
-    for p in points:
-        c = p["cluster"]
-        if c == -1:
-            groups.append(-1)  # provisional; reassigned after nearest-fine below
-        else:
-            groups.append(grp_idx[grp_key.get(c, fallback_major)])
-    # provisionally give noise the global-centroid group so they don't distort;
-    # assign each noise point to the major of its nearest non-noise point.
     import numpy as _np
     from scipy.spatial import cKDTree as _KD
     XY = _np.array([(p["x"], p["y"]) for p in points])
     real = [i for i, p in enumerate(points) if p["cluster"] != -1]
     rtree = _KD(XY[real])
+    groups = []
     for i, p in enumerate(points):
-        if p["cluster"] == -1:
-            j = real[int(rtree.query(XY[i])[1])]
-            groups[i] = grp_idx[grp_key.get(points[j]["cluster"], fallback_major)]
+        c = p["cluster"]
+        if c == -1:
+            c = points[real[int(rtree.query(XY[i])[1])]]["cluster"]
+        groups.append(grp_idx[CLUSTER_TO_MAJOR.get(c, "alzheimer")])
 
     packed = pack_force([(p["x"], p["y"]) for p in points], groups, spacing=PACK_SPACING)
     # then snap onto one shared hex lattice: clean tiling, no overlaps.
@@ -385,6 +374,7 @@ def main() -> None:
     # points array: [px, py, fine_id, year]
     pt_rows = []
     titles = []
+    ids = []
     idx_of = {}
     for i, p in enumerate(points):
         c = p["cluster"]
@@ -392,6 +382,7 @@ def main() -> None:
             c = nearest_fine(p["px"], p["py"])
         pt_rows.append([round(p["px"], 3), round(p["py"], 3), c, p["year"]])
         titles.append(p["title"])
+        ids.append(p["paper_id"])
         idx_of[p["paper_id"]] = i
 
     # Citation graph: in-corpus paper->reference links (a paper cites another
@@ -437,294 +428,18 @@ def main() -> None:
         "minors": fine_records,
         "points": pt_rows,
         "titles": titles,
+        "ids": ids,
         "edges": edges,
     }
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "atlas.json").write_text(json.dumps(data, separators=(",", ":")))
 
-    html = HTML_TEMPLATE.replace("__DATA__", json.dumps(data, separators=(",", ":")))
-    (OUT_DIR / "index.html").write_text(html)
-
-    print(f"wrote {OUT_DIR/'index.html'}")
+    print(f"wrote {OUT_DIR/'atlas.json'}")
     print(f"  {len(points)} papers | {len(major_records)} major topics | "
           f"{len(fine_records)} minor topics | {len(edges)} citation links")
     for m in major_records:
         print(f"    {m['count']:>4}  {m['label']}")
-
-
-# ---------------------------------------------------------------------------
-# Self-contained web view (vanilla canvas; data inlined as __DATA__).
-# ---------------------------------------------------------------------------
-HTML_TEMPLATE = r"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Dementia Gap Map · Theme Atlas</title>
-<style>
-  :root { --bg:#ffffff; --fg:#1b1b1f; --muted:#6b6b73; }
-  * { box-sizing:border-box; }
-  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
-  #wrap { position:fixed; inset:0; overflow:hidden; }
-  canvas { display:block; width:100%; height:100%; cursor:grab; }
-  canvas.drag { cursor:grabbing; }
-  .panel { position:absolute; top:16px; left:18px; max-width:340px;
-    background:rgba(255,255,255,.82); backdrop-filter:blur(6px);
-    border:1px solid rgba(0,0,0,.06); border-radius:12px; padding:14px 16px;
-    box-shadow:0 6px 24px rgba(0,0,0,.06); }
-  .panel h1 { font-size:16px; margin:0 0 4px; letter-spacing:-.01em; }
-  .panel p { font-size:12px; line-height:1.45; color:var(--muted); margin:0 0 10px; }
-  .legend { display:flex; flex-direction:column; gap:5px; max-height:42vh; overflow:auto; }
-  .legend .row { display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer;
-    padding:2px 4px; border-radius:6px; }
-  .legend .row:hover { background:rgba(0,0,0,.04); }
-  .legend .row.off { opacity:.35; }
-  .legend .sw { width:11px; height:11px; border-radius:50%; flex:none; }
-  .legend .ct { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; }
-  .hint { font-size:11px; color:var(--muted); margin-top:10px; }
-  #tip { position:absolute; pointer-events:none; z-index:10; max-width:300px;
-    background:rgba(20,20,24,.94); color:#fff; padding:8px 10px; border-radius:8px;
-    font-size:12px; line-height:1.4; opacity:0; transition:opacity .08s; }
-  #tip .t { font-weight:600; }
-  #tip .m { color:#c9c9d2; margin-top:3px; font-size:11px; }
-  #zoom { position:absolute; right:16px; bottom:16px; display:flex; gap:6px; }
-  #zoom button { width:32px; height:32px; border-radius:8px; border:1px solid rgba(0,0,0,.1);
-    background:rgba(255,255,255,.9); font-size:17px; cursor:pointer; color:var(--fg); }
-  #zoom button:hover { background:#fff; }
-</style>
-</head>
-<body>
-<div id="wrap">
-  <canvas id="c"></canvas>
-  <div class="panel">
-    <h1>Dementia Gap Map — Theme Atlas</h1>
-    <p id="sub"></p>
-    <div class="legend" id="legend"></div>
-    <div class="hint">Scroll to zoom · drag to pan · hover a dot to trace its citations · zoom in for finer topics</div>
-  </div>
-  <div id="tip"></div>
-  <div id="zoom"><button id="zout">–</button><button id="zin">+</button></div>
-</div>
-<script>
-const DATA = __DATA__;
-const cv = document.getElementById('c');
-const ctx = cv.getContext('2d');
-const tip = document.getElementById('tip');
-let DPR = Math.min(window.devicePixelRatio || 1, 2);
-
-// ---- world bounds -----------------------------------------------------------
-const P = DATA.points;
-let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
-for (const p of P){ if(p[0]<minx)minx=p[0]; if(p[0]>maxx)maxx=p[0];
-  if(p[1]<miny)miny=p[1]; if(p[1]>maxy)maxy=p[1]; }
-const worldW = maxx-minx, worldH = maxy-miny;
-const cx0 = (minx+maxx)/2, cy0 = (miny+maxy)/2;
-
-// hex-lattice spacing -> dot radius that tiles the lattice with a tiny gap
-const spacing = DATA.meta.spacing || 0.032;
-const dotR = spacing * 0.46;
-
-const minorMajor = {}, minorLabel = {};
-for (const m of DATA.minors){ minorMajor[m.id]=m.major; minorLabel[m.id]=m.label; }
-const majorLabel = {}, majorColor = {};
-for (const M of DATA.majors){ majorLabel[M.id]=M.label; majorColor[M.id]=M.color; }
-const hidden = new Set();  // hidden major ids
-
-// ---- gradient colour --------------------------------------------------------
-// Each dot's colour = inverse-distance blend of the disease-area colours, so a
-// region core keeps its hue while borders melt smoothly into their neighbours.
-function hx(h){ h=h.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
-const MC = DATA.majors.map(M=>({x:M.x,y:M.y,c:hx(M.color)}));
-const PC = new Array(P.length);
-for(let i=0;i<P.length;i++){
-  const px=P[i][0], py=P[i][1];
-  let r=0,g=0,b=0,ws=0;
-  for(const m of MC){
-    const dx=px-m.x, dy=py-m.y;
-    const w=1/Math.pow(dx*dx+dy*dy+2e-3, 2.3);
-    r+=m.c[0]*w; g+=m.c[1]*w; b+=m.c[2]*w; ws+=w;
-  }
-  PC[i]='rgb('+Math.round(r/ws)+','+Math.round(g/ws)+','+Math.round(b/ws)+')';
-}
-
-// ---- citation adjacency (a paper cites / is cited by another in the corpus) --
-const ADJ = Array.from({length:P.length}, ()=>[]);
-for(const e of (DATA.edges||[])){ ADJ[e[0]].push(e[1]); ADJ[e[1]].push(e[0]); }
-let hoverIdx = -1;
-
-// ---- view state -------------------------------------------------------------
-let view = { s:1, tx:0, ty:0 };   // screen = world*s + t
-function fit(){
-  const w = cv.clientWidth, h = cv.clientHeight;
-  const pad = 60;
-  const s = Math.min((w-2*pad)/worldW, (h-2*pad)/worldH);
-  view.s = s;
-  view.tx = w/2 - cx0*s;
-  view.ty = h/2 - cy0*s;   // note: y flipped below
-}
-function wx(x){ return x*view.s + view.tx; }
-function wy(y){ return -y*view.s + (cv.clientHeight - view.ty); }  // flip y so up is +
-
-function resize(){
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
-  cv.width = cv.clientWidth*DPR; cv.height = cv.clientHeight*DPR;
-  draw();
-}
-
-// baseline scale (fit) to gauge zoom level for label tiers
-let baseS = 1;
-
-function draw(){
-  const w = cv.clientWidth, h = cv.clientHeight;
-  ctx.setTransform(DPR,0,0,DPR,0,0);
-  ctx.clearRect(0,0,w,h);
-
-  const zoom = view.s / baseS;
-  // dot grows with zoom but is capped so deep zoom reads as a clean lattice.
-  const r = Math.min(Math.max(1.0, dotR*view.s), 9);
-
-  const hoverOn = hoverIdx>=0 && !hidden.has(minorMajor[P[hoverIdx][2]]);
-  const nb = hoverOn ? new Set(ADJ[hoverIdx]) : null;
-
-  // dots
-  for (let i=0;i<P.length;i++){
-    const p=P[i]; const fid=p[2];
-    if (hidden.has(minorMajor[fid])) continue;
-    const X=wx(p[0]), Y=wy(p[1]);
-    if (X<-4||X>w+4||Y<-4||Y>h+4) continue;
-    ctx.globalAlpha = (hoverOn && i!==hoverIdx && !nb.has(i)) ? 0.16 : 1;
-    ctx.beginPath();
-    ctx.arc(X,Y,r,0,6.2832);
-    ctx.fillStyle = PC[i];
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  // citation links radiating from the hovered paper
-  if (hoverOn){
-    const hX=wx(P[hoverIdx][0]), hY=wy(P[hoverIdx][1]);
-    ctx.strokeStyle='rgba(28,28,38,.5)';
-    ctx.lineWidth=Math.min(1.5, 0.7*zoom);
-    ctx.beginPath();
-    for(const j of ADJ[hoverIdx]){
-      if(hidden.has(minorMajor[P[j][2]])) continue;
-      ctx.moveTo(hX,hY); ctx.lineTo(wx(P[j][0]),wy(P[j][1]));
-    }
-    ctx.stroke();
-    for(const j of ADJ[hoverIdx]){
-      if(hidden.has(minorMajor[P[j][2]])) continue;
-      ctx.beginPath(); ctx.arc(wx(P[j][0]),wy(P[j][1]),r,0,6.2832);
-      ctx.fillStyle=PC[j]; ctx.fill();
-    }
-    ctx.beginPath(); ctx.arc(hX,hY,r+2,0,6.2832);
-    ctx.fillStyle=PC[hoverIdx]; ctx.fill();
-    ctx.lineWidth=2; ctx.strokeStyle='#1b1b1f'; ctx.stroke();
-  }
-
-  // labels — minor appear as you zoom in, major fade out
-  const showMinor = zoom > 1.7;
-  const majorAlpha = showMinor ? Math.max(0.12, 1-(zoom-1.7)/1.4) : 1;
-
-  if (majorAlpha > 0.02){
-    for (const M of DATA.majors){
-      if (hidden.has(M.id)) continue;
-      drawLabel(M.label, wx(M.x), wy(M.y), 15+Math.min(7,M.count/500),
-                M.color, majorAlpha, true);
-    }
-  }
-  if (showMinor){
-    const a = Math.min(1, (zoom-1.7)/0.6);
-    for (const m of DATA.minors){
-      if (hidden.has(m.major)) continue;
-      if (m.count < 40 && zoom < 3) continue;   // reveal small ones deeper in
-      drawLabel(m.label, wx(m.x), wy(m.y), 12, '#23232a', a, false);
-    }
-  }
-}
-
-function drawLabel(text,x,y,size,color,alpha,bold){
-  ctx.font = `${bold?'700':'600'} ${size}px -apple-system,Segoe UI,Roboto,sans-serif`;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.globalAlpha = alpha;
-  ctx.lineWidth = bold?4:3; ctx.strokeStyle='rgba(255,255,255,.92)';
-  ctx.lineJoin='round';
-  ctx.strokeText(text,x,y);
-  ctx.fillStyle=color; ctx.fillText(text,x,y);
-  ctx.globalAlpha=1;
-}
-
-// ---- interaction ------------------------------------------------------------
-let drag=null;
-cv.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY,tx:view.tx,ty:view.ty}; cv.classList.add('drag'); });
-window.addEventListener('mouseup',()=>{ drag=null; cv.classList.remove('drag'); });
-cv.addEventListener('mouseleave',()=>{ if(hoverIdx>=0){ hoverIdx=-1; draw(); } hideTip(); });
-window.addEventListener('mousemove',e=>{
-  if(drag){ if(hoverIdx>=0)hoverIdx=-1; view.tx = drag.tx + (e.clientX-drag.x); view.ty = drag.ty - (e.clientY-drag.y); draw(); hideTip(); return; }
-  if(e.target!==cv){ if(hoverIdx>=0){ hoverIdx=-1; draw(); } hideTip(); return; }
-  hover(e);
-});
-cv.addEventListener('wheel',e=>{
-  e.preventDefault();
-  const f = Math.exp(-e.deltaY*0.0015);
-  zoomAt(e.clientX, e.clientY, f);
-},{passive:false});
-
-function zoomAt(sx,sy,f){
-  // keep world point under cursor fixed
-  const wxp=(sx-view.tx)/view.s, wyp=(cv.clientHeight-sy-view.ty)/view.s;
-  view.s*=f;
-  view.tx = sx - wxp*view.s;
-  view.ty = (cv.clientHeight-sy) - wyp*view.s;
-  draw();
-}
-document.getElementById('zin').onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1.4);
-document.getElementById('zout').onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1/1.4);
-
-function hover(e){
-  const r = Math.max(2.5, dotR*view.s)+2;
-  let best=-1,bd=r*r;
-  for(let i=0;i<P.length;i++){
-    const p=P[i]; if(hidden.has(minorMajor[p[2]])) continue;
-    const dx=wx(p[0])-e.clientX, dy=wy(p[1])-e.clientY;
-    const d=dx*dx+dy*dy; if(d<bd){bd=d;best=i;}
-  }
-  if(best!==hoverIdx){ hoverIdx=best; draw(); }
-  if(best<0){ hideTip(); return; }
-  const p=P[best], fid=p[2], deg=ADJ[best].length;
-  tip.innerHTML = `<div class="t">${esc(DATA.titles[best])}</div>`+
-    `<div class="m">${p[3]} · ${minorLabel[fid]} · ${majorLabel[minorMajor[fid]]}</div>`+
-    `<div class="m">${deg} citation link${deg===1?'':'s'} in corpus</div>`;
-  tip.style.opacity=1;
-  const tx=Math.min(e.clientX+14, window.innerWidth-320);
-  const ty=Math.min(e.clientY+14, window.innerHeight-90);
-  tip.style.left=tx+'px'; tip.style.top=ty+'px';
-}
-function hideTip(){ tip.style.opacity=0; }
-function esc(s){ return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
-
-// ---- legend -----------------------------------------------------------------
-const legend=document.getElementById('legend');
-for(const M of DATA.majors){
-  const row=document.createElement('div'); row.className='row';
-  row.innerHTML=`<span class="sw" style="background:${M.color}"></span>`+
-    `<span>${M.label}</span><span class="ct">${M.count}</span>`;
-  row.onclick=()=>{ if(hidden.has(M.id))hidden.delete(M.id); else hidden.add(M.id);
-    row.classList.toggle('off'); draw(); };
-  legend.appendChild(row);
-}
-document.getElementById('sub').textContent =
-  `${DATA.meta.n_papers.toLocaleString()} papers · ${DATA.meta.n_major} disease areas · `+
-  `${DATA.meta.n_minor} sub-topics · ${DATA.meta.year_min}–${DATA.meta.year_max} · Qwen3-Embedding-8B`;
-
-window.addEventListener('resize',()=>{ resize(); });
-function boot(){ fit(); baseS=view.s; resize(); }
-boot();
-</script>
-</body>
-</html>
-"""
 
 
 if __name__ == "__main__":

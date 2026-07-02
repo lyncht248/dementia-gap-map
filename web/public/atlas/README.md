@@ -3,12 +3,17 @@
 An interactive, pan/zoom "theme map" of the 4,780-paper dementia / GWAS corpus,
 built from the **Qwen3-Embedding-8B** run of the embedding bake-off
 (`docs/embedding-benchmark.md`). One hex-tiled dot per paper (no overlaps),
-coloured by a smooth disease-area gradient; big labels when zoomed out, finer
-sub-topics as you zoom in. **Hover any dot to trace its citation links** — lines
-fan out to every other paper in the corpus it cites or is cited by.
+coloured by disease area (flat regions, blending only at true borders); big
+labels when zoomed out, finer sub-topics as you zoom in. **Hover any dot to
+trace its citation links** — lines fan out to every other paper in the corpus it
+cites or is cited by. **Draw a region** (Select region) to list those papers in
+the feed below the map.
 
-Open `index.html` directly in a browser (it is fully self-contained), or visit
-`/atlas/` on the deployed site.
+This directory holds only the data (`atlas.json`). The map is rendered by the
+web app: the canvas renderer is `web/src/lib/atlasRender.ts`, embedded in the
+map panel via `web/src/components/AtlasMap.tsx`. It needs only Track A data
+(embeddings + citations) — no Track B (genes / pathways / trials) required;
+Track B would only enrich the per-paper selection feed.
 
 ## How topics are chosen (the two-tier hierarchy)
 
@@ -37,18 +42,20 @@ readable label for every cluster live in that script.
 ## Layout & colour
 
 Raw UMAP scatters have dense pile-ups and lots of whitespace. For the atlas look
-the layout is built in two deterministic steps:
+the layout is built in two deterministic steps (`scripts/build_atlas.py`):
 
-1. `pack_force` — a small force simulation: collision (no overlaps) + gravity
-   toward each paper's disease-major centroid (squeeze out whitespace, keep
-   regions as islands) + a faint anchor to the original UMAP position (preserve
-   sub-topic ordering).
+1. `pack_force` — a small force simulation that keeps each disease region a
+   distinct, cohesive *shape* (not one fused blob): a modest region-centroid
+   pull fills whitespace, a gentle global pull brings the islands closer, a
+   strong anchor preserves the UMAP continent outline, and collision keeps dots
+   from overlapping.
 2. `hex_snap` — snaps the compact cloud onto one shared hexagonal lattice so
-   every paper gets its own cell: perfect tiling, zero overlaps, uniform gaps.
+   every paper gets its own cell: clean tiling, zero overlaps, uniform gaps.
 
-**Colour** is a smooth gradient: each dot's colour is an inverse-distance blend
-of the 10 disease-area colours, so region cores keep their hue while borders
-melt into their neighbours (computed in the browser from the region centroids).
+**Colour** (computed in the browser, `atlasRender.ts`): each dot shows its own
+disease-area's flat colour, blending toward a neighbour only in a thin seam
+right at the border between two regions — so a gradient appears only where the
+embedding actually sits between topics.
 
 **Citation links.** On hover, lines connect the paper to every corpus paper it
 cites or is cited by (22,763 undirected in-corpus links, derived from each
@@ -57,8 +64,10 @@ paper's `references` list intersected with the corpus; both directions merged).
 ## Regenerate
 
 ```bash
-python3 scripts/build_atlas.py
+python3 scripts/build_atlas.py   # writes atlas.json
+cd web && npm run build          # or `npm run dev` to view the app
 ```
 
-Reads `data/exports/visual/embeddings/qwen3-8b/{points,clusters}.jsonl` +
-`manifest.json` and rewrites `index.html` + `atlas.json` here.
+`build_atlas.py` reads `data/exports/visual/embeddings/qwen3-8b/{points,clusters}.jsonl`
++ `manifest.json` (and `data/processed/topic-dynamics/papers.jsonl` for the
+citation links) and writes `atlas.json` here.
