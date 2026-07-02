@@ -82,11 +82,6 @@ export default function App() {
     <div className="app">
       <header className="hero">
         <h1>Dementia Gap Map</h1>
-        <p>
-          Explore dementia &amp; Alzheimer research papers, clustered by topic.
-          Drag to pan, scroll to zoom, then draw a region to inspect a group of
-          papers below.
-        </p>
       </header>
 
       <section className="map-panel">
@@ -179,7 +174,8 @@ export default function App() {
       />
 
       <footer className="foot">
-        Prototype MVP · synthetic placeholder data · see PROTOTYPE_BUILD_SPEC.md
+        Co-citation map of dementia &amp; GWAS literature · data from PubMed / NIH
+        iCite, GWAS Catalog, Open Targets &amp; ClinicalTrials.gov
       </footer>
     </div>
   );
