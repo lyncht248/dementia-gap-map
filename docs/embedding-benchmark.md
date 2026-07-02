@@ -55,7 +55,7 @@ Both runs write to `data/exports/visual/embeddings/<model>/` where `<model>` is
 |------|--------|----------|
 | `vectors.npy` | float16 `.npy`, shape `(4780, D)` | raw embeddings, **row order = `ids.json` order**. `D`=4096 (Qwen) / 768 (SPECTER2). |
 | `ids.json` | JSON array of strings | `paper_id` for each row, defines row order for `vectors.npy`. |
-| `points.jsonl` | JSON Lines | one record per paper: `{"paper_id", "x", "y", "cluster", "title", "year"}` |
+| `points.jsonl` | JSON Lines | one record per paper: `{"paper_id", "x", "y", "px", "py", "cluster", "title", "year"}` — `x,y` = raw UMAP coords; `px,py` = **packed, non-overlapping** display coords (see §3a). |
 | `clusters.jsonl` | JSON Lines | one record per cluster: `{"cluster", "size", "label", "top_terms": [...]}` |
 | `map.png` | PNG | the 2D scatter, points coloured by cluster (see §4). |
 | `map.html` | standalone HTML (optional but preferred) | interactive Plotly scatter, hover shows title/year/cluster. |
@@ -97,9 +97,42 @@ Run these **identically** for both models. Pin the versions and seeds below.
 
 ---
 
+## 3a. Bubble packing — no overlapping dots
+
+**Requirement:** in the final map every paper is an **equal-size circle and no two
+circles overlap** — they should tile together cleanly with small uniform gaps,
+following the cluster shapes, like the reference map we're matching (dense,
+hex-packed, one dot per paper, no pile-ups).
+
+A raw UMAP scatter has dense cores where hundreds of points land on top of each
+other — exactly what we do **not** want. So after §3 we compute a second set of
+**packed display coordinates** `px,py` from the raw UMAP `x,y`, and the plot in §4
+renders `px,py` with a fixed marker radius. Keep both: `x,y` (true embedding, for
+analysis) and `px,py` (clean render). Run the **same packing with the same radius
+for both models** so the two maps are visually comparable.
+
+Two acceptable methods — try the first for the closest match to the reference, fall
+back to the second if it's fragile on your setup:
+
+1. **Hex-grid snapping (RasterFairy)** — closest to the reference's uniform hex
+   look. `pip install rasterfairy-py3`; assign the 4,780 UMAP points to a regular
+   **hexagonal** (or circular) grid so each dot gets its own cell while preserving
+   relative position. Zero overlap by construction. Deterministic.
+2. **Collision relaxation (d3-force / anchored)** — robust and slightly more
+   organic. Anchor each node to its UMAP coord (`forceX`/`forceY`, strength ≈ 0.1)
+   plus `forceCollide(r)` at a fixed radius `r`; run ~300 ticks and export the
+   settled positions as `px,py` so `map.png` and `map.html` agree. Seed any RNG at 42.
+
+Pick the radius `r` from the layout itself: `r ≈ 0.45 ×` the **median
+nearest-neighbour distance** of the raw UMAP points, so the packed map keeps roughly
+the same overall footprint. Record the packing method + `r` in `manifest.json`.
+
+---
+
 ## 4. The plot
 
-- Scatter of all 4,780 points at their 2D UMAP coords.
+- Scatter of all 4,780 points at their **packed coords `px,py`** (§3a), every marker
+  the **same fixed radius**, so bubbles tile cleanly and **never overlap**.
 - Colour by `cluster`; noise (`-1`) in light grey, small/faint.
 - Annotate each non-noise cluster with its `label` near the cluster centroid.
 - Title: `"<Model> — dementia/GWAS corpus (4,780 papers)"`.
