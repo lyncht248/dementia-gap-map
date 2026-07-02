@@ -9,8 +9,9 @@ import {
   DEFAULT_BASE_URL,
 } from "../server/agentProxy";
 
-// Allow slower (reasoning) model turns; 60s is the Hobby-plan ceiling.
-export const config = { maxDuration: 60 };
+// Allow slower (reasoning) model turns. Plan ceilings: Hobby 60s, Pro 300s
+// (up to 800s with Fluid Compute). Only actual execution time is billed.
+export const config = { maxDuration: 300 };
 
 export default async function handler(req: any, res: any) {
   // Health check: visit /api/agent in a browser to confirm the function loads

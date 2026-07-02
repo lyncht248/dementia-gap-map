@@ -91,7 +91,12 @@ npm run dev                    # /api/agent served by Vite middleware
 - The shared proxy core lives in `web/server/` (not `api/`): Vercel excludes
   `_`-prefixed files in `api/` from the function bundle, which crashes the import
   at runtime (`FUNCTION_INVOCATION_FAILED`). `api/agent.ts` sets
-  `maxDuration = 60` for slower reasoning-model turns.
+  `maxDuration = 300` (Pro ceiling; Hobby caps at 60) for slower reasoning-model
+  turns — only actual execution time is billed.
+- **Env vars are per-project.** `OPENAI_API_KEY` must be set on the
+  **`dementia-gap-map`** project (or as a Team Shared Variable *linked* to it) —
+  a key on a sibling project (e.g. `et-al`) is not visible here. Confirm with the
+  health check.
 
 ### Access control (open-proxy risk)
 `/api/agent` relays to the model with the server key. `checkAccess` blocks
