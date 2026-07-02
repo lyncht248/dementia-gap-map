@@ -51,4 +51,6 @@ export interface MapData {
   disease?: string;
   clusters: Cluster[];
   papers: Paper[];
+  /** Pruned coupling edges as [i, j] index pairs into `papers`. */
+  edges?: [number, number][];
 }

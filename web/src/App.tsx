@@ -154,6 +154,7 @@ export default function App() {
 
         <MapCanvas
           papers={data.papers}
+          edges={data.edges ?? []}
           clusters={data.clusters}
           viewMode="clusters"
           selectMode={selectMode}

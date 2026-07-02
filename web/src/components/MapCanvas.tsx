@@ -10,6 +10,7 @@ import {
 
 interface Props {
   papers: Paper[];
+  edges?: [number, number][];
   clusters: Cluster[];
   viewMode: "clusters" | "all";
   selectMode: boolean;
@@ -23,6 +24,7 @@ const NEUTRAL = "#c8c8cc";
 
 export default function MapCanvas({
   papers,
+  edges = [],
   clusters,
   viewMode,
   selectMode,
@@ -42,6 +44,23 @@ export default function MapCanvas({
     for (const c of clusters) m.set(c.topic_id, c);
     return m;
   }, [clusters]);
+
+  const indexById = useMemo(() => {
+    const m = new Map<string, number>();
+    papers.forEach((p, i) => m.set(p.paper_id, i));
+    return m;
+  }, [papers]);
+
+  // adjacency (paper index -> neighbour indices) for hover highlighting
+  const adjacency = useMemo(() => {
+    const adj = new Map<number, number[]>();
+    for (const [a, b] of edges) {
+      let la = adj.get(a); if (!la) adj.set(a, (la = []));
+      let lb = adj.get(b); if (!lb) adj.set(b, (lb = []));
+      la.push(b); lb.push(a);
+    }
+    return adj;
+  }, [edges]);
 
   // interaction refs
   const dragging = useRef(false);
@@ -72,7 +91,7 @@ export default function MapCanvas({
   const radiusFor = useCallback(
     (p: Paper) => {
       const c = p.metrics.citation_count ?? 10;
-      return Math.max(1.6, Math.min(7, 1.6 + Math.sqrt(c) * 0.35)) * Math.sqrt(transform.scale);
+      return Math.max(2.2, Math.min(8, 2.2 + Math.sqrt(c) * 0.35)) * Math.sqrt(transform.scale);
     },
     [transform.scale]
   );
@@ -108,11 +127,34 @@ export default function MapCanvas({
       ctx.stroke();
     }
 
+    // coupling edges — faint web beneath the points (only between visible papers)
+    const hoverIdx = hover ? indexById.get(hover.paper.paper_id) ?? -1 : -1;
+    const visible = (p: Paper) => isActive(p) || selectedIds.has(p.paper_id);
+    if (edges.length) {
+      ctx.strokeStyle = "#9aa4b8";
+      ctx.lineWidth = 0.8;
+      ctx.globalAlpha = 0.045;
+      ctx.beginPath();
+      for (const [a, b] of edges) {
+        if (a === hoverIdx || b === hoverIdx) continue; // hovered links drawn bright later
+        const pa = papers[a], pb = papers[b];
+        if (!pa || !pb || !visible(pa) || !visible(pb)) continue;
+        const sa = toScreen(pa, transform), sb = toScreen(pb, transform);
+        if ((sa.x < 0 && sb.x < 0) || (sa.x > size.w && sb.x > size.w) ||
+            (sa.y < 0 && sb.y < 0) || (sa.y > size.h && sb.y > size.h)) continue;
+        ctx.moveTo(sa.x, sa.y);
+        ctx.lineTo(sb.x, sb.y);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     // points — inactive first (faint), then active, then selected on top
     const drawPoint = (p: Paper, mode: "inactive" | "active" | "selected") => {
       const s = toScreen(p, transform);
       if (s.x < -20 || s.x > size.w + 20 || s.y < -20 || s.y > size.h + 20) return;
-      const r = radiusFor(p);
+      const isOther = p.cluster_id === "other";
+      const r = radiusFor(p) * (isOther ? 0.65 : 1);
       const cluster = clusterById.get(p.cluster_id);
       let color = NEUTRAL;
       let alpha = 0.25;
@@ -121,7 +163,7 @@ export default function MapCanvas({
         alpha = 0.18;
       } else if (viewMode === "clusters") {
         color = cluster?.color ?? NEUTRAL;
-        alpha = mode === "selected" ? 1 : 0.82;
+        alpha = mode === "selected" ? 1 : isOther ? 0.4 : 0.82;
       } else {
         color = mode === "selected" ? (cluster?.color ?? "#333") : "#7a7a80";
         alpha = mode === "selected" ? 1 : 0.5;
@@ -172,6 +214,40 @@ export default function MapCanvas({
       }
     }
 
+    // hovered paper's connections, drawn bright on top
+    if (hoverIdx >= 0) {
+      const nbrs = adjacency.get(hoverIdx);
+      const src = papers[hoverIdx];
+      if (nbrs && src) {
+        const s0 = toScreen(src, transform);
+        const col = clusterById.get(src.cluster_id)?.color ?? "#333";
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.2;
+        ctx.globalAlpha = 0.75;
+        ctx.beginPath();
+        for (const j of nbrs) {
+          const pj = papers[j];
+          if (!pj) continue;
+          const sj = toScreen(pj, transform);
+          ctx.moveTo(s0.x, s0.y);
+          ctx.lineTo(sj.x, sj.y);
+        }
+        ctx.stroke();
+        // re-dot the neighbours so they read as connected
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = col;
+        for (const j of nbrs) {
+          const pj = papers[j];
+          if (!pj) continue;
+          const sj = toScreen(pj, transform);
+          ctx.beginPath();
+          ctx.arc(sj.x, sj.y, Math.max(1.8, radiusFor(pj)), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
     // lasso path
     if (lasso.current.length > 1) {
       ctx.beginPath();
@@ -188,6 +264,9 @@ export default function MapCanvas({
     }
   }, [
     papers,
+    edges,
+    indexById,
+    adjacency,
     clusters,
     clusterById,
     transform,
@@ -197,6 +276,7 @@ export default function MapCanvas({
     isActive,
     radiusFor,
     lassoTick,
+    hover,
   ]);
 
   // --- pointer handlers -----------------------------------------------------

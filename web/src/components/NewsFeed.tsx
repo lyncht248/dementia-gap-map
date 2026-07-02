@@ -21,15 +21,25 @@ export default function NewsFeed({ selected, clusters, onClear }: Props) {
   }, [clusters]);
 
   const agg = useMemo(() => {
-    const genes = tally(selected.flatMap((p) => p.genes));
+    // Genes/trials are topic-level evidence (Track B rollup lives on the
+    // cluster). Aggregate them from the topics present in the selection,
+    // falling back to any per-paper gene attribution where a topic has none.
+    const genes = tally(
+      selected.flatMap((p) => {
+        const c = clusterById.get(p.cluster_id);
+        return c && c.top_genes.length ? c.top_genes : p.genes;
+      })
+    );
     const clusterCounts = tally(selected.map((p) => p.cluster_id));
-    const trials = tally(selected.flatMap((p) => p.trials));
+    const trials = tally(
+      selected.flatMap((p) => clusterById.get(p.cluster_id)?.trials ?? p.trials)
+    );
     const pathways = tally(selected.map((p) => p.pathway_group));
     const years = selected.map((p) => p.year).sort((a, b) => a - b);
     const yearRange = years.length ? `${years[0]}–${years[years.length - 1]}` : "—";
     const clinical = selected.filter((p) => p.metrics.is_clinical).length;
     return { genes, clusterCounts, trials, pathways, yearRange, clinical };
-  }, [selected]);
+  }, [selected, clusterById]);
 
   const sorted = useMemo(
     () =>

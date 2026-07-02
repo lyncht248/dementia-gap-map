@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "gen-data": "node ../scripts/gen-mock-data.mjs",
+    "gen-data": "cd ../scripts && npm install --silent && node build-map-data.mjs",
     "dev": "vite",
-    "build": "npm run gen-data && tsc -b && vite build",
+    "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
