@@ -198,6 +198,15 @@ def main():
                  "on most records for dementia-vs-AD filtering. Scores carry their "
                  "component inputs (no black-box); verdicts (contradiction/opportunity/"
                  "novelty) are for agents to compose from entity_metrics.jsonl.",
+        "gene_mechanism_membership": "AUTHORITATIVE gene->mechanism membership is "
+                 "MULTI-VALUED: use gene_pathways_api.jsonl.ad_bucket_signals "
+                 "(each {bucket, source, matched_term}) - a gene belongs to ALL "
+                 "buckets it has signals for (e.g. APP -> amyloid AND synaptic AND "
+                 "lipid, all true). Do NOT rely on the single gene_pathway.csv "
+                 "primary bucket for mechanism filtering: it is a non-authoritative "
+                 "single-value convenience (a general ontology cannot canonically "
+                 "pick one AD mechanism per gene). Filter mechanisms via the "
+                 "multi-valued signals.",
     }
 
     out = common.PROCESSED_DIR / "CATALOG.json"

@@ -89,8 +89,12 @@ The agent's **decision layer** (what to select/zoom/highlight) uses §2 data +
 - gene/symbol → papers: `topic_evidence_links.jsonl` gene links carry
   `provenance.gene_symbol` + `supporting_paper_ids` (PMIDs); OR `Paper.genes[]`
   in map_data.json. PMID ↔ `Paper.pmid`.
-- gene → mechanism/pathway_group: `genes.jsonl`/`pathways.jsonl` (colours),
-  and per-community `Cluster.pathway_group`.
+- gene → mechanism: **multi-valued** — a gene belongs to ALL buckets it has
+  signals for (APP → amyloid AND synaptic AND lipid, all true). **Filter mechanism
+  via `gene_pathways_api.jsonl.ad_bucket_signals`** (each `{bucket, source,
+  matched_term}`), NOT the single `gene_pathway.csv` primary (a non-authoritative
+  one-value convenience; a general ontology can't canonically pick one AD
+  mechanism per gene).
 - community ↔ evidence/scores: `topic_evidence_rollup.jsonl` (per topic) +
   `Cluster.scores` in map_data.json.
 - "everything connected to X" (multi-hop): traverse `edges.jsonl`/`nodes.jsonl`
