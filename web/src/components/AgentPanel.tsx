@@ -184,8 +184,9 @@ export default function AgentPanel({
           <button
             className="agent-minimize"
             onClick={onMinimize}
-            title="Minimize agent"
+            title="Minimize agent  ( [ )"
             aria-label="Minimize agent"
+            aria-keyshortcuts="["
           >
             ‹
           </button>

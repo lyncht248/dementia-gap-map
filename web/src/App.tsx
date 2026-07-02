@@ -100,6 +100,21 @@ export default function App() {
     };
   }, [dragging]);
 
+  // Keyboard shortcut: "[" toggles the agent panel (ignored while typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "[" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable)
+        return;
+      e.preventDefault();
+      setAgentOpen((v) => !v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const yearBounds = useMemo<[number, number]>(() => {
     if (!data) return [2000, 2026];
     const years = data.papers.map((p) => p.year);
@@ -277,11 +292,17 @@ export default function App() {
         <button
           className="agent-reopen"
           onClick={() => setAgentOpen(true)}
-          title="Show the research agent"
+          title="Show the research agent  ( [ )"
           aria-label="Show the research agent"
+          aria-keyshortcuts="["
         >
-          <span className="agent-reopen-chevron">›</span>
+          <span className="agent-reopen-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l1.7 6.1c.2.6.6 1 1.2 1.2L21 11l-6.1 1.7c-.6.2-1 .6-1.2 1.2L12 20l-1.7-6.1c-.2-.6-.6-1-1.2-1.2L3 11l6.1-1.7c.6-.2 1-.6 1.2-1.2z" />
+            </svg>
+          </span>
           <span className="agent-reopen-label">Agent</span>
+          <kbd className="agent-reopen-key" aria-hidden="true">[</kbd>
         </button>
       )}
 
