@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Cluster, Paper } from "../types";
+import type { Cluster, Hypothesis, Paper } from "../types";
 import {
   fitTransform,
   pointInPolygon,
@@ -12,6 +12,7 @@ interface Props {
   papers: Paper[];
   edges?: [number, number][];
   clusters: Cluster[];
+  hypotheses?: Hypothesis[];
   viewMode: "clusters" | "all";
   selectMode: boolean;
   isActive: (p: Paper) => boolean;
@@ -26,6 +27,7 @@ export default function MapCanvas({
   papers,
   edges = [],
   clusters,
+  hypotheses = [],
   viewMode,
   selectMode,
   isActive,
@@ -195,67 +197,75 @@ export default function MapCanvas({
     for (const p of selected) drawPoint(p, "selected");
     ctx.globalAlpha = 1;
 
-    // cluster labels — primary label always; sublabel fades in when zoomed in.
-    // Labels are decluttered greedily: larger clusters get priority, and a
-    // label is skipped if its pill would overlap one already drawn. As zoom
-    // spreads the centroids apart, more of the smaller labels reappear — so the
-    // zoomed-out view stays clean and detail emerges on zoom in.
+    // Two label layers, both decluttered greedily (a label is skipped if its
+    // pill would overlap one already drawn; higher-priority labels claim space
+    // first):
+    //   1. Hypothesis overlay (primary, always on) — clean single-concept labels
+    //      placed at where each dementia hypothesis's papers concentrate,
+    //      independent of the coloured co-citation clusters.
+    //   2. Per-cluster gene/method specifics (secondary) — fade in on zoom so
+    //      the detail is there when you look closely but never clutters the
+    //      zoomed-out view.
     if (viewMode === "clusters") {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      // zoom ratio relative to the initial fit; sublabels ramp in from 1.4x–2.2x
       const zoom = transform.scale / (fitScaleRef.current || 1);
-      const subAlpha = Math.max(0, Math.min(1, (zoom - 1.4) / 0.8));
-      const LABEL_FONT = "600 13px ui-sans-serif, system-ui, -apple-system, sans-serif";
-      const SUB_FONT = "500 10.5px ui-sans-serif, system-ui, -apple-system, sans-serif";
-      const padX = 6;
-      const bh = 18;
+      const detailAlpha = Math.max(0, Math.min(1, (zoom - 1.4) / 0.8));
+
       const drawn: { x0: number; y0: number; x1: number; y1: number }[] = [];
       const overlaps = (r: { x0: number; y0: number; x1: number; y1: number }) =>
         drawn.some((d) => r.x0 < d.x1 && r.x1 > d.x0 && r.y0 < d.y1 && r.y1 > d.y0);
-      // largest clusters first so they win the space; "other" never labels
-      const ordered = [...clusters]
-        .filter((c) => c.topic_id !== "other")
-        .sort((a, b) => (b.paper_count ?? 0) - (a.paper_count ?? 0));
-      for (const c of ordered) {
-        const s = toScreen(c.centroid, transform);
+
+      // --- layer 1: hypothesis overlay ---
+      // The core AD hypotheses (amyloid, tau, inflammation) share the same
+      // region of a co-citation layout, so rather than hide a colliding label we
+      // nudge it vertically off its centroid until it clears — every hypothesis
+      // stays visible, stacking where they genuinely overlap.
+      const HYP_FONT = "700 15px ui-sans-serif, system-ui, -apple-system, sans-serif";
+      const hbh = 22;
+      const step = hbh + 3;
+      ctx.font = HYP_FONT;
+      for (const h of [...hypotheses].sort((a, b) => (b.paper_count ?? 0) - (a.paper_count ?? 0))) {
+        const s = toScreen(h.centroid, transform);
         if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) continue;
-        const hasSub = subAlpha > 0.01 && !!c.sublabel;
-
-        ctx.font = LABEL_FONT;
-        const tw = ctx.measureText(c.label).width;
-        ctx.font = SUB_FONT;
-        const stw = hasSub ? ctx.measureText(c.sublabel!).width : 0;
-
-        // combined footprint of label (+ sublabel) with a small margin
-        const halfW = Math.max(tw / 2 + padX, stw / 2 + 5) + 3;
-        const top = s.y - bh / 2 - 3;
-        const bot = hasSub ? s.y + bh / 2 + 8 + 8 + 3 : s.y + bh / 2 + 3;
-        const rect = { x0: s.x - halfW, y0: top, x1: s.x + halfW, y1: bot };
-        if (overlaps(rect)) continue;
-        drawn.push(rect);
-
-        // primary label pill
-        ctx.font = LABEL_FONT;
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = "rgba(255,255,255,0.82)";
-        roundRect(ctx, s.x - tw / 2 - padX, s.y - bh / 2, tw + padX * 2, bh, 5);
+        const tw = ctx.measureText(h.label).width;
+        const mk = (y: number) => ({ x0: s.x - tw / 2 - 10, y0: y - hbh / 2 - 2, x1: s.x + tw / 2 + 10, y1: y + hbh / 2 + 2 });
+        // try centroid, then alternating up/down offsets; fall back to centroid
+        let y = s.y;
+        for (const off of [0, step, -step, 2 * step, -2 * step, 3 * step, -3 * step]) {
+          if (!overlaps(mk(s.y + off))) { y = s.y + off; break; }
+        }
+        drawn.push(mk(y));
+        ctx.globalAlpha = 0.86;
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        roundRect(ctx, s.x - tw / 2 - 9, y - hbh / 2, tw + 18, hbh, 7);
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.fillStyle = "#26262b";
-        ctx.fillText(c.label, s.x, s.y + 0.5);
+        ctx.fillStyle = "#1c1c22";
+        ctx.fillText(h.label, s.x, y + 0.5);
+      }
 
-        // sublabel — smaller, beneath, only once zoomed in
-        if (hasSub) {
-          ctx.font = SUB_FONT;
-          const sy = s.y + bh / 2 + 8;
-          ctx.globalAlpha = 0.7 * subAlpha;
-          ctx.fillStyle = "rgba(255,255,255,0.72)";
-          roundRect(ctx, s.x - stw / 2 - 5, sy - 8, stw + 10, 15, 4);
+      // --- layer 2: per-cluster specifics, only once zoomed in ---
+      if (detailAlpha > 0.01) {
+        const DET_FONT = "600 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
+        const dbh = 16;
+        ctx.font = DET_FONT;
+        for (const c of [...clusters]
+          .filter((c) => c.topic_id !== "other" && c.sublabel)
+          .sort((a, b) => (b.paper_count ?? 0) - (a.paper_count ?? 0))) {
+          const s = toScreen(c.centroid, transform);
+          if (s.x < 0 || s.x > size.w || s.y < 0 || s.y > size.h) continue;
+          const tw = ctx.measureText(c.sublabel!).width;
+          const rect = { x0: s.x - tw / 2 - 6, y0: s.y - dbh / 2, x1: s.x + tw / 2 + 6, y1: s.y + dbh / 2 };
+          if (overlaps(rect)) continue;
+          drawn.push(rect);
+          ctx.globalAlpha = 0.72 * detailAlpha;
+          ctx.fillStyle = "rgba(255,255,255,0.8)";
+          roundRect(ctx, s.x - tw / 2 - 5, s.y - dbh / 2, tw + 10, dbh, 4);
           ctx.fill();
-          ctx.globalAlpha = subAlpha;
-          ctx.fillStyle = "#55555c";
-          ctx.fillText(c.sublabel!, s.x, sy);
+          ctx.globalAlpha = detailAlpha;
+          ctx.fillStyle = "#4a4a52";
+          ctx.fillText(c.sublabel!, s.x, s.y + 0.5);
         }
       }
     }
@@ -314,6 +324,7 @@ export default function MapCanvas({
     indexById,
     adjacency,
     clusters,
+    hypotheses,
     clusterById,
     transform,
     size,

@@ -490,6 +490,54 @@ console.log(`  ${outEdges.length} edges kept for drawing`);
 
 computeEmergence(outPapers, outClusters); // per-cluster burst/growth/RCR emergence score
 
+// --- etiological-hypothesis overlay -----------------------------------------
+// Independent of the co-citation communities: assign each paper to the dementia
+// hypothesis it best matches (gene links + title keywords), then drop one clean
+// label at the median position of each hypothesis's papers. These float over the
+// map as an interpretive layer — a paper's hypothesis need not match its cluster.
+console.log("placing hypothesis overlay…");
+const hypoConfig = JSON.parse(fs.readFileSync(P("scripts/hypotheses.json"), "utf8"));
+const MIN_SCORE = hypoConfig.min_score ?? 2;
+const MIN_HYPO_PAPERS = hypoConfig.min_papers ?? 18;
+const GENE_W = hypoConfig.gene_weight ?? 2;
+const KW_W = hypoConfig.keyword_weight ?? 1.5;
+const GENE_W_OVERRIDE = hypoConfig.gene_weight_overrides || {};
+const hypos = hypoConfig.hypotheses.map((h) => ({
+  ...h,
+  geneSet: new Set(h.genes),
+  kws: h.keywords.map((k) => k.toLowerCase()),
+  pts: [],
+}));
+for (const p of outPapers) {
+  const title = (p.title || "").toLowerCase();
+  let best = null, bestScore = 0;
+  for (const h of hypos) {
+    let s = 0;
+    for (const g of p.genes) if (h.geneSet.has(g)) s += GENE_W_OVERRIDE[g] ?? GENE_W;
+    for (const kw of h.kws) if (title.includes(kw)) s += KW_W;
+    if (s > bestScore) { bestScore = s; best = h; }
+  }
+  if (best && bestScore >= MIN_SCORE) best.pts.push([p.x, p.y]);
+}
+const median = (arr) => {
+  const a = [...arr].sort((x, y) => x - y);
+  const m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+};
+const outHypotheses = hypos
+  .filter((h) => h.pts.length >= MIN_HYPO_PAPERS)
+  .map((h) => ({
+    id: h.id,
+    label: h.label,
+    paper_count: h.pts.length,
+    centroid: {
+      x: Math.round(median(h.pts.map((q) => q[0])) * 100) / 100,
+      y: Math.round(median(h.pts.map((q) => q[1])) * 100) / 100,
+    },
+  }))
+  .sort((a, b) => b.paper_count - a.paper_count);
+console.log(`  ${outHypotheses.length} hypotheses placed: ${outHypotheses.map((h) => `${h.label}(${h.paper_count})`).join(", ")}`);
+
 const nGeneP = outPapers.filter((p) => p.genes.length).length;
 const data = {
   generated_note: `Co-citation map (cosine-weighted, per Davis et al. 2025): ForceAtlas2 layout + Louvain communities over ${added} co-citation edges (coupling fallback for uncited-yet papers). ` +
@@ -498,6 +546,7 @@ const data = {
   disease: "Alzheimer disease / dementia (ADRD)",
   coordinate_space: "ForceAtlas2 layout of the cosine-weighted co-citation graph (auto-fit by the app)",
   clusters: outClusters,
+  hypotheses: outHypotheses,
   papers: outPapers,
   edges: outEdges,
 };

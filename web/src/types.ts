@@ -63,10 +63,20 @@ export interface Cluster {
   emergence?: ClusterEmergence | null;
 }
 
+/** Etiological-hypothesis overlay label, placed at the median position of the
+ * papers matching that hypothesis — independent of the co-citation clusters. */
+export interface Hypothesis {
+  id: string;
+  label: string;
+  paper_count: number;
+  centroid: { x: number; y: number };
+}
+
 export interface MapData {
   generated_note?: string;
   disease?: string;
   clusters: Cluster[];
+  hypotheses?: Hypothesis[];
   papers: Paper[];
   /** Pruned coupling edges as [i, j] index pairs into `papers`. */
   edges?: [number, number][];

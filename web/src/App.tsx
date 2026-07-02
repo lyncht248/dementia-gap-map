@@ -156,6 +156,7 @@ export default function App() {
           papers={data.papers}
           edges={data.edges ?? []}
           clusters={data.clusters}
+          hypotheses={data.hypotheses ?? []}
           viewMode="clusters"
           selectMode={selectMode}
           isActive={isActive}
