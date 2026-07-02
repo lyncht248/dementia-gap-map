@@ -21,6 +21,17 @@ export default function App() {
     atlasRef.current?.clearSelection();
   };
 
+  // Reset view: recenter the map AND clear filters + any selection.
+  const resetAll = () => {
+    setHiddenMajors([]);
+    if (meta) setYearRange([meta.yearMin, meta.yearMax]);
+    setSelected([]);
+    setSelectMode(false);
+    setFiltersOpen(false);
+    atlasRef.current?.clearSelection();
+    atlasRef.current?.resetView();
+  };
+
   const onReady = (m: AtlasReady) => {
     setMeta(m);
     setYearRange([m.yearMin, m.yearMax]);
@@ -36,8 +47,9 @@ export default function App() {
         <h1>Dementia Gap Map</h1>
         <p>
           Explore research papers matching &ldquo;Dementia AND GWAS&rdquo; from PubMed, coloured
-          by the disease hypothesis each supports. Drag to pan, scroll to zoom, then draw a
-          region to inspect a group of papers below.
+          by disease area and semantically placed using Qwen embeddings, with topic labels
+          added. Drag to pan, scroll to zoom, then draw a region to inspect a group of papers
+          below.
         </p>
       </header>
 
@@ -47,7 +59,7 @@ export default function App() {
             className={`btn ${selectMode ? "active" : ""}`}
             onClick={() => setSelectMode((v) => !v)}
           >
-            {selectMode ? "Drawing…" : "Select region"}
+            {selectMode ? "Click and drag…" : "Select region"}
           </button>
           <button
             className={`btn ${filtersOpen ? "active" : ""}`}
@@ -115,7 +127,7 @@ export default function App() {
         <div className="toolbar toolbar-bottom">
           <span className="count-note">{count.toLocaleString()} papers</span>
         </div>
-        <button className="reset-view" onClick={() => atlasRef.current?.resetView()} title="Reset view">
+        <button className="reset-view" onClick={resetAll} title="Reset view">
           Reset view
         </button>
       </section>
