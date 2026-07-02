@@ -31,6 +31,34 @@ const mapData = JSON.parse(fs.readFileSync(P("web/public/data/map_data.json"), "
 const points = readJsonl("data/exports/visual/embeddings/qwen3-8b/points.jsonl");
 const atlas = JSON.parse(fs.readFileSync(P("web/public/atlas/atlas.json"), "utf8"));
 const rollups = readJsonl("data/processed/shared/atlas_evidence_rollup.jsonl");
+const evLinks = readJsonl("data/processed/shared/atlas_evidence_links.jsonl");
+
+// ---- strictly per-paper evidence (no theme rollup) -------------------------
+// Genes: only from paper-grounded links (mention / chemical annotation / GWAS
+// paper in corpus) via each link's supporting_paper_ids — a paper gets a gene
+// only if that gene is actually evidenced in that paper.
+const paperGenes = new Map(); // paper_id -> Set(symbol)
+for (const l of evLinks) {
+  if (l.evidence_type !== "gene") continue;
+  const sym = l.provenance?.gene_symbol || l.evidence_id;
+  if (!sym) continue;
+  for (const pid of l.supporting_paper_ids || []) {
+    const id = `pmid:${pid}`;
+    if (!paperGenes.has(id)) paperGenes.set(id, new Set());
+    paperGenes.get(id).add(sym);
+  }
+}
+// gene symbol -> pathway group (for per-paper pathways)
+const genePathway = new Map();
+for (const line of fs.readFileSync(P("translational-evidence/map/gene_pathway.csv"), "utf8").split("\n").slice(1)) {
+  const [sym, pg] = line.split(",");
+  if (sym && pg) genePathway.set(sym.trim(), pg.trim());
+}
+// theme -> its trials (each with the genes the trial's drug targets)
+const themeTrials = new Map(); // "atlas:N" -> [{ title, targets:Set }]
+for (const r of rollups) {
+  themeTrials.set(r.topic_id, (r.trials || []).map((t) => ({ title: t.brief_title, targets: new Set(t.target_genes || []) })));
+}
 
 // paper_id -> true HDBSCAN theme id (-1 = noise/"other")
 const themeOf = new Map(points.map((p) => [p.paper_id, p.cluster]));
@@ -77,7 +105,18 @@ const papers = mapData.papers.map((p) => {
   const t = themeOf.get(p.paper_id);
   const cluster_id = t == null || t < 0 ? "other" : `t${t}`;
   const area = t == null || t < 0 ? "other" : themeArea.get(t) ?? "other";
-  return { ...p, cluster_id, area };
+  // strictly per-paper evidence
+  const geneSet = paperGenes.get(p.paper_id) || new Set();
+  const genes = [...geneSet].sort();
+  const pathways = [...new Set(genes.map((g) => genePathway.get(g)).filter(Boolean))];
+  const themeTr = t == null || t < 0 ? [] : themeTrials.get(`atlas:${t}`) || [];
+  const trials = [...new Set(
+    themeTr.filter((tr) => [...tr.targets].some((g) => geneSet.has(g))).map((tr) => tr.title)
+  )];
+  return {
+    ...p, cluster_id, area, genes, pathways, trials,
+    pathway_group: pathways[0] || "unclassified",
+  };
 });
 
 // ---- clusters: one per atlas theme present + "other" -----------------------
@@ -151,7 +190,7 @@ const areas = [...areaCount.keys()]
 const slimPapers = papers.map((p) => ({
   paper_id: p.paper_id, title: p.title, year: p.year, journal: p.journal,
   authors: p.authors, cluster_id: p.cluster_id, area: p.area, x: p.x, y: p.y,
-  genes: p.genes, pathway_group: p.pathway_group, trials: p.trials,
+  genes: p.genes, pathways: p.pathways, pathway_group: p.pathway_group, trials: p.trials,
   metrics: p.metrics, url: p.url,
 }));
 
