@@ -88,11 +88,12 @@ npm run dev                    # /api/agent served by Vite middleware
 - Health check: open `https://<deploy>/api/agent` in a browser — it returns
   `{ ok, hasKey, model, baseUrl }`. `hasKey:false` ⇒ the key isn't set for that
   environment.
-- The shared proxy core lives in `web/server/` (not `api/`): Vercel excludes
-  `_`-prefixed files in `api/` from the function bundle, which crashes the import
-  at runtime (`FUNCTION_INVOCATION_FAILED`). `api/agent.ts` sets
-  `maxDuration = 300` (Pro ceiling; Hobby caps at 60) for slower reasoning-model
-  turns — only actual execution time is billed.
+- `api/agent.ts` is **self-contained (no relative imports)** on purpose: with
+  `"type": "module"`, an extensionless relative import fails to resolve under
+  native ESM at runtime → `FUNCTION_INVOCATION_FAILED` before the handler runs
+  (even a trivial `GET` crashes). The same logic lives in `web/server/agentProxy.ts`
+  for the Vite dev middleware — keep the two in sync. `maxDuration = 300`
+  (Pro ceiling; Hobby caps at 60); only actual execution time is billed.
 - **Env vars are per-project.** `OPENAI_API_KEY` must be set on the
   **`dementia-gap-map`** project (or as a Team Shared Variable *linked* to it) —
   a key on a sibling project (e.g. `et-al`) is not visible here. Confirm with the
