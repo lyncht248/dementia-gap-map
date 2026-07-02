@@ -113,6 +113,23 @@ export async function schemaText(): Promise<string> {
   ).join("\n");
 }
 
+function stripSqlComments(sql: string): string {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+}
+
+/** Reject anything that isn't a single read-only SELECT/WITH statement, so the
+ * model can't CREATE/DROP/INSERT and mutate the registered views. */
+export function assertSelectOnly(sql: string): void {
+  const cleaned = stripSqlComments(sql).trim().replace(/;\s*$/, "");
+  if (!cleaned) throw new Error("Empty query.");
+  if (cleaned.includes(";")) {
+    throw new Error("Only a single statement is allowed (no ';').");
+  }
+  if (!/^(select|with)\b/i.test(cleaned)) {
+    throw new Error("Only read-only SELECT / WITH queries are allowed.");
+  }
+}
+
 function normalize(v: unknown): unknown {
   if (v == null) return null;
   if (typeof v === "bigint") return Number(v);
@@ -126,6 +143,7 @@ function normalize(v: unknown): unknown {
 
 /** Run a read-only SQL query. Returns row objects (BigInt/list-safe). */
 export async function runSql(sql: string): Promise<QueryResult> {
+  assertSelectOnly(sql);
   const db = await getDb();
   const conn = await db.connect();
   try {

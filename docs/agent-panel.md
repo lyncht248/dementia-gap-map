@@ -43,7 +43,8 @@ server is a **stateless proxy** — no DB, no session store.
 | `web/src/agent/types.ts` | `AgentController`, `MapHandle`, `MapState` |
 | `web/src/components/AgentPanel.tsx` | Chat tabs, timeline, tool chips, input |
 | `web/src/components/MapCanvas.tsx` | `forwardRef` handle (`zoomToPapers`…) + highlight rendering |
-| `web/api/agent.ts` + `_agent-core.ts` | Vercel serverless proxy (shared core) |
+| `web/api/agent.ts` | Vercel serverless function (handler + `GET` health check) |
+| `web/server/agentProxy.ts` | Shared proxy core + `checkAccess` gate (NOT under `api/` — Vercel drops `_`-prefixed helpers; NOT under `src/` — keeps it out of the app typecheck) |
 | `web/vite.config.ts` | Dev middleware serving `/api/agent` locally |
 
 ## Data tables (DuckDB, SELECT-only, 200-row cap)
@@ -78,9 +79,26 @@ npm install
 npm run dev                    # /api/agent served by Vite middleware
 ```
 
-Deploy: Vercel project root = `web/`; it serves `api/agent.ts` as a function and
-the committed Parquet statically. Set the same env vars in Vercel settings.
-DuckDB-Wasm loads from the jsDelivr CDN at runtime.
+### Deploy (Vercel)
+- Project **Root Directory = `web/`** (Settings → General). It serves `api/agent.ts`
+  as a Node function and the committed Parquet statically.
+- Set env vars for **Production + Preview** (Settings → Environment Variables):
+  `OPENAI_API_KEY` (required), optionally `OPENAI_BASE_URL`, `OPENAI_MODEL`
+  (default `gpt-5.5`), `OPENAI_TEMPERATURE`. **Redeploy** after adding them.
+- Health check: open `https://<deploy>/api/agent` in a browser — it returns
+  `{ ok, hasKey, model, baseUrl }`. `hasKey:false` ⇒ the key isn't set for that
+  environment.
+- The shared proxy core lives in `web/server/` (not `api/`): Vercel excludes
+  `_`-prefixed files in `api/` from the function bundle, which crashes the import
+  at runtime (`FUNCTION_INVOCATION_FAILED`). `api/agent.ts` sets
+  `maxDuration = 60` for slower reasoning-model turns.
+
+### Access control (open-proxy risk)
+`/api/agent` relays to the model with the server key. `checkAccess` blocks
+cross-origin browser calls (best-effort). For a public deploy this is **not**
+sufficient on its own — keep **Vercel Deployment Protection** on (it's on for
+previews by default) or put a real auth/rate-limit gateway in front. A browser
+app can't hold a secret, so there's no client-side token.
 
 Dev-only: `window.mapAgent` exposes the controller for console debugging.
 

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { defineConfig, loadEnv, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
-import { runAgentProxy } from "./api/_agent-core";
+import { checkAccess, runAgentProxy } from "./server/agentProxy";
 
 const ENV_KEYS = [
   "OPENAI_API_KEY",
@@ -19,12 +19,36 @@ function agentDevProxy(): PluginOption {
     name: "agent-dev-proxy",
     configureServer(server) {
       server.middlewares.use("/api/agent", async (req, res) => {
+        if (req.method === "GET") {
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              hasKey: !!process.env.OPENAI_API_KEY,
+              model: process.env.OPENAI_MODEL || "gpt-5.5",
+              baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+            })
+          );
+          return;
+        }
         if (req.method !== "POST") {
           res.statusCode = 405;
           res.end("Method not allowed");
           return;
         }
         try {
+          const gate = checkAccess({
+            origin: req.headers.origin,
+            referer: req.headers.referer,
+            host: req.headers.host,
+          });
+          if (gate) {
+            res.statusCode = gate.status;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(gate.body));
+            return;
+          }
           const chunks: Buffer[] = [];
           for await (const chunk of req) chunks.push(chunk as Buffer);
           const raw = Buffer.concat(chunks).toString("utf8") || "{}";

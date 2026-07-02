@@ -69,10 +69,16 @@ export function createController(deps: ControllerDeps): AgentController {
 
     setFilters(patch: FilterPatch) {
       const data = deps.getData();
+      // Track the values we actually apply and return THOSE — the getters below
+      // still read the previous render's refs, so re-reading them would report
+      // stale filters to the agent.
+      let nextGroups = deps.getActiveGroups();
+      let nextYear = deps.getYearRange();
       if (patch.pathway_groups) {
         const allowed = new Set(data.clusters.map((c) => c.pathway_group));
-        const next = new Set(patch.pathway_groups.filter((g) => allowed.has(g)));
-        deps.setActiveGroups(next.size ? next : new Set(allowed));
+        const filtered = new Set(patch.pathway_groups.filter((g) => allowed.has(g)));
+        nextGroups = filtered.size ? filtered : new Set(allowed);
+        deps.setActiveGroups(nextGroups);
       }
       if (patch.yearRange) {
         const years = data.papers.map((p) => p.year);
@@ -80,12 +86,10 @@ export function createController(deps: ControllerDeps): AgentController {
         const max = Math.max(...years);
         const lo = Math.max(min, Math.min(patch.yearRange[0], max));
         const hi = Math.min(max, Math.max(patch.yearRange[1], min));
-        deps.setYearRange([Math.min(lo, hi), Math.max(lo, hi)]);
+        nextYear = [Math.min(lo, hi), Math.max(lo, hi)];
+        deps.setYearRange(nextYear);
       }
-      return {
-        pathway_groups: [...deps.getActiveGroups()],
-        yearRange: deps.getYearRange(),
-      };
+      return { pathway_groups: [...nextGroups], yearRange: nextYear };
     },
 
     resetView() {
