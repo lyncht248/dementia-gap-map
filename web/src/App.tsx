@@ -150,6 +150,19 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // The atlas fits its view on mount; inside the split layout that can happen
+  // before the flex row settles, leaving it bunched. Nudge a resize once the
+  // layout is stable and whenever the panel opens/closes (big width change).
+  useEffect(() => {
+    const nudge = () => window.dispatchEvent(new Event("resize"));
+    const raf = requestAnimationFrame(nudge);
+    const t = setTimeout(nudge, 250);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+  }, [agentOpen]);
+
   const mapPage = (
     <div className="app">
       <header className="hero">

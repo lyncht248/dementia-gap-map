@@ -304,10 +304,15 @@ def build_papers_and_clusters() -> None:
     paper_rows = []
     for p in d["papers"]:
         m = p.get("metrics") or {}
+        pid = p.get("paper_id")
+        # atlas_feed papers carry no separate pmid; derive it from 'pmid:<id>'.
+        pmid = p.get("pmid")
+        if pmid is None and isinstance(pid, str) and pid.startswith("pmid:"):
+            pmid = pid.split("pmid:", 1)[1]
         paper_rows.append(
             {
-                "paper_id": p.get("paper_id"),
-                "pmid": str(p.get("pmid")) if p.get("pmid") is not None else None,
+                "paper_id": pid,
+                "pmid": str(pmid) if pmid is not None else None,
                 "title": p.get("title"),
                 "year": num(p.get("year")),
                 "journal": p.get("journal"),
