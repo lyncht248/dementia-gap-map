@@ -4,6 +4,7 @@ scikit-learn
 umap-learn
 hdbscan
 matplotlib
+pandas
 plotly
 torch
 transformers>=4.51.0
