@@ -14,6 +14,8 @@ export interface Paper {
   journal: string | null;
   authors: string[];
   cluster_id: string;
+  /** coarse (theme-level) group id, or null for unclustered papers */
+  coarse_id?: string | null;
   x: number;
   y: number;
   genes: string[];
@@ -47,6 +49,8 @@ export interface Cluster {
   topic_id: string;
   label: string;
   color: string;
+  /** coarse (theme-level) group id this fine cluster belongs to */
+  coarse_id?: string | null;
   pathway_group: string;
   top_genes: string[];
   trials: string[];
@@ -58,10 +62,23 @@ export interface Cluster {
   emergence?: ClusterEmergence | null;
 }
 
+/** A theme-level grouping of several fine clusters, used for the always-on
+ *  coarse label tier. Anchored on its largest member's centroid. */
+export interface CoarseCluster {
+  coarse_id: string;
+  label: string;
+  color: string;
+  centroid: { x: number; y: number };
+  paper_count: number;
+  fine_ids: string[];
+}
+
 export interface MapData {
   generated_note?: string;
   disease?: string;
   clusters: Cluster[];
+  /** Coarse theme groups (always-on labels); fine `clusters` reveal on zoom. */
+  coarse_clusters?: CoarseCluster[];
   papers: Paper[];
   /** Pruned coupling edges as [i, j] index pairs into `papers`. */
   edges?: [number, number][];
