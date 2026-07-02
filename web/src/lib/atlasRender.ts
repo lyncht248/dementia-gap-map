@@ -1,10 +1,10 @@
 // Framework-agnostic renderer for the Qwen embedding "theme atlas".
 //
-// `mountAtlas(root, data)` builds the canvas + overlay UI inside `root`, wires
-// pan / zoom / hover-to-trace-citations, and returns a cleanup function. It is
-// the single source of truth for how the atlas renders (the React component in
-// AtlasMap.tsx just fetches the data and calls this). The data file is produced
-// by scripts/build_atlas.py -> web/public/atlas/atlas.json.
+// `mountAtlas(root, data, opts)` builds the canvas inside `root`, wires pan /
+// zoom / hover-to-trace-citations / lasso region-select, and returns a handle
+// the React shell drives (select mode, filters, reset view, clear selection).
+// The disease-area legend + year filter live in the app's Filters panel, not on
+// the canvas. Data: scripts/build_atlas.py -> web/public/atlas/atlas.json.
 
 export interface AtlasMajor {
   id: string; label: string; color: string; x: number; y: number; count: number;
@@ -39,18 +39,29 @@ export interface SelectedPaper {
   degree: number;
 }
 
+export interface AtlasReady {
+  majors: AtlasMajor[];
+  yearMin: number;
+  yearMax: number;
+  total: number;
+}
+
 export interface AtlasOptions {
-  /** called when the user finishes drawing a selection region */
   onSelect?: (rows: SelectedPaper[]) => void;
-  /** called when the atlas leaves select mode on its own (after a drag) */
   onSelectModeChange?: (on: boolean) => void;
+  onReady?: (meta: AtlasReady) => void;
+  onCount?: (visible: number) => void;
 }
 
 export interface AtlasHandle {
   destroy: () => void;
   setSelectMode: (on: boolean) => void;
   clearSelection: () => void;
+  resetView: () => void;
+  setFilter: (hiddenMajors: string[], yearRange: [number, number]) => void;
 }
+
+type Pt = { x: number; y: number };
 
 function hx(h: string): [number, number, number] {
   h = h.replace("#", "");
@@ -62,40 +73,31 @@ function mix(a: number[], b: number[], t: number) {
 function esc(s: string) {
   return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string));
 }
+function pointInPolygon(p: Pt, poly: Pt[]): boolean {
+  if (poly.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+    const hit = yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi;
+    if (hit) inside = !inside;
+  }
+  return inside;
+}
+
+const GREY = "rgb(200,200,204)";
 
 export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOptions = {}): AtlasHandle {
   root.classList.add("atlas-root");
   root.innerHTML = "";
-
   const cv = document.createElement("canvas");
   cv.className = "atlas-canvas";
-  const panel = document.createElement("div");
-  panel.className = "atlas-panel";
-  const h1 = document.createElement("h1");
-  h1.textContent = "Dementia Gap Map — Theme Atlas";
-  const sub = document.createElement("p");
-  const legend = document.createElement("div");
-  legend.className = "atlas-legend";
-  const hint = document.createElement("div");
-  hint.className = "atlas-hint";
-  hint.textContent =
-    "Scroll to zoom · drag to pan · hover a dot to trace its citations · zoom in for finer topics";
-  panel.append(h1, sub, legend, hint);
   const tip = document.createElement("div");
   tip.className = "atlas-tip";
-  const zoomBox = document.createElement("div");
-  zoomBox.className = "atlas-zoom";
-  const zout = document.createElement("button");
-  zout.textContent = "–";
-  const zin = document.createElement("button");
-  zin.textContent = "+";
-  zoomBox.append(zout, zin);
-  root.append(cv, panel, tip, zoomBox);
+  root.append(cv, tip);
 
   const ctx = cv.getContext("2d")!;
   let DPR = Math.min(window.devicePixelRatio || 1, 2);
 
-  // ---- world bounds ----
   const P = DATA.points;
   let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
   for (const p of P) {
@@ -113,10 +115,8 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   for (const m of DATA.minors) { minorMajor[m.id] = m.major; minorLabel[m.id] = m.label; }
   const majorLabel: Record<string, string> = {};
   for (const M of DATA.majors) majorLabel[M.id] = M.label;
-  const hidden = new Set<string>();
 
-  // ---- colour: own disease-area flat colour, blending toward a neighbour only
-  // in a thin seam right at the border (gradient only where topics actually meet).
+  // ---- colour: own disease-area flat colour, blending only in a thin border seam
   const majArr = DATA.majors.map((M) => ({ id: M.id, x: M.x, y: M.y, c: hx(M.color) }));
   const majIdx: Record<string, number> = {};
   majArr.forEach((m, i) => (majIdx[m.id] = i));
@@ -143,10 +143,24 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   for (const e of DATA.edges || []) { ADJ[e[0]].push(e[1]); ADJ[e[1]].push(e[0]); }
   let hoverIdx = -1;
 
+  // ---- filter state ----
+  const hiddenMajors = new Set<string>();
+  let yLo = DATA.meta.year_min, yHi = DATA.meta.year_max;
+  const visible = (i: number) => {
+    const p = P[i];
+    return !hiddenMajors.has(minorMajor[p[2]]) && p[3] >= yLo && p[3] <= yHi;
+  };
+  function reportCount() {
+    if (!opts.onCount) return;
+    let n = 0;
+    for (let i = 0; i < P.length; i++) if (visible(i)) n++;
+    opts.onCount(n);
+  }
+
   // ---- selection ----
-  let selecting = false;                       // "Select region" mode active
-  let selRect: { x0: number; y0: number; x1: number; y1: number } | null = null;
-  let selSet = new Set<number>();              // currently selected point indices
+  let selecting = false;
+  let lasso: Pt[] = [];
+  let selSet = new Set<number>();
 
   // ---- view ----
   const view = { s: 1, tx: 0, ty: 0 };
@@ -154,7 +168,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   const cw = () => cv.clientWidth;
   const ch = () => cv.clientHeight;
   function fit() {
-    const w = cw(), h = ch(), pad = 60;
+    const w = cw(), h = ch(), pad = 48;
     view.s = Math.min((w - 2 * pad) / worldW, (h - 2 * pad) / worldH);
     view.tx = w / 2 - cx0 * view.s;
     view.ty = h / 2 - cy0 * view.s;
@@ -174,38 +188,42 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     ctx.clearRect(0, 0, w, h);
     const zoom = view.s / baseS;
     const r = Math.min(Math.max(1.0, dotR * view.s), 9);
-    const hoverOn = hoverIdx >= 0 && !hidden.has(minorMajor[P[hoverIdx][2]]);
+    const hoverOn = hoverIdx >= 0 && visible(hoverIdx);
     const nb = hoverOn ? new Set(ADJ[hoverIdx]) : null;
     const selOn = !hoverOn && selSet.size > 0;
 
     for (let i = 0; i < P.length; i++) {
-      const p = P[i], fid = p[2];
-      if (hidden.has(minorMajor[fid])) continue;
+      const p = P[i];
       const X = wx(p[0]), Y = wy(p[1]);
       if (X < -4 || X > w + 4 || Y < -4 || Y > h + 4) continue;
+      if (!visible(i)) {
+        ctx.globalAlpha = 0.16;
+        ctx.beginPath(); ctx.arc(X, Y, r, 0, 6.2832);
+        ctx.fillStyle = GREY; ctx.fill();
+        continue;
+      }
       let a = 1;
       if (hoverOn && i !== hoverIdx && !nb!.has(i)) a = 0.55;
       else if (selOn && !selSet.has(i)) a = 0.3;
       ctx.globalAlpha = a;
-      ctx.beginPath();
-      ctx.arc(X, Y, r, 0, 6.2832);
-      ctx.fillStyle = PC[i];
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(X, Y, r, 0, 6.2832);
+      ctx.fillStyle = PC[i]; ctx.fill();
     }
     ctx.globalAlpha = 1;
 
+    // citation links from the hovered paper
     if (hoverOn) {
       const hX = wx(P[hoverIdx][0]), hY = wy(P[hoverIdx][1]);
       ctx.strokeStyle = "rgba(28,28,38,.5)";
       ctx.lineWidth = Math.min(1.5, 0.7 * zoom);
       ctx.beginPath();
       for (const j of ADJ[hoverIdx]) {
-        if (hidden.has(minorMajor[P[j][2]])) continue;
+        if (!visible(j)) continue;
         ctx.moveTo(hX, hY); ctx.lineTo(wx(P[j][0]), wy(P[j][1]));
       }
       ctx.stroke();
       for (const j of ADJ[hoverIdx]) {
-        if (hidden.has(minorMajor[P[j][2]])) continue;
+        if (!visible(j)) continue;
         ctx.beginPath(); ctx.arc(wx(P[j][0]), wy(P[j][1]), r, 0, 6.2832);
         ctx.fillStyle = PC[j]; ctx.fill();
       }
@@ -214,32 +232,36 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       ctx.lineWidth = 2; ctx.strokeStyle = "#1b1b1f"; ctx.stroke();
     }
 
+    // labels
     const showMinor = zoom > 1.7;
     const majorAlpha = showMinor ? Math.max(0.12, 1 - (zoom - 1.7) / 1.4) : 1;
     if (majorAlpha > 0.02) {
       for (const M of DATA.majors) {
-        if (hidden.has(M.id)) continue;
+        if (hiddenMajors.has(M.id)) continue;
         drawLabel(M.label, wx(M.x), wy(M.y), 15 + Math.min(7, M.count / 500), M.color, majorAlpha, true);
       }
     }
     if (showMinor) {
       const a = Math.min(1, (zoom - 1.7) / 0.6);
       for (const m of DATA.minors) {
-        if (hidden.has(m.major)) continue;
+        if (hiddenMajors.has(m.major)) continue;
         if (m.count < 40 && zoom < 3) continue;
         drawLabel(m.label, wx(m.x), wy(m.y), 16, "#22222a", a, false);
       }
     }
 
-    // selection rectangle while dragging
-    if (selRect) {
-      const x = Math.min(selRect.x0, selRect.x1), y = Math.min(selRect.y0, selRect.y1);
-      const rw = Math.abs(selRect.x1 - selRect.x0), rh = Math.abs(selRect.y1 - selRect.y0);
+    // lasso path
+    if (lasso.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(lasso[0].x, lasso[0].y);
+      for (let k = 1; k < lasso.length; k++) ctx.lineTo(lasso[k].x, lasso[k].y);
+      ctx.closePath();
       ctx.fillStyle = "rgba(47,111,87,0.10)";
-      ctx.strokeStyle = "rgba(47,111,87,0.9)";
-      ctx.lineWidth = 1.5;
-      ctx.fillRect(x, y, rw, rh);
-      ctx.strokeRect(x, y, rw, rh);
+      ctx.fill();
+      ctx.setLineDash([6, 5]);
+      ctx.lineWidth = 1.5; ctx.strokeStyle = "#2f6f57";
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 
@@ -253,23 +275,24 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     ctx.globalAlpha = 1;
   }
 
-  // ---- interaction (coords relative to the canvas, so it works when embedded) ----
-  const rel = (e: MouseEvent) => { const b = cv.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
+  // ---- interaction ----
+  const rel = (e: MouseEvent): Pt => { const b = cv.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
   let drag: { x: number; y: number; tx: number; ty: number } | null = null;
 
   const onDown = (e: MouseEvent) => {
     const m = rel(e);
-    if (selecting) { selRect = { x0: m.x, y0: m.y, x1: m.x, y1: m.y }; hideTip(); return; }
+    if (selecting) { lasso = [m]; hideTip(); return; }
     drag = { x: m.x, y: m.y, tx: view.tx, ty: view.ty }; cv.classList.add("drag");
   };
   const onUp = () => {
-    if (selecting && selRect) { finishSelection(); return; }
+    if (selecting && lasso.length > 2) { finishSelection(); return; }
+    if (selecting) { lasso = []; draw(); return; }
     drag = null; cv.classList.remove("drag");
   };
   const onLeave = () => { if (hoverIdx >= 0) { hoverIdx = -1; draw(); } hideTip(); };
   const onMove = (e: MouseEvent) => {
     if (selecting) {
-      if (selRect) { const m = rel(e); selRect.x1 = m.x; selRect.y1 = m.y; draw(); }
+      if (lasso.length) { lasso.push(rel(e)); draw(); }
       return;
     }
     if (drag) {
@@ -281,26 +304,36 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     if (e.target !== cv) { if (hoverIdx >= 0) { hoverIdx = -1; draw(); } hideTip(); return; }
     hover(e);
   };
+  const onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    const m = rel(e);
+    const intensity = e.ctrlKey ? 0.01 : 0.0015;
+    zoomAt(m.x, m.y, Math.exp(-e.deltaY * intensity));
+  };
+
+  function zoomAt(sx: number, sy: number, f: number) {
+    const ns = Math.max(baseS * 0.6, Math.min(baseS * 40, view.s * f));
+    const wxp = (sx - view.tx) / view.s, wyp = (ch() - sy - view.ty) / view.s;
+    view.s = ns;
+    view.tx = sx - wxp * view.s;
+    view.ty = ch() - sy - wyp * view.s;
+    draw();
+  }
 
   function finishSelection() {
-    const rct = selRect!;
-    selRect = null;
-    const x = Math.min(rct.x0, rct.x1), y = Math.min(rct.y0, rct.y1);
-    const rw = Math.abs(rct.x1 - rct.x0), rh = Math.abs(rct.y1 - rct.y0);
+    const poly = lasso;
+    lasso = [];
     const rows: SelectedPaper[] = [];
     selSet = new Set();
-    if (rw > 3 && rh > 3) {
-      for (let i = 0; i < P.length; i++) {
-        const p = P[i];
-        if (hidden.has(minorMajor[p[2]])) continue;
-        const X = wx(p[0]), Y = wy(p[1]);
-        if (X >= x && X <= x + rw && Y >= y && Y <= y + rh) {
-          selSet.add(i);
-          rows.push({
-            i, paper_id: DATA.ids[i], title: DATA.titles[i], year: p[3],
-            minor: minorLabel[p[2]], major: majorLabel[minorMajor[p[2]]], degree: ADJ[i].length,
-          });
-        }
+    for (let i = 0; i < P.length; i++) {
+      if (!visible(i)) continue;
+      const p = P[i];
+      if (pointInPolygon({ x: wx(p[0]), y: wy(p[1]) }, poly)) {
+        selSet.add(i);
+        rows.push({
+          i, paper_id: DATA.ids[i], title: DATA.titles[i], year: p[3],
+          minor: minorLabel[p[2]], major: majorLabel[minorMajor[p[2]]], degree: ADJ[i].length,
+        });
       }
     }
     rows.sort((a, b) => b.degree - a.degree || b.year - a.year);
@@ -310,24 +343,14 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     opts.onSelect?.(rows);
     draw();
   }
-  const onWheel = (e: WheelEvent) => { e.preventDefault(); const m = rel(e); zoomAt(m.x, m.y, Math.exp(-e.deltaY * 0.0015)); };
-
-  function zoomAt(sx: number, sy: number, f: number) {
-    const wxp = (sx - view.tx) / view.s, wyp = (ch() - sy - view.ty) / view.s;
-    view.s *= f;
-    view.tx = sx - wxp * view.s;
-    view.ty = ch() - sy - wyp * view.s;
-    draw();
-  }
-  zin.onclick = () => zoomAt(cw() / 2, ch() / 2, 1.4);
-  zout.onclick = () => zoomAt(cw() / 2, ch() / 2, 1 / 1.4);
 
   function hover(e: MouseEvent) {
     const m = rel(e);
     const r = Math.max(2.5, dotR * view.s) + 2;
     let best = -1, bd = r * r;
     for (let i = 0; i < P.length; i++) {
-      const p = P[i]; if (hidden.has(minorMajor[p[2]])) continue;
+      if (!visible(i)) continue;
+      const p = P[i];
       const dx = wx(p[0]) - m.x, dy = wy(p[1]) - m.y, d = dx * dx + dy * dy;
       if (d < bd) { bd = d; best = i; }
     }
@@ -345,23 +368,6 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   }
   const hideTip = () => { tip.style.opacity = "0"; };
 
-  // ---- legend ----
-  for (const M of DATA.majors) {
-    const row = document.createElement("div");
-    row.className = "row";
-    row.innerHTML =
-      `<span class="sw" style="background:${M.color}"></span>` +
-      `<span>${esc(M.label)}</span><span class="ct">${M.count}</span>`;
-    row.onclick = () => {
-      if (hidden.has(M.id)) hidden.delete(M.id); else hidden.add(M.id);
-      row.classList.toggle("off"); draw();
-    };
-    legend.appendChild(row);
-  }
-  sub.textContent =
-    `${DATA.meta.n_papers.toLocaleString()} papers · ${DATA.meta.n_major} disease areas · ` +
-    `${DATA.meta.n_minor} sub-topics · ${DATA.meta.year_min}–${DATA.meta.year_max} · Qwen3-Embedding-8B`;
-
   cv.addEventListener("mousedown", onDown);
   cv.addEventListener("mouseleave", onLeave);
   cv.addEventListener("wheel", onWheel, { passive: false });
@@ -371,6 +377,8 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   ro.observe(root);
 
   fit(); baseS = view.s; resize();
+  opts.onReady?.({ majors: DATA.majors, yearMin: DATA.meta.year_min, yearMax: DATA.meta.year_max, total: P.length });
+  reportCount();
 
   return {
     destroy() {
@@ -385,15 +393,20 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     },
     setSelectMode(on: boolean) {
       selecting = on;
-      selRect = null;
+      lasso = [];
       cv.classList.toggle("selecting", on);
-      if (on && hoverIdx >= 0) { hoverIdx = -1; }
+      if (on && hoverIdx >= 0) hoverIdx = -1;
       hideTip();
       draw();
     },
-    clearSelection() {
-      selSet = new Set();
+    clearSelection() { selSet = new Set(); draw(); },
+    resetView() { fit(); baseS = view.s; draw(); },
+    setFilter(hm: string[], yr: [number, number]) {
+      hiddenMajors.clear();
+      for (const id of hm) hiddenMajors.add(id);
+      yLo = yr[0]; yHi = yr[1];
       draw();
+      reportCount();
     },
   };
 }
