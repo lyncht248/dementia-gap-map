@@ -197,10 +197,6 @@ export default function AgentPanel({
         {active.items.length === 0 && (
           <div className="agent-empty">
             <div className="agent-empty-title">Ask the map</div>
-            <p className="agent-empty-sub">
-              I can query the evidence data and drive the graph — select, highlight,
-              zoom, and filter.
-            </p>
             <div className="agent-suggestions">
               {SUGGESTIONS.map((s) => (
                 <button key={s} className="agent-suggestion" onClick={() => void send(s)}>
@@ -235,7 +231,7 @@ export default function AgentPanel({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Ask about the data or tell me what to show…"
+          placeholder="Ask about the data…"
           rows={2}
         />
         {active.busy ? (
