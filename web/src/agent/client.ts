@@ -31,7 +31,9 @@ export interface AgentCallbacks {
   onToolResult?: (e: ToolEvent) => void;
 }
 
-const MAX_STEPS = 8;
+// Tool-loop turns per user message. Deep, generative questions (propose targets +
+// next experiments + repurposing) chain many queries, so keep this generous.
+const MAX_STEPS = 16;
 const AGENT_ENDPOINT = "/api/agent";
 
 /** Empty transcript; the system message (with live schema) is injected lazily by
