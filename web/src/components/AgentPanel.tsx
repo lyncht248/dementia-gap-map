@@ -31,10 +31,10 @@ const newConversation = (n: number): Conversation => ({
 });
 
 const SUGGESTIONS = [
-  "Which loci look most underserved by clinical trials?",
-  "Which papers mention APOE? Select and zoom to them.",
-  "Show me the amyloid pathway community.",
-  "Top genes by genetic support — and how many trials target them?",
+  "Which mechanisms have active clinical development, and which are stalled?",
+  "Trace the latest anti-amyloid trials back to their earliest GWAS anchors.",
+  "Which pathways have strong genetics but little clinical translation?",
+  "Show the strongest genetic targets for Alzheimer's and highlight them.",
 ];
 
 export default function AgentPanel({
