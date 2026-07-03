@@ -1376,12 +1376,29 @@ a.mini-tag.trial.link:hover {
   resize: none;
   font: inherit;
   font-size: 13.5px;
+  line-height: 1.4;
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 10px 12px;
   outline: none;
   background: #fff;
+  /* Grows with content (set in JS) up to this height, then scrolls, so
+     pasted multi-line text stays visible instead of clipping to one row. */
+  max-height: 140px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+.agent-input textarea::-webkit-scrollbar {
+  width: 7px;
+}
+.agent-input textarea::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 7px;
+}
+.agent-input textarea::-webkit-scrollbar-track {
+  background: transparent;
 }
 .agent-input textarea:focus {
   border-color: #c9c9c6;

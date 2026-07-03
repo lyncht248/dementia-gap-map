@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AgentController } from "../agent/types";
 import { initialMessages, runConversation, type ChatMessage } from "../agent/client";
 import Markdown from "./Markdown";
@@ -50,9 +50,20 @@ export default function AgentPanel({
   const [input, setInput] = useState("");
   const countRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<Record<string, AbortController>>({});
 
   const active = convos.find((c) => c.id === activeId) ?? convos[0];
+
+  // Auto-grow the input to fit its content (up to the CSS max-height, then it
+  // scrolls). Keyed on `input` so it also fires on paste, suggestion-fill, and
+  // the reset back to one row after sending.
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   const update = (id: string, fn: (c: Conversation) => Conversation) =>
     setConvos((prev) => prev.map((c) => (c.id === id ? fn(c) : c)));
@@ -229,6 +240,7 @@ export default function AgentPanel({
         }}
       >
         <textarea
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
