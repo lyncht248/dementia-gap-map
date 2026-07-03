@@ -1,20 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Cluster, Paper } from "../types";
+import type { AreaInfo, Cluster, Paper } from "../types";
 
 interface Props {
   selected: Paper[];
   clusters: Cluster[];
+  areas: AreaInfo[];
   onClear: () => void;
+  /** report the papers passing the active facet filters (for the map highlight) */
+  onFilteredChange?: (paperIds: string[] | null) => void;
 }
 
-/** Facet types the newsfeed can be filtered by. */
-type Facet = "topic" | "gene" | "pathway" | "trial";
+/** Facet types the newsfeed can be filtered by. `area` = coarse disease area,
+ *  `topic` = fine embedding theme; both levels of the hierarchy are available. */
+type Facet = "area" | "topic" | "gene" | "pathway" | "trial";
 /** What the newsfeed lists. "papers" shows paper cards; the rest rank a facet. */
 type ViewMode = "papers" | "gene" | "pathway" | "trial";
 
-const FACETS: Facet[] = ["topic", "gene", "pathway", "trial"];
+const FACETS: Facet[] = ["area", "topic", "gene", "pathway", "trial"];
 
 const FACET_LABEL: Record<Facet, string> = {
+  area: "Disease areas",
   topic: "Topics",
   gene: "Top genes / loci",
   pathway: "Pathway groups",
@@ -35,10 +40,10 @@ function tally(items: string[], limit = Infinity): [string, number][] {
 }
 
 function emptyFilters(): Record<Facet, Set<string>> {
-  return { topic: new Set(), gene: new Set(), pathway: new Set(), trial: new Set() };
+  return { area: new Set(), topic: new Set(), gene: new Set(), pathway: new Set(), trial: new Set() };
 }
 
-export default function NewsFeed({ selected, clusters, onClear }: Props) {
+export default function NewsFeed({ selected, clusters, areas, onClear, onFilteredChange }: Props) {
   const [view, setView] = useState<ViewMode>("papers");
   const [filters, setFilters] = useState<Record<Facet, Set<string>>>(emptyFilters);
 
@@ -47,6 +52,12 @@ export default function NewsFeed({ selected, clusters, onClear }: Props) {
     for (const c of clusters) m.set(c.topic_id, c);
     return m;
   }, [clusters]);
+
+  const areaById = useMemo(() => {
+    const m = new Map<string, AreaInfo>();
+    for (const a of areas) m.set(a.id, a);
+    return m;
+  }, [areas]);
 
   // A stable signature of the current selection: reset filters + view whenever
   // the user draws a new region so stale facets don't leak across selections.
@@ -63,16 +74,19 @@ export default function NewsFeed({ selected, clusters, onClear }: Props) {
   // topic (falling back to per-paper attribution), matching the counts shown.
   const valuesOf = useMemo(() => {
     return (p: Paper, facet: Facet): string[] => {
-      const c = clusterById.get(p.cluster_id);
+      // All facets are strictly per-paper — genes / pathways / trials come from
+      // the paper's own evidence, never rolled up from its topic.
       switch (facet) {
+        case "area":
+          return [p.area ?? "other"];
         case "topic":
           return [p.cluster_id];
         case "gene":
-          return c && c.top_genes.length ? c.top_genes : p.genes;
+          return p.genes;
         case "pathway":
-          return [p.pathway_group];
+          return p.pathways && p.pathways.length ? p.pathways : p.pathway_group ? [p.pathway_group] : [];
         case "trial":
-          return c ? c.trials ?? p.trials : p.trials;
+          return p.trials;
       }
     };
   }, [clusterById]);
@@ -98,17 +112,11 @@ export default function NewsFeed({ selected, clusters, onClear }: Props) {
 
   const anyFilter = FACETS.some((f) => filters[f].size > 0);
 
-  // Emerging topics present in the (filtered) view, ranked by their topic-level
-  // emergence score (burst + growth + influence, computed over the whole topic).
-  const emerging = useMemo(
-    () =>
-      [...new Set(filtered.map((p) => p.cluster_id))]
-        .map((id) => clusterById.get(id))
-        .filter((c): c is Cluster => !!c && c.topic_id !== "other" && !!c.emergence)
-        .sort((a, b) => b.emergence!.score - a.emergence!.score)
-        .slice(0, 5),
-    [filtered, clusterById]
-  );
+  // Reflect the active facet filter on the map: highlight the papers still
+  // showing (e.g. filter by APOE -> the map dims all but the APOE papers).
+  useEffect(() => {
+    onFilteredChange?.(anyFilter ? filtered.map((p) => p.paper_id) : null);
+  }, [filtered, anyFilter, onFilteredChange]);
 
   const toggle = (facet: Facet, value: string) =>
     setFilters((prev) => {
@@ -217,32 +225,6 @@ export default function NewsFeed({ selected, clusters, onClear }: Props) {
 
       <div className="feed-body">
         <aside className="feed-aside">
-          <div className="aside-section">
-            <h4>Emerging topics</h4>
-            {emerging.length ? (
-              emerging.map((c) => {
-                const e = c.emergence!;
-                return (
-                  <div key={c.topic_id} className="emerge-row">
-                    <div className="emerge-head">
-                      <span className="dot" style={{ background: c.color }} />
-                      <span className="chip-label">{c.label}</span>
-                      <span className="emerge-score">{Math.round(e.score * 100)}</span>
-                    </div>
-                    <div className="emerge-bar">
-                      <span style={{ width: `${Math.round(e.score * 100)}%` }} />
-                    </div>
-                    <div className="emerge-meta">
-                      {Math.round(e.pct_new * 100)}% recent · {e.growth}× growth · RCR{" "}
-                      {e.mean_rcr}
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <span className="muted">no emerging topics in view</span>
-            )}
-          </div>
           {FACETS.map((f) => {
             // The facet currently listed in the newsfeed can't filter itself.
             if (view === (f as ViewMode)) return null;
@@ -253,6 +235,7 @@ export default function NewsFeed({ selected, clusters, onClear }: Props) {
                 counts={asideCounts[f]}
                 active={filters[f]}
                 clusterById={clusterById}
+                areaById={areaById}
                 onToggle={(v) => toggle(f, v)}
               />
             );
@@ -260,7 +243,7 @@ export default function NewsFeed({ selected, clusters, onClear }: Props) {
         </aside>
 
         {view === "papers" ? (
-          <PaperList papers={sortedPapers} clusterById={clusterById} />
+          <PaperList papers={sortedPapers} clusterById={clusterById} areaById={areaById} />
         ) : (
           <RankList facet={view as Facet} rows={ranked} />
         )}
@@ -274,14 +257,21 @@ function FilterSection({
   counts,
   active,
   clusterById,
+  areaById,
   onToggle,
 }: {
   facet: Facet;
   counts: [string, number][];
   active: Set<string>;
   clusterById: Map<string, Cluster>;
+  areaById: Map<string, AreaInfo>;
   onToggle: (value: string) => void;
 }) {
+  const dotFacet = facet === "topic" || facet === "area";
+  const lookup = (id: string): { label: string; color: string } =>
+    facet === "area"
+      ? { label: areaById.get(id)?.label ?? id, color: areaById.get(id)?.color ?? "#999" }
+      : { label: clusterById.get(id)?.label ?? id, color: clusterById.get(id)?.color ?? "#999" };
   return (
     <div className="aside-section">
       <h4>{FACET_LABEL[facet]}</h4>
@@ -289,19 +279,19 @@ function FilterSection({
         <span className="muted">
           {facet === "trial" ? "no trial links here" : "none"}
         </span>
-      ) : facet === "topic" ? (
+      ) : dotFacet ? (
         <div className="chip-list">
           {counts.map(([id, n]) => {
-            const c = clusterById.get(id);
+            const info = lookup(id);
             return (
               <button
                 key={id}
                 className={`chip-row click ${active.has(id) ? "on" : ""}`}
                 onClick={() => onToggle(id)}
-                title={c?.label ?? id}
+                title={info.label}
               >
-                <span className="dot" style={{ background: c?.color ?? "#999" }} />
-                <span className="chip-label">{c?.label ?? id}</span>
+                <span className="dot" style={{ background: info.color }} />
+                <span className="chip-label">{info.label}</span>
                 <span className="chip-count">{n}</span>
               </button>
             );
@@ -360,9 +350,11 @@ function RankList({ facet, rows }: { facet: Facet; rows: [string, number][] }) {
 function PaperList({
   papers,
   clusterById,
+  areaById,
 }: {
   papers: Paper[];
   clusterById: Map<string, Cluster>;
+  areaById: Map<string, AreaInfo>;
 }) {
   if (papers.length === 0) {
     return (
@@ -373,11 +365,13 @@ function PaperList({
     <div className="feed-list">
       {papers.map((p) => {
         const c = clusterById.get(p.cluster_id);
+        const area = p.area ? areaById.get(p.area) : undefined;
         return (
           <article key={p.paper_id} className="card">
             <div className="card-top">
               <span className="dot" style={{ background: c?.color ?? "#999" }} />
               <span className="card-topic">{c?.label ?? p.cluster_id}</span>
+              {area && <span className="card-area">{area.label}</span>}
               <span className="card-year">{p.year}</span>
             </div>
             <h3 className="card-title">

@@ -14,9 +14,13 @@ export interface Paper {
   journal: string | null;
   authors: string[];
   cluster_id: string;
+  /** coarse level of the hierarchy: the paper's disease area (major) */
+  area?: string;
   x: number;
   y: number;
   genes: string[];
+  /** per-paper pathway groups (derived from the paper's own genes) */
+  pathways?: string[];
   pathway_group: string;
   trials: string[];
   metrics: PaperMetrics;
@@ -58,9 +62,18 @@ export interface Cluster {
   emergence?: ClusterEmergence | null;
 }
 
+/** A disease area (the coarse level of the topic hierarchy). */
+export interface AreaInfo {
+  id: string;
+  label: string;
+  color: string;
+  paper_count?: number;
+}
+
 export interface MapData {
   generated_note?: string;
   disease?: string;
+  areas?: AreaInfo[];
   clusters: Cluster[];
   papers: Paper[];
   /** Pruned coupling edges as [i, j] index pairs into `papers`. */

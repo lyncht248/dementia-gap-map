@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AtlasMap, { type AtlasMapHandle } from "./components/AtlasMap";
 import NewsFeed from "./components/NewsFeed";
 import AgentPanel from "./components/AgentPanel";
 import { createController } from "./agent/controller";
 import { warmupDuckDb } from "./lib/duckdb";
 import type { AtlasReady, SelectedPaper } from "./lib/atlasRender";
-import type { Cluster, Paper } from "./types";
+import type { AreaInfo, Cluster, Paper } from "./types";
 
 interface FeedData {
   clusters: Cluster[];
+  areas: AreaInfo[];
   byId: Map<string, Paper>;
 }
 
@@ -37,10 +38,14 @@ export default function App() {
     warmupDuckDb();
     fetch(`${import.meta.env.BASE_URL}atlas/atlas_feed.json`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d: { clusters: Cluster[]; papers: Paper[] }) => {
-        setFeed({ clusters: d.clusters, byId: new Map(d.papers.map((p) => [p.paper_id, p])) });
+      .then((d: { clusters: Cluster[]; areas?: AreaInfo[]; papers: Paper[] }) => {
+        setFeed({
+          clusters: d.clusters,
+          areas: d.areas ?? [],
+          byId: new Map(d.papers.map((p) => [p.paper_id, p])),
+        });
       })
-      .catch(() => setFeed({ clusters: [], byId: new Map() }));
+      .catch(() => setFeed({ clusters: [], areas: [], byId: new Map() }));
   }, []);
 
   const clearSelection = () => {
@@ -75,7 +80,13 @@ export default function App() {
   const toggleMajor = (id: string) =>
     setHiddenMajors((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
+  // The NewsFeed's active facet filter (e.g. gene = APOE) drives a map highlight.
+  const onFilteredChange = useCallback((ids: string[] | null) => {
+    atlasRef.current?.setHighlight(ids);
+  }, []);
+
   const clusters = useMemo(() => feed?.clusters ?? [], [feed]);
+  const areas = useMemo(() => feed?.areas ?? [], [feed]);
 
   // --- agent controller (reads latest state via refs; stable identity) ------
   const feedRef = useRef(feed);
@@ -171,8 +182,9 @@ export default function App() {
         <p>
           Explore research papers matching &ldquo;Dementia AND GWAS&rdquo; from PubMed, coloured
           by disease area and semantically placed using Qwen embeddings, with topic labels
-          added. Drag to pan, scroll to zoom, then draw a region to inspect a group of papers
-          below.
+          added. Each label shows a growth trend (↑ rising, ↓ falling) — papers in the last 3
+          years ÷ the preceding 3 years. Drag to pan, scroll to zoom, then draw a region to
+          inspect a group of papers below.
         </p>
       </header>
 
@@ -255,7 +267,13 @@ export default function App() {
         </button>
       </section>
 
-      <NewsFeed selected={selected} clusters={clusters} onClear={clearSelection} />
+      <NewsFeed
+        selected={selected}
+        clusters={clusters}
+        areas={areas}
+        onClear={clearSelection}
+        onFilteredChange={onFilteredChange}
+      />
 
       <footer className="foot">
         Theme atlas of dementia &amp; GWAS literature · Qwen3-Embedding-8B · citation links

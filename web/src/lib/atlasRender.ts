@@ -8,10 +8,12 @@
 
 export interface AtlasMajor {
   id: string; label: string; color: string; x: number; y: number; count: number;
+  /** last-3-years vs preceding-3-years publication ratio (emergence signal) */
+  growth?: number;
 }
 export interface AtlasMinor {
   id: number; major: string; label: string; color: string;
-  x: number; y: number; count: number;
+  x: number; y: number; count: number; growth?: number;
 }
 export interface AtlasData {
   meta: {
@@ -65,6 +67,8 @@ export interface AtlasHandle {
   highlightByIds: (ids: string[]) => number;
   clearHighlight: () => void;
   zoomToIds: (ids: string[], pad?: number) => number;
+  /** highlight a subset of papers on the map (the NewsFeed's active facet filter) */
+  setHighlight: (paperIds: string[] | null) => void;
 }
 
 type Pt = { x: number; y: number };
@@ -179,6 +183,10 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   let selSet = new Set<number>();
   let hlSet = new Set<number>(); // agent spotlight (amber ring), distinct from selection
   let selAnchor = -1; // the clicked paper (draws citation lines), -1 for lasso
+  // refineSet: an external highlight (the NewsFeed's active facet filter, e.g.
+  // "papers mentioning APOE"). When set it narrows the highlight within selSet.
+  let refineSet: Set<number> | null = null;
+  const idToIndex = new Map<string, number>(DATA.ids.map((id, i) => [id, i]));
 
   const rowFor = (i: number): SelectedPaper => ({
     i, paper_id: DATA.ids[i], title: DATA.titles[i], year: P[i][3],
@@ -233,7 +241,11 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     const r = Math.min(Math.max(1.0, dotR * view.s), 9);
     const hoverOn = hoverIdx >= 0 && visible(hoverIdx);
     const nb = hoverOn ? new Set(ADJ[hoverIdx]) : null;
-    const selOn = !hoverOn && selSet.size > 0;
+    // What to emphasise: an active facet filter (refineSet) narrows the highlight;
+    // otherwise the whole selection (selSet).
+    const dimSet = refineSet && refineSet.size ? refineSet : selSet;
+    const dimOn = !hoverOn && dimSet.size > 0;
+    const dimAlpha = refineSet && refineSet.size ? 0.14 : 0.3;
 
     for (let i = 0; i < P.length; i++) {
       const p = P[i];
@@ -247,16 +259,18 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       }
       let a = 1;
       if (hoverOn && i !== hoverIdx && !nb!.has(i)) a = 0.55;
-      else if (selOn && !selSet.has(i)) a = 0.3;
+      else if (dimOn && !dimSet.has(i)) a = dimAlpha;
       ctx.globalAlpha = a;
       ctx.beginPath(); ctx.arc(X, Y, r, 0, 6.2832);
       ctx.fillStyle = PC[i]; ctx.fill();
     }
     ctx.globalAlpha = 1;
 
-    // citation links — from the hovered paper, or (when not hovering) the paper
-    // clicked to build the current selection.
-    const lineAnchor = hoverOn ? hoverIdx : (selAnchor >= 0 && visible(selAnchor) ? selAnchor : -1);
+    // citation links — from the hovered paper, or (when not hovering / not facet-
+    // filtering) the paper clicked to build the current selection.
+    const lineAnchor = hoverOn
+      ? hoverIdx
+      : (!refineSet && selAnchor >= 0 && visible(selAnchor) ? selAnchor : -1);
     if (lineAnchor >= 0) {
       const hX = wx(P[lineAnchor][0]), hY = wy(P[lineAnchor][1]);
       ctx.strokeStyle = "rgba(28,28,38,.5)";
@@ -283,7 +297,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     if (majorAlpha > 0.02) {
       for (const M of DATA.majors) {
         if (hiddenMajors.has(M.id)) continue;
-        drawLabel(M.label, wx(M.x), wy(M.y), 15 + Math.min(7, M.count / 500), M.color, majorAlpha, true);
+        drawLabel(M.label, trend(M.growth), wx(M.x), wy(M.y), 15 + Math.min(7, M.count / 500), M.color, majorAlpha, true);
       }
     }
     if (showMinor) {
@@ -291,7 +305,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       for (const m of DATA.minors) {
         if (hiddenMajors.has(m.major)) continue;
         if (m.count < 40 && zoom < 3) continue;
-        drawLabel(m.label, wx(m.x), wy(m.y), 16, "#22222a", a, false);
+        drawLabel(m.label, trend(m.growth), wx(m.x), wy(m.y), 16, "#22222a", a, false);
       }
     }
 
@@ -326,13 +340,25 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     }
   }
 
-  function drawLabel(text: string, x: number, y: number, size: number, color: string, alpha: number, bold: boolean) {
-    ctx.font = `${bold ? "700" : "600"} ${size}px -apple-system,Segoe UI,Roboto,sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.globalAlpha = alpha;
-    ctx.lineWidth = bold ? 4.5 : 4; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.lineJoin = "round";
-    ctx.strokeText(text, x, y);
-    ctx.fillStyle = color; ctx.fillText(text, x, y);
+  // "↑ 1.3×" / "↓ 0.8×" — the topic's publication-growth trend.
+  function trend(g?: number): string {
+    if (g == null || !isFinite(g)) return "";
+    return (g >= 1 ? "↑" : "↓") + " " + g.toFixed(1) + "×";
+  }
+
+  // Draws the topic name (bold) with its trend on a centred second line below,
+  // in a smaller, lighter weight; both with a white halo.
+  function drawLabel(label: string, suffix: string, x: number, y: number, size: number, color: string, alpha: number, bold: boolean) {
+    const face = "-apple-system,Segoe UI,Roboto,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+    ctx.globalAlpha = alpha; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.fillStyle = color;
+    ctx.font = `${bold ? "700" : "600"} ${size}px ${face}`; ctx.lineWidth = bold ? 4.5 : 4;
+    ctx.strokeText(label, x, y); ctx.fillText(label, x, y);
+    if (suffix) {
+      ctx.font = `400 ${Math.round(size * 0.8)}px ${face}`; ctx.lineWidth = bold ? 3.5 : 3;
+      const yy = y + size * 0.9;
+      ctx.strokeText(suffix, x, yy); ctx.fillText(suffix, x, yy);
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -473,7 +499,15 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       hideTip();
       draw();
     },
-    clearSelection() { selSet = new Set(); selAnchor = -1; draw(); },
+    clearSelection() { selSet = new Set(); selAnchor = -1; refineSet = null; draw(); },
+    setHighlight(ids: string[] | null) {
+      if (!ids || !ids.length) { refineSet = null; }
+      else {
+        refineSet = new Set<number>();
+        for (const id of ids) { const j = idToIndex.get(id); if (j != null) refineSet.add(j); }
+      }
+      draw();
+    },
     resetView() { fit(); baseS = view.s; draw(); },
     selectByIds(ids: string[]) {
       const idx = idsToIdx(ids);
