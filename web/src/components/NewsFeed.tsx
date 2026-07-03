@@ -389,7 +389,7 @@ function RankList({
       ? "link to each trial"
       : facet === "gene"
       ? "mention each gene / locus"
-      : "fall in each pathway group";
+      : "are in each pathway group";
   return (
     <div className="rank-list">
       <div className="rank-caption">

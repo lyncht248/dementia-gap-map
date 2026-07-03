@@ -283,7 +283,7 @@ function ToolItem({
         disabled={!hasDetail}
       >
         <span className="tool-icon">{pending ? "◴" : "✓"}</span>
-        <span className="tool-name">{item.name}</span>
+        <span className="tool-name">{toolLabel(item.name)}</span>
         <span className="tool-summary">{summary}</span>
       </button>
       {open && (
@@ -300,6 +300,24 @@ function ToolItem({
   );
 }
 
+const TOOL_LABEL: Record<string, string> = {
+  query_data: "Searched the data",
+  describe_schema: "Checked the schema",
+  select_papers: "Selected papers",
+  highlight_papers: "Highlighted papers",
+  zoom_to_papers: "Zoomed the map",
+  zoom_to_community: "Zoomed to a theme",
+  set_filters: "Set filters",
+  focus_entity: "Focused on an entity",
+  clear_selection: "Cleared the selection",
+  clear_highlight: "Cleared the highlight",
+  reset_view: "Reset the view",
+  get_state: "Read the map state",
+};
+const toolLabel = (name: string) => TOOL_LABEL[name] ?? name.replace(/_/g, " ");
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 function toolSummary(item: Extract<UiItem, { kind: "tool" }>): string {
   const r = item.result as Record<string, unknown> | undefined;
   if (item.result === undefined) return "running…";
@@ -307,18 +325,18 @@ function toolSummary(item: Extract<UiItem, { kind: "tool" }>): string {
   switch (item.name) {
     case "query_data":
       return r
-        ? `${r.rowCount ?? 0} rows${r.truncated ? "+" : ""}`
+        ? `${plural(Number(r.rowCount ?? 0), "row")}${r.truncated ? "+" : ""}`
         : "done";
     case "select_papers":
-      return `selected ${r?.selected ?? 0}`;
+      return plural(Number(r?.selected ?? 0), "paper");
     case "highlight_papers":
-      return `highlighted ${r?.highlighted ?? 0}`;
+      return plural(Number(r?.highlighted ?? 0), "paper");
     case "zoom_to_papers":
-      return `framed ${r?.zoomed ?? 0}`;
+      return `zoomed to ${plural(Number(r?.zoomed ?? 0), "paper")}`;
     case "zoom_to_community":
-      return r?.error ? `error` : `community ${r?.topic_id} · ${r?.members} papers`;
+      return r?.error ? `error` : `${plural(Number(r?.members ?? 0), "paper")} in ${r?.topic_id}`;
     case "focus_entity":
-      return `resolved ${r?.resolved ?? 0} (${r?.by ?? "?"})`;
+      return `${plural(Number(r?.resolved ?? 0), "paper")} (${r?.by ?? "?"})`;
     default:
       return "done";
   }

@@ -1266,9 +1266,8 @@ a.mini-tag.trial.link:hover {
   opacity: 0.72;
 }
 .tool-name {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ink);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .tool-summary {
   margin-left: auto;
