@@ -85,7 +85,7 @@ export default function App() {
         <p>
           Explore research papers matching &ldquo;Dementia AND GWAS&rdquo; from PubMed, coloured
           by disease area and semantically placed using Qwen embeddings, with topic labels
-          added. Each label shows a growth trend (▲ rising, ▼ falling) — papers in the last 3
+          added. Each label shows a growth trend (↑ rising, ↓ falling) — papers in the last 3
           years ÷ the preceding 3 years. Drag to pan, scroll to zoom, then draw a region to
           inspect a group of papers below.
         </p>

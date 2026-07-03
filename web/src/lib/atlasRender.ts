@@ -280,7 +280,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     if (majorAlpha > 0.02) {
       for (const M of DATA.majors) {
         if (hiddenMajors.has(M.id)) continue;
-        drawLabel(M.label + trend(M.growth), wx(M.x), wy(M.y), 15 + Math.min(7, M.count / 500), M.color, majorAlpha, true);
+        drawLabel(M.label, trend(M.growth), wx(M.x), wy(M.y), 15 + Math.min(7, M.count / 500), M.color, majorAlpha, true);
       }
     }
     if (showMinor) {
@@ -288,7 +288,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       for (const m of DATA.minors) {
         if (hiddenMajors.has(m.major)) continue;
         if (m.count < 40 && zoom < 3) continue;
-        drawLabel(m.label + trend(m.growth), wx(m.x), wy(m.y), 16, "#22222a", a, false);
+        drawLabel(m.label, trend(m.growth), wx(m.x), wy(m.y), 16, "#22222a", a, false);
       }
     }
 
@@ -307,19 +307,30 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     }
   }
 
-  // "  ▲ 1.3×" / "  ▼ 0.8×" — the topic's publication-growth trend.
+  // "  ↑ 1.3×" / "  ↓ 0.8×" — the topic's publication-growth trend.
   function trend(g?: number): string {
     if (g == null || !isFinite(g)) return "";
-    return "  " + (g >= 1 ? "▲" : "▼") + " " + g.toFixed(1) + "×";
+    return "  " + (g >= 1 ? "↑" : "↓") + " " + g.toFixed(1) + "×";
   }
 
-  function drawLabel(text: string, x: number, y: number, size: number, color: string, alpha: number, bold: boolean) {
-    ctx.font = `${bold ? "700" : "600"} ${size}px -apple-system,Segoe UI,Roboto,sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.globalAlpha = alpha;
-    ctx.lineWidth = bold ? 4.5 : 4; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.lineJoin = "round";
-    ctx.strokeText(text, x, y);
-    ctx.fillStyle = color; ctx.fillText(text, x, y);
+  // Draws the topic name (bold) followed by its trend suffix in a lighter
+  // weight, centred as one unit, each with a white halo.
+  function drawLabel(label: string, suffix: string, x: number, y: number, size: number, color: string, alpha: number, bold: boolean) {
+    const face = "-apple-system,Segoe UI,Roboto,sans-serif";
+    const mainFont = `${bold ? "700" : "600"} ${size}px ${face}`;
+    const subFont = `400 ${size}px ${face}`;
+    ctx.textBaseline = "middle"; ctx.lineJoin = "round"; ctx.globalAlpha = alpha;
+    ctx.font = mainFont; const wMain = ctx.measureText(label).width;
+    ctx.font = subFont; const wSub = suffix ? ctx.measureText(suffix).width : 0;
+    ctx.textAlign = "left";
+    const left = x - (wMain + wSub) / 2;
+    ctx.strokeStyle = "rgba(255,255,255,.95)";
+    ctx.font = mainFont; ctx.lineWidth = bold ? 4.5 : 4;
+    ctx.strokeText(label, left, y); ctx.fillStyle = color; ctx.fillText(label, left, y);
+    if (suffix) {
+      ctx.font = subFont; ctx.lineWidth = bold ? 3.5 : 3;
+      ctx.strokeText(suffix, left + wMain, y); ctx.fillStyle = color; ctx.fillText(suffix, left + wMain, y);
+    }
     ctx.globalAlpha = 1;
   }
 
