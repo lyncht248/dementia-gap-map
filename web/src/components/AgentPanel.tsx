@@ -62,7 +62,11 @@ export default function AgentPanel({
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    // scrollHeight is 0 while the panel is hidden (it stays mounted under a
+    // display:none parent to preserve chats), so skip and keep the natural
+    // one-row auto height. +2 covers the top/bottom border (box-sizing:
+    // border-box) so the single line is not clipped.
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight + 2}px`;
   }, [input]);
 
   const update = (id: string, fn: (c: Conversation) => Conversation) =>
