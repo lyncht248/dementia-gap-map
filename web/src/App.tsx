@@ -162,17 +162,9 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // The atlas fits its view when it mounts, but inside the split layout that can
-  // happen before the flex row settles, leaving it bunched. AtlasMap's resize
-  // only redraws (it doesn't re-fit), so once the atlas is ready we re-fit to the
-  // settled size with resetView.
-  useEffect(() => {
-    if (!meta) return;
-    const t = setTimeout(() => atlasRef.current?.resetView(), 80);
-    return () => clearTimeout(t);
-  }, [meta]);
-
-  // Panel open/close changes the map width — nudge a redraw.
+  // Panel open/close (and the initial split-layout settle) change the map width;
+  // nudge a resize so the atlas re-fits (it auto-fits on resize until the user
+  // pans/zooms).
   useEffect(() => {
     const t = setTimeout(() => window.dispatchEvent(new Event("resize")), 60);
     return () => clearTimeout(t);
@@ -184,7 +176,7 @@ export default function App() {
         <h1>Dementia Gap Map</h1>
         <p>
           A map of dementia &amp; GWAS research, grouped by theme. Drag to pan, scroll to zoom,
-          and draw a region to inspect papers — or ask the agent on the left.
+          and draw a region to inspect papers, or ask the agent on the left.
         </p>
       </header>
 

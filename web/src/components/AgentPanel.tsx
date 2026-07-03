@@ -232,7 +232,7 @@ export default function AgentPanel({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Ask about the data…"
-          rows={2}
+          rows={1}
         />
         {active.busy ? (
           <button type="button" className="agent-send agent-stop" onClick={stop}>

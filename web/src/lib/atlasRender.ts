@@ -216,6 +216,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   // ---- view ----
   const view = { s: 1, tx: 0, ty: 0 };
   let baseS = 1;
+  let userMoved = false; // once the user pans/zooms, stop auto-fitting on resize
   const cw = () => cv.clientWidth;
   const ch = () => cv.clientHeight;
   function fit() {
@@ -230,6 +231,9 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
     cv.width = cw() * DPR; cv.height = ch() * DPR;
+    // Re-fit while the user hasn't taken control, so the map fills the panel even
+    // when the initial fit ran before the (split) layout settled.
+    if (!userMoved) { fit(); baseS = view.s; }
     draw();
   }
 
@@ -395,7 +399,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     }
     if (drag) {
       const m = rel(e);
-      if (Math.abs(m.x - drag.x) + Math.abs(m.y - drag.y) > 4) dragMoved = true;
+      if (Math.abs(m.x - drag.x) + Math.abs(m.y - drag.y) > 4) { dragMoved = true; userMoved = true; }
       if (hoverIdx >= 0) hoverIdx = -1;
       view.tx = drag.tx + (m.x - drag.x); view.ty = drag.ty - (m.y - drag.y);
       draw(); hideTip(); return;
@@ -411,6 +415,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   };
 
   function zoomAt(sx: number, sy: number, f: number) {
+    userMoved = true;
     const ns = Math.max(baseS * 0.6, Math.min(baseS * 40, view.s * f));
     const wxp = (sx - view.tx) / view.s, wyp = (ch() - sy - view.ty) / view.s;
     view.s = ns;
@@ -508,7 +513,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       }
       draw();
     },
-    resetView() { fit(); baseS = view.s; draw(); },
+    resetView() { userMoved = false; fit(); baseS = view.s; draw(); },
     selectByIds(ids: string[]) {
       const idx = idsToIdx(ids);
       selSet = new Set(idx);
@@ -528,6 +533,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     zoomToIds(ids: string[], pad = 60) {
       const idx = idsToIdx(ids);
       if (!idx.length) return 0;
+      userMoved = true;
       let mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
       for (const i of idx) {
         const p = P[i];
