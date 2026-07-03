@@ -162,17 +162,20 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // The atlas fits its view on mount; inside the split layout that can happen
-  // before the flex row settles, leaving it bunched. Nudge a resize once the
-  // layout is stable and whenever the panel opens/closes (big width change).
+  // The atlas fits its view when it mounts, but inside the split layout that can
+  // happen before the flex row settles, leaving it bunched. AtlasMap's resize
+  // only redraws (it doesn't re-fit), so once the atlas is ready we re-fit to the
+  // settled size with resetView.
   useEffect(() => {
-    const nudge = () => window.dispatchEvent(new Event("resize"));
-    const raf = requestAnimationFrame(nudge);
-    const t = setTimeout(nudge, 250);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t);
-    };
+    if (!meta) return;
+    const t = setTimeout(() => atlasRef.current?.resetView(), 80);
+    return () => clearTimeout(t);
+  }, [meta]);
+
+  // Panel open/close changes the map width — nudge a redraw.
+  useEffect(() => {
+    const t = setTimeout(() => window.dispatchEvent(new Event("resize")), 60);
+    return () => clearTimeout(t);
   }, [agentOpen]);
 
   const mapPage = (
@@ -180,11 +183,8 @@ export default function App() {
       <header className="hero">
         <h1>Dementia Gap Map</h1>
         <p>
-          Explore research papers matching &ldquo;Dementia AND GWAS&rdquo; from PubMed, coloured
-          by disease area and semantically placed using Qwen embeddings, with topic labels
-          added. Each label shows a growth trend (↑ rising, ↓ falling) — papers in the last 3
-          years ÷ the preceding 3 years. Drag to pan, scroll to zoom, then draw a region to
-          inspect a group of papers below.
+          A map of dementia &amp; GWAS research, grouped by theme. Drag to pan, scroll to zoom,
+          and draw a region to inspect papers — or ask the agent on the left.
         </p>
       </header>
 
@@ -276,8 +276,8 @@ export default function App() {
       />
 
       <footer className="foot">
-        Theme atlas of dementia &amp; GWAS literature · Qwen3-Embedding-8B · citation links
-        from PubMed / NIH iCite, GWAS Catalog, Open Targets &amp; ClinicalTrials.gov
+        Dementia Gap Map · research prototype · data from PubMed, GWAS Catalog, Open Targets
+        &amp; ClinicalTrials.gov
       </footer>
     </div>
   );
