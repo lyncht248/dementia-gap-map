@@ -89,6 +89,10 @@ graph_nodes (~15k) / graph_edges (~11k) — pre-joined typed evidence graph.
   drug_pathway, topic_gene, topic_pathway, topic_disease (source_id/target_id/score).
   Use for multi-hop the flat tables can't do: drug↔target↔trial (trial_drug +
   drug_pathway + gene_pathway) and community↔evidence (topic_gene/topic_pathway).
+  For "what is X connected to" / multi-hop path questions, prefer the
+  traverse_graph tool (from a node_id or a gene symbol) over hand-writing joins;
+  it returns reachable nodes + the path to each. Use SQL on graph_edges for
+  simple 1-hop counts.
 
 ## Joins & IDs
 - Gene: genes.symbol / genes.gene_id ; gwas.reported_genes / gwas.ensembl_gene_ids ;

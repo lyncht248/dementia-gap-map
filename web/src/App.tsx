@@ -283,20 +283,22 @@ export default function App() {
 
   return (
     <div className="workspace" ref={workspaceRef}>
+      {/* Kept mounted (hidden when minimized) so open chats are preserved. */}
+      <div
+        className="agent-col"
+        style={{ width: agentWidth, display: agentOpen ? undefined : "none" }}
+      >
+        <AgentPanel controller={controller} onMinimize={() => setAgentOpen(false)} />
+      </div>
       {agentOpen ? (
-        <>
-          <div className="agent-col" style={{ width: agentWidth }}>
-            <AgentPanel controller={controller} onMinimize={() => setAgentOpen(false)} />
-          </div>
-          <div
-            className={`divider ${dragging ? "dragging" : ""}`}
-            onPointerDown={() => setDragging(true)}
-            role="separator"
-            aria-orientation="vertical"
-          >
-            <span className="divider-grip" />
-          </div>
-        </>
+        <div
+          className={`divider ${dragging ? "dragging" : ""}`}
+          onPointerDown={() => setDragging(true)}
+          role="separator"
+          aria-orientation="vertical"
+        >
+          <span className="divider-grip" />
+        </div>
       ) : (
         <button
           className="agent-reopen"

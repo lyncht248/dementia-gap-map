@@ -942,6 +942,46 @@ a.mini-tag.trial.link:hover {
   overflow-x: auto;
   flex: 1 1 auto;
   min-width: 0;
+  /* the tab strip scrolls, but the scrollbar itself is hidden */
+  scrollbar-width: none;
+}
+.agent-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* thin, subtle scrollbars for the scrollable panes */
+.agent-messages,
+.right-scroll,
+.feed-list,
+.rank-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+.agent-messages::-webkit-scrollbar,
+.right-scroll::-webkit-scrollbar,
+.feed-list::-webkit-scrollbar,
+.rank-list::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.agent-messages::-webkit-scrollbar-thumb,
+.right-scroll::-webkit-scrollbar-thumb,
+.feed-list::-webkit-scrollbar-thumb,
+.rank-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 7px;
+}
+.agent-messages::-webkit-scrollbar-thumb:hover,
+.right-scroll::-webkit-scrollbar-thumb:hover,
+.feed-list::-webkit-scrollbar-thumb:hover,
+.rank-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+.agent-messages::-webkit-scrollbar-track,
+.right-scroll::-webkit-scrollbar-track,
+.feed-list::-webkit-scrollbar-track,
+.rank-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* collapsed-agent reopen tab (left edge) */

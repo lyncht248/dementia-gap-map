@@ -35,6 +35,7 @@ const SUGGESTIONS = [
   "Trace the latest anti-amyloid trials back to their earliest GWAS anchors.",
   "Which pathways have strong genetics but little clinical translation?",
   "Show the strongest genetic targets for Alzheimer's and highlight them.",
+  "What is APOE connected to across pathways, drugs, and trials?",
 ];
 
 export default function AgentPanel({
@@ -302,6 +303,7 @@ function ToolItem({
 
 const TOOL_LABEL: Record<string, string> = {
   query_data: "Searched the data",
+  traverse_graph: "Traversed the graph",
   describe_schema: "Checked the schema",
   select_papers: "Selected papers",
   highlight_papers: "Highlighted papers",
@@ -327,6 +329,8 @@ function toolSummary(item: Extract<UiItem, { kind: "tool" }>): string {
       return r
         ? `${plural(Number(r.rowCount ?? 0), "row")}${r.truncated ? "+" : ""}`
         : "done";
+    case "traverse_graph":
+      return r?.error ? "error" : plural(Number(r?.count ?? 0), "node");
     case "select_papers":
       return plural(Number(r?.selected ?? 0), "paper");
     case "highlight_papers":

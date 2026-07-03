@@ -2,7 +2,7 @@
 // tool call locally: `query_data` hits DuckDB-Wasm, the rest drive the map via
 // the AgentController. Everything executes in the browser; the serverless proxy
 // only relays model turns.
-import { getSchema, runSql } from "../lib/duckdb";
+import { getSchema, runSql, traverseGraph } from "../lib/duckdb";
 import type { AgentController } from "./types";
 
 export interface ToolSpec {
@@ -34,6 +34,42 @@ export const TOOLS: ToolSpec[] = [
           sql: { type: "string", description: "A single SELECT statement." },
         },
         required: ["sql"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "traverse_graph",
+      description:
+        "Traverse the pre-joined evidence graph from a start node and return the " +
+        "nodes reachable within `hops`, WITH the path to each. Use for 'what is X " +
+        "connected to' / multi-hop questions that are awkward in SQL: " +
+        "drug<->target<->trial, gene<->pathway<->drug, community(topic)<->evidence. " +
+        "`from` accepts a node_id ('gene:ENSG…', 'drug:…', 'trial:NCT…', 'pathway:…', " +
+        "'disease:…', 'topic:…') OR a gene SYMBOL like 'APOE' (auto-resolved). Edge " +
+        "types: variant_gene, gene_pathway, gene_disease, trial_drug, trial_pathway, " +
+        "drug_pathway, topic_gene, topic_pathway, topic_disease.",
+      parameters: {
+        type: "object",
+        properties: {
+          from: {
+            type: "string",
+            description: "Start node_id or gene symbol (e.g. 'APOE' or 'gene:ENSG00000130203').",
+          },
+          edge_types: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional: only follow these edge types.",
+          },
+          hops: { type: "number", description: "Max hops (1-4, default 2)." },
+          direction: {
+            type: "string",
+            enum: ["out", "in", "both"],
+            description: "Edge direction to follow (default both).",
+          },
+        },
+        required: ["from"],
       },
     },
   },
@@ -189,6 +225,19 @@ export async function dispatchTool(
         return { error: String(e instanceof Error ? e.message : e) };
       }
     }
+    case "traverse_graph":
+      try {
+        return await traverseGraph({
+          from: String(args.from ?? ""),
+          edgeTypes: Array.isArray(args.edge_types)
+            ? args.edge_types.map(String)
+            : undefined,
+          hops: args.hops != null ? Number(args.hops) : undefined,
+          direction: args.direction ? String(args.direction) : undefined,
+        });
+      } catch (e) {
+        return { error: String(e instanceof Error ? e.message : e) };
+      }
     case "describe_schema":
       try {
         return await getSchema();
