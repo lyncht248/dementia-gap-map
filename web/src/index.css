@@ -1020,7 +1020,7 @@ button.tag.trial.on {
   background: #fff;
 }
 .agent-empty {
-  margin: 4px 0 0;
+  margin: auto 0;
   color: var(--muted);
   text-align: center;
 }

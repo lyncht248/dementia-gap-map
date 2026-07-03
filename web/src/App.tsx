@@ -28,7 +28,7 @@ export default function App() {
   const atlasRef = useRef<AtlasMapHandle>(null);
 
   // Split layout
-  const [agentOpen, setAgentOpen] = useState(true);
+  const [agentOpen, setAgentOpen] = useState(false);
   const [agentWidth, setAgentWidth] = useState(400);
   const [dragging, setDragging] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
