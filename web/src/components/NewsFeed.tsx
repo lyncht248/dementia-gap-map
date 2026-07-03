@@ -305,7 +305,12 @@ function FilterSection({
               >
                 <span className="dot" style={{ background: info.color }} />
                 <span className="chip-label">{info.label}</span>
-                <span className="chip-count">{n}</span>
+                <span
+                  className="chip-count"
+                  title={`${n} selected paper${n !== 1 ? "s" : ""}`}
+                >
+                  {n}
+                </span>
               </button>
             );
           })}
@@ -319,7 +324,7 @@ function FilterSection({
                 active.has(v) ? "on" : ""
               }`}
               onClick={() => onToggle(v)}
-              title={v}
+              title={`${v} · ${n} selected paper${n !== 1 ? "s" : ""} (click to filter)`}
             >
               {facet === "trial" && v.length > 34 ? v.slice(0, 33) + "…" : v}{" "}
               <em>{n}</em>
@@ -348,8 +353,17 @@ function RankList({
     );
   }
   const max = rows[0][1] || 1;
+  const noun =
+    facet === "trial"
+      ? "linked to each trial"
+      : facet === "gene"
+      ? "mentioning each gene / locus"
+      : "in each pathway group";
   return (
     <div className="rank-list">
+      <div className="rank-caption">
+        Number = how many of the selected papers are {noun}.
+      </div>
       {rows.map(([name, n]) => {
         const nct = facet === "trial" ? trialNct?.get(name) : undefined;
         return (
@@ -369,7 +383,9 @@ function RankList({
               style={{ width: `${Math.max(4, (n / max) * 100)}%` }}
             />
           </span>
-          <span className="rank-count">{n}</span>
+          <span className="rank-count" title={`${n} selected paper${n !== 1 ? "s" : ""}`}>
+            {n}
+          </span>
         </div>
         );
       })}
@@ -434,7 +450,7 @@ function PaperList({
               ))}
               {trialLinksOf(p).map((t) => {
                 const why = t.via.length
-                  ? `Linked because its drug${t.drug ? ` (${t.drug.toLowerCase()})` : ""} targets ${t.via.join(", ")}, a gene studied in this paper.`
+                  ? `This trial tests a drug${t.drug ? ` (${t.drug})` : ""} that targets ${t.via.join(", ")}, ${t.via.length > 1 ? "genes" : "a gene"} studied in this paper. Opens the trial on ClinicalTrials.gov.`
                   : t.title;
                 const body = (
                   <>
