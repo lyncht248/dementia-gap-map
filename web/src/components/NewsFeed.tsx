@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AreaInfo, Cluster, Paper } from "../types";
+import type { AreaInfo, Cluster, Paper, TrialLink } from "../types";
+
+const ctgovUrl = (nct: string) => `https://clinicaltrials.gov/study/${nct}`;
+
+const trialLinksOf = (p: Paper): TrialLink[] =>
+  p.trialLinks ?? p.trials.map((title) => ({ title, nct_id: null, drug: null, via: [] }));
 
 interface Props {
   selected: Paper[];
@@ -169,6 +174,14 @@ export default function NewsFeed({ selected, clusters, areas, onClear, onFiltere
     return tally(filtered.flatMap((p) => valuesOf(p, view as Facet)));
   }, [view, filtered, valuesOf]);
 
+  // trial title -> NCT id, so the trial ranking can link out to ClinicalTrials.gov.
+  const trialNct = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of selected)
+      for (const t of p.trialLinks ?? []) if (t.nct_id) m.set(t.title, t.nct_id);
+    return m;
+  }, [selected]);
+
   if (selected.length === 0) {
     return (
       <div className="feed feed-empty">
@@ -245,7 +258,7 @@ export default function NewsFeed({ selected, clusters, areas, onClear, onFiltere
         {view === "papers" ? (
           <PaperList papers={sortedPapers} clusterById={clusterById} areaById={areaById} />
         ) : (
-          <RankList facet={view as Facet} rows={ranked} />
+          <RankList facet={view as Facet} rows={ranked} trialNct={trialNct} />
         )}
       </div>
     </div>
@@ -318,7 +331,15 @@ function FilterSection({
   );
 }
 
-function RankList({ facet, rows }: { facet: Facet; rows: [string, number][] }) {
+function RankList({
+  facet,
+  rows,
+  trialNct,
+}: {
+  facet: Facet;
+  rows: [string, number][];
+  trialNct?: Map<string, string>;
+}) {
   if (rows.length === 0) {
     return (
       <div className="rank-empty">
@@ -329,10 +350,18 @@ function RankList({ facet, rows }: { facet: Facet; rows: [string, number][] }) {
   const max = rows[0][1] || 1;
   return (
     <div className="rank-list">
-      {rows.map(([name, n]) => (
+      {rows.map(([name, n]) => {
+        const nct = facet === "trial" ? trialNct?.get(name) : undefined;
+        return (
         <div key={name} className="rank-row">
           <span className="rank-name" title={name}>
-            {name}
+            {nct ? (
+              <a href={ctgovUrl(nct)} target="_blank" rel="noreferrer">
+                {name}
+              </a>
+            ) : (
+              name
+            )}
           </span>
           <span className="rank-track">
             <span
@@ -342,7 +371,8 @@ function RankList({ facet, rows }: { facet: Facet; rows: [string, number][] }) {
           </span>
           <span className="rank-count">{n}</span>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -402,11 +432,35 @@ function PaperList({
                   {g}
                 </span>
               ))}
-              {p.trials.map((t) => (
-                <span key={t} className="mini-tag trial">
-                  {t}
-                </span>
-              ))}
+              {trialLinksOf(p).map((t) => {
+                const why = t.via.length
+                  ? `Linked because its drug${t.drug ? ` (${t.drug.toLowerCase()})` : ""} targets ${t.via.join(", ")}, a gene studied in this paper.`
+                  : t.title;
+                const body = (
+                  <>
+                    {t.title}
+                    {t.via.length > 0 && (
+                      <em className="trial-via"> · via {t.via.slice(0, 2).join(", ")}</em>
+                    )}
+                  </>
+                );
+                return t.nct_id ? (
+                  <a
+                    key={t.nct_id}
+                    className="mini-tag trial link"
+                    href={ctgovUrl(t.nct_id)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={why}
+                  >
+                    {body}
+                  </a>
+                ) : (
+                  <span key={t.title} className="mini-tag trial" title={why}>
+                    {body}
+                  </span>
+                );
+              })}
             </div>
           </article>
         );

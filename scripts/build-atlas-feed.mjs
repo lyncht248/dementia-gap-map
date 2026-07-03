@@ -55,9 +55,17 @@ for (const line of fs.readFileSync(P("translational-evidence/map/gene_pathway.cs
   if (sym && pg) genePathway.set(sym.trim(), pg.trim());
 }
 // theme -> its trials (each with the genes the trial's drug targets)
-const themeTrials = new Map(); // "atlas:N" -> [{ title, targets:Set }]
+const themeTrials = new Map(); // "atlas:N" -> [{ title, nct_id, drug, targets:Set }]
 for (const r of rollups) {
-  themeTrials.set(r.topic_id, (r.trials || []).map((t) => ({ title: t.brief_title, targets: new Set(t.target_genes || []) })));
+  themeTrials.set(
+    r.topic_id,
+    (r.trials || []).map((t) => ({
+      title: t.brief_title,
+      nct_id: t.nct_id ?? null,
+      drug: (t.drugs || [])[0] ?? null,
+      targets: new Set(t.target_genes || []),
+    }))
+  );
 }
 
 // paper_id -> true HDBSCAN theme id (-1 = noise/"other")
@@ -110,11 +118,26 @@ const papers = mapData.papers.map((p) => {
   const genes = [...geneSet].sort();
   const pathways = [...new Set(genes.map((g) => genePathway.get(g)).filter(Boolean))];
   const themeTr = t == null || t < 0 ? [] : themeTrials.get(`atlas:${t}`) || [];
-  const trials = [...new Set(
-    themeTr.filter((tr) => [...tr.targets].some((g) => geneSet.has(g))).map((tr) => tr.title)
-  )];
+  // A trial links to this paper when its drug targets a gene the paper studies.
+  // `via` records WHICH of the paper's genes it hit (the reason for the link).
+  const seenTrial = new Set();
+  const trialLinks = themeTr
+    .map((tr) => ({
+      title: tr.title,
+      nct_id: tr.nct_id,
+      drug: tr.drug,
+      via: [...tr.targets].filter((g) => geneSet.has(g)),
+    }))
+    .filter((tr) => tr.via.length)
+    .filter((tr) => {
+      const k = tr.nct_id || tr.title;
+      if (seenTrial.has(k)) return false;
+      seenTrial.add(k);
+      return true;
+    });
+  const trials = trialLinks.map((tr) => tr.title);
   return {
-    ...p, cluster_id, area, genes, pathways, trials,
+    ...p, cluster_id, area, genes, pathways, trials, trialLinks,
     pathway_group: pathways[0] || "unclassified",
   };
 });
@@ -190,7 +213,8 @@ const areas = [...areaCount.keys()]
 const slimPapers = papers.map((p) => ({
   paper_id: p.paper_id, title: p.title, year: p.year, journal: p.journal,
   authors: p.authors, cluster_id: p.cluster_id, area: p.area, x: p.x, y: p.y,
-  genes: p.genes, pathways: p.pathways, pathway_group: p.pathway_group, trials: p.trials,
+  genes: p.genes, pathways: p.pathways, pathway_group: p.pathway_group,
+  trials: p.trials, trialLinks: p.trialLinks,
   metrics: p.metrics, url: p.url,
 }));
 

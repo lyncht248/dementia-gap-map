@@ -657,6 +657,25 @@ button.tag.trial.on {
   background: #e7f1ec;
   color: #24513f;
 }
+a.mini-tag.trial.link {
+  text-decoration: none;
+  cursor: pointer;
+}
+a.mini-tag.trial.link:hover {
+  background: #d5e8de;
+}
+.trial-via {
+  font-style: normal;
+  color: #5b7d6e;
+  opacity: 0.85;
+}
+.rank-name a {
+  color: inherit;
+  text-decoration: none;
+}
+.rank-name a:hover {
+  text-decoration: underline;
+}
 
 .foot {
   text-align: center;
