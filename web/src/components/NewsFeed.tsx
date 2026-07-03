@@ -2,6 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import type { AreaInfo, Cluster, Paper, TrialLink } from "../types";
 
 const ctgovUrl = (nct: string) => `https://clinicaltrials.gov/study/${nct}`;
+const geneUrl = (sym: string) =>
+  `https://www.genecards.org/cgi-bin/carddisp.pl?gene=${encodeURIComponent(sym)}`;
+/** RCR is a field-normalized citation impact (1.0 = an average NIH paper). */
+const fmtRcr = (v: number) => Number(v.toFixed(2));
+
+const PATHWAY_DESC: Record<string, string> = {
+  amyloid: "Amyloid-β processing (APP cleavage, secretases)",
+  tau: "Tau / neurofibrillary pathology",
+  lipid_metabolism: "Lipid metabolism (APOE, cholesterol transport)",
+  microglia_immune: "Microglia / innate immunity",
+  synaptic_neuronal: "Synaptic / neuronal function",
+  endocytosis_endosomal: "Endocytosis / endosomal trafficking",
+  vascular: "Vascular / blood-brain barrier",
+  epigenetic_transcription: "Epigenetic / transcriptional regulation",
+  unclassified: "Not assigned to a mechanism bucket",
+  other: "Other / uncertain mechanism",
+};
+const pathwayTip = (slug: string) => PATHWAY_DESC[slug] ?? slug.replace(/_/g, " ");
 
 const trialLinksOf = (p: Paper): TrialLink[] =>
   p.trialLinks ?? p.trials.map((title) => ({ title, nct_id: null, drug: null, via: [] }));
@@ -10,6 +28,8 @@ interface Props {
   selected: Paper[];
   clusters: Cluster[];
   areas: AreaInfo[];
+  /** the single paper the user clicked on the map (floated + highlighted) */
+  anchorId?: string | null;
   onClear: () => void;
   /** report the papers passing the active facet filters (for the map highlight) */
   onFilteredChange?: (paperIds: string[] | null) => void;
@@ -48,7 +68,7 @@ function emptyFilters(): Record<Facet, Set<string>> {
   return { area: new Set(), topic: new Set(), gene: new Set(), pathway: new Set(), trial: new Set() };
 }
 
-export default function NewsFeed({ selected, clusters, areas, onClear, onFilteredChange }: Props) {
+export default function NewsFeed({ selected, clusters, areas, anchorId, onClear, onFilteredChange }: Props) {
   const [view, setView] = useState<ViewMode>("papers");
   const [filters, setFilters] = useState<Record<Facet, Set<string>>>(emptyFilters);
 
@@ -159,14 +179,18 @@ export default function NewsFeed({ selected, clusters, areas, onClear, onFiltere
     return { yearRange, clinical, topics };
   }, [filtered]);
 
-  const sortedPapers = useMemo(
-    () =>
-      [...filtered].sort(
-        (a, b) =>
-          (b.metrics.citation_count ?? 0) - (a.metrics.citation_count ?? 0)
-      ),
-    [filtered]
-  );
+  // Ordered by citation count (most-cited first); the clicked paper (anchor) is
+  // floated to the top so its highlight is easy to find.
+  const sortedPapers = useMemo(() => {
+    const byCites = [...filtered].sort(
+      (a, b) => (b.metrics.citation_count ?? 0) - (a.metrics.citation_count ?? 0)
+    );
+    if (anchorId) {
+      const i = byCites.findIndex((p) => p.paper_id === anchorId);
+      if (i > 0) byCites.unshift(byCites.splice(i, 1)[0]);
+    }
+    return byCites;
+  }, [filtered, anchorId]);
 
   // Ranked facet list shown in the newsfeed for non-"papers" views.
   const ranked = useMemo(() => {
@@ -256,7 +280,12 @@ export default function NewsFeed({ selected, clusters, areas, onClear, onFiltere
         </aside>
 
         {view === "papers" ? (
-          <PaperList papers={sortedPapers} clusterById={clusterById} areaById={areaById} />
+          <PaperList
+            papers={sortedPapers}
+            clusterById={clusterById}
+            areaById={areaById}
+            anchorId={anchorId}
+          />
         ) : (
           <RankList facet={view as Facet} rows={ranked} trialNct={trialNct} />
         )}
@@ -324,7 +353,9 @@ function FilterSection({
                 active.has(v) ? "on" : ""
               }`}
               onClick={() => onToggle(v)}
-              title={`${v} · ${n} selected paper${n !== 1 ? "s" : ""} (click to filter)`}
+              title={`${facet === "pathway" ? `${pathwayTip(v)} · ` : ""}${v} · ${n} selected paper${
+                n !== 1 ? "s" : ""
+              } (click to filter)`}
             >
               {facet === "trial" && v.length > 34 ? v.slice(0, 33) + "…" : v}{" "}
               <em>{n}</em>
@@ -368,8 +399,21 @@ function RankList({
         const nct = facet === "trial" ? trialNct?.get(name) : undefined;
         return (
         <div key={name} className="rank-row">
-          <span className="rank-name" title={name}>
-            {nct ? (
+          <span
+            className="rank-name"
+            title={
+              facet === "gene"
+                ? `${name} · open on GeneCards`
+                : facet === "pathway"
+                ? pathwayTip(name)
+                : name
+            }
+          >
+            {facet === "gene" ? (
+              <a href={geneUrl(name)} target="_blank" rel="noreferrer">
+                {name}
+              </a>
+            ) : nct ? (
               <a href={ctgovUrl(nct)} target="_blank" rel="noreferrer">
                 {name}
               </a>
@@ -397,10 +441,12 @@ function PaperList({
   papers,
   clusterById,
   areaById,
+  anchorId,
 }: {
   papers: Paper[];
   clusterById: Map<string, Cluster>;
   areaById: Map<string, AreaInfo>;
+  anchorId?: string | null;
 }) {
   if (papers.length === 0) {
     return (
@@ -413,7 +459,10 @@ function PaperList({
         const c = clusterById.get(p.cluster_id);
         const area = p.area ? areaById.get(p.area) : undefined;
         return (
-          <article key={p.paper_id} className="card">
+          <article
+            key={p.paper_id}
+            className={`card ${p.paper_id === anchorId ? "anchor" : ""}`}
+          >
             <div className="card-top">
               <span className="dot" style={{ background: c?.color ?? "#999" }} />
               <span className="card-topic">{c?.label ?? p.cluster_id}</span>
@@ -438,15 +487,22 @@ function PaperList({
                 📈 {p.metrics.citation_count ?? 0} cites
               </span>
               {p.metrics.relative_citation_ratio != null && (
-                <span title="Relative Citation Ratio">
-                  RCR {p.metrics.relative_citation_ratio}
+                <span title="Relative Citation Ratio: field-normalized citation impact (1.0 = an average NIH-funded paper)">
+                  RCR {fmtRcr(p.metrics.relative_citation_ratio)}
                 </span>
               )}
               {p.metrics.is_clinical && <span className="badge">clinical</span>}
               {p.genes.slice(0, 3).map((g) => (
-                <span key={g} className="mini-tag">
+                <a
+                  key={g}
+                  className="mini-tag link"
+                  href={geneUrl(g)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`${g} · open on GeneCards`}
+                >
                   {g}
-                </span>
+                </a>
               ))}
               {trialLinksOf(p).map((t) => {
                 const why = t.via.length

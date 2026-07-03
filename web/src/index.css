@@ -599,6 +599,12 @@ button.tag.trial.on {
   padding: 12px 14px;
   background: #fff;
 }
+/* the paper the user clicked on the map — subtle accent */
+.card.anchor {
+  border-color: #bcd8cb;
+  box-shadow: inset 3px 0 0 var(--accent);
+  background: #f8fbf9;
+}
 .card-top {
   display: flex;
   align-items: center;
@@ -664,6 +670,13 @@ button.tag.trial.on {
 .mini-tag.trial {
   background: #e7f1ec;
   color: #24513f;
+}
+a.mini-tag.link {
+  text-decoration: none;
+  cursor: pointer;
+}
+a.mini-tag.link:hover {
+  background: #e6e6e3;
 }
 a.mini-tag.trial.link {
   text-decoration: none;

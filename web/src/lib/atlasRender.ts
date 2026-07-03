@@ -49,7 +49,7 @@ export interface AtlasReady {
 }
 
 export interface AtlasOptions {
-  onSelect?: (rows: SelectedPaper[]) => void;
+  onSelect?: (rows: SelectedPaper[], anchorId?: string | null) => void;
   onSelectModeChange?: (on: boolean) => void;
   onReady?: (meta: AtlasReady) => void;
   onCount?: (visible: number) => void;
@@ -209,7 +209,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     const nbrs = ADJ[i].filter(visible);
     selSet = new Set<number>([i, ...nbrs]);
     const ordered = nbrs.slice().sort((a, b) => ADJ[b].length - ADJ[a].length);
-    opts.onSelect?.([rowFor(i), ...ordered.map(rowFor)]);
+    opts.onSelect?.([rowFor(i), ...ordered.map(rowFor)], DATA.ids[i]);
     draw();
   }
 
@@ -386,7 +386,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
         // or clear the selection if the click landed on empty space.
         const i = pickAt(drag.x, drag.y);
         if (i >= 0) clickSelect(i);
-        else if (selSet.size) { selSet = new Set(); selAnchor = -1; opts.onSelect?.([]); draw(); }
+        else if (selSet.size) { selSet = new Set(); selAnchor = -1; opts.onSelect?.([], null); draw(); }
       }
       drag = null;
     }
@@ -445,7 +445,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     selecting = false;
     cv.classList.remove("selecting");
     opts.onSelectModeChange?.(false);
-    opts.onSelect?.(rows);
+    opts.onSelect?.(rows, null);
     draw();
   }
 
@@ -519,7 +519,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       selSet = new Set(idx);
       selAnchor = idx.length === 1 ? idx[0] : -1;
       const rows = idx.map(rowFor).sort((a, b) => b.degree - a.degree || b.year - a.year);
-      opts.onSelect?.(rows);
+      opts.onSelect?.(rows, idx.length === 1 ? DATA.ids[idx[0]] : null);
       draw();
       return idx.length;
     },

@@ -20,7 +20,7 @@ interface Props {
   selectMode: boolean;
   hiddenMajors: string[];
   yearRange: [number, number];
-  onSelect: (rows: SelectedPaper[]) => void;
+  onSelect: (rows: SelectedPaper[], anchorId?: string | null) => void;
   onSelectModeChange: (on: boolean) => void;
   onReady: (meta: AtlasReady) => void;
   onCount: (n: number) => void;
@@ -53,7 +53,7 @@ const AtlasMap = forwardRef<AtlasMapHandle, Props>(function AtlasMap(
   useEffect(() => {
     if (!data || !elRef.current) return;
     const h = mountAtlas(elRef.current, data, {
-      onSelect: (rows) => cbs.current.onSelect(rows),
+      onSelect: (rows, anchorId) => cbs.current.onSelect(rows, anchorId),
       onSelectModeChange: (on) => cbs.current.onSelectModeChange(on),
       onReady: (m) => cbs.current.onReady(m),
       onCount: (n) => cbs.current.onCount(n),

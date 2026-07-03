@@ -20,6 +20,7 @@ export default function App() {
   const [selectMode, setSelectMode] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<Paper[]>([]);
+  const [anchorId, setAnchorId] = useState<string | null>(null);
   const [meta, setMeta] = useState<AtlasReady | null>(null);
   const [hiddenMajors, setHiddenMajors] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
@@ -50,6 +51,7 @@ export default function App() {
 
   const clearSelection = () => {
     setSelected([]);
+    setAnchorId(null);
     atlasRef.current?.clearSelection();
   };
 
@@ -58,6 +60,7 @@ export default function App() {
     setHiddenMajors([]);
     if (meta) setYearRange([meta.yearMin, meta.yearMax]);
     setSelected([]);
+    setAnchorId(null);
     setSelectMode(false);
     setFiltersOpen(false);
     atlasRef.current?.clearSelection();
@@ -71,7 +74,9 @@ export default function App() {
   };
 
   // Map the atlas' selected paper ids -> full paper records for the feed.
-  const onSelect = (rows: SelectedPaper[]) => {
+  // `anchor` = the single paper the user clicked (highlighted in the feed).
+  const onSelect = (rows: SelectedPaper[], anchor?: string | null) => {
+    setAnchorId(anchor ?? null);
     const byId = feed?.byId;
     if (!byId) return;
     setSelected(rows.map((r) => byId.get(r.paper_id)).filter((p): p is Paper => !!p));
@@ -110,6 +115,7 @@ export default function App() {
         },
         clearSelection: () => {
           setSelected([]);
+          setAnchorId(null);
           atlasRef.current?.clearSelection();
         },
         resetView: () => atlasRef.current?.resetView(),
@@ -263,6 +269,7 @@ export default function App() {
         selected={selected}
         clusters={clusters}
         areas={areas}
+        anchorId={anchorId}
         onClear={clearSelection}
         onFilteredChange={onFilteredChange}
       />
