@@ -1020,7 +1020,7 @@ button.tag.trial.on {
   background: #fff;
 }
 .agent-empty {
-  margin: auto 0;
+  margin: 4px 0 0;
   color: var(--muted);
   text-align: center;
 }
@@ -1028,6 +1028,7 @@ button.tag.trial.on {
   font-size: 16px;
   font-weight: 700;
   color: var(--ink);
+  margin-bottom: 12px;
 }
 .agent-empty-sub {
   font-size: 13px;
