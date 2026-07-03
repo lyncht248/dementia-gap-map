@@ -533,8 +533,11 @@ button.tag.trial.on {
 }
 .rank-caption {
   font-size: 12px;
+  font-style: italic;
   color: var(--muted);
+  padding-bottom: 8px;
   margin: -2px 0 4px;
+  border-bottom: 1px solid var(--line);
 }
 .rank-row {
   display: flex;

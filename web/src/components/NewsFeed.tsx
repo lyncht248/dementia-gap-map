@@ -355,14 +355,14 @@ function RankList({
   const max = rows[0][1] || 1;
   const noun =
     facet === "trial"
-      ? "linked to each trial"
+      ? "link to each trial"
       : facet === "gene"
-      ? "mentioning each gene / locus"
-      : "in each pathway group";
+      ? "mention each gene / locus"
+      : "fall in each pathway group";
   return (
     <div className="rank-list">
       <div className="rank-caption">
-        Number = how many of the selected papers are {noun}.
+        Ranked by how many of your selected papers {noun}.
       </div>
       {rows.map(([name, n]) => {
         const nct = facet === "trial" ? trialNct?.get(name) : undefined;
@@ -450,7 +450,7 @@ function PaperList({
               ))}
               {trialLinksOf(p).map((t) => {
                 const why = t.via.length
-                  ? `This trial tests a drug${t.drug ? ` (${t.drug})` : ""} that targets ${t.via.join(", ")}, ${t.via.length > 1 ? "genes" : "a gene"} studied in this paper. Opens the trial on ClinicalTrials.gov.`
+                  ? `This trial tests a drug${t.drug ? ` (${t.drug})` : ""} that targets ${t.via.join(", ")}, ${t.via.length > 1 ? "genes" : "a gene"} studied in this paper.`
                   : t.title;
                 const body = (
                   <>
