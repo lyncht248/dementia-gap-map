@@ -49,7 +49,7 @@ export interface AtlasReady {
 }
 
 export interface AtlasOptions {
-  onSelect?: (rows: SelectedPaper[]) => void;
+  onSelect?: (rows: SelectedPaper[], anchorId?: string | null) => void;
   onSelectModeChange?: (on: boolean) => void;
   onReady?: (meta: AtlasReady) => void;
   onCount?: (visible: number) => void;
@@ -61,6 +61,12 @@ export interface AtlasHandle {
   clearSelection: () => void;
   resetView: () => void;
   setFilter: (hiddenMajors: string[], yearRange: [number, number]) => void;
+  /** Agent control: select papers by id (updates the feed), spotlight with a
+   * ring, or animate the camera to their bounding box. */
+  selectByIds: (ids: string[]) => number;
+  highlightByIds: (ids: string[]) => number;
+  clearHighlight: () => void;
+  zoomToIds: (ids: string[], pad?: number) => number;
   /** highlight a subset of papers on the map (the NewsFeed's active facet filter) */
   setHighlight: (paperIds: string[] | null) => void;
 }
@@ -103,6 +109,16 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   let DPR = Math.min(window.devicePixelRatio || 1, 2);
 
   const P = DATA.points;
+  const idIndex = new Map<string, number>();
+  DATA.ids.forEach((id, i) => idIndex.set(id, i));
+  const idsToIdx = (ids: string[]): number[] => {
+    const out: number[] = [];
+    for (const id of ids) {
+      const i = idIndex.get(id);
+      if (i !== undefined) out.push(i);
+    }
+    return out;
+  };
   let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
   for (const p of P) {
     if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0];
@@ -165,6 +181,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   let selecting = false;
   let lasso: Pt[] = [];
   let selSet = new Set<number>();
+  let hlSet = new Set<number>(); // agent spotlight (amber ring), distinct from selection
   let selAnchor = -1; // the clicked paper (draws citation lines), -1 for lasso
   // refineSet: an external highlight (the NewsFeed's active facet filter, e.g.
   // "papers mentioning APOE"). When set it narrows the highlight within selSet.
@@ -192,13 +209,14 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     const nbrs = ADJ[i].filter(visible);
     selSet = new Set<number>([i, ...nbrs]);
     const ordered = nbrs.slice().sort((a, b) => ADJ[b].length - ADJ[a].length);
-    opts.onSelect?.([rowFor(i), ...ordered.map(rowFor)]);
+    opts.onSelect?.([rowFor(i), ...ordered.map(rowFor)], DATA.ids[i]);
     draw();
   }
 
   // ---- view ----
   const view = { s: 1, tx: 0, ty: 0 };
   let baseS = 1;
+  let userMoved = false; // once the user pans/zooms, stop auto-fitting on resize
   const cw = () => cv.clientWidth;
   const ch = () => cv.clientHeight;
   function fit() {
@@ -213,6 +231,9 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
     cv.width = cw() * DPR; cv.height = ch() * DPR;
+    // Re-fit while the user hasn't taken control, so the map fills the panel even
+    // when the initial fit ran before the (split) layout settled.
+    if (!userMoved) { fit(); baseS = view.s; }
     draw();
   }
 
@@ -292,6 +313,22 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       }
     }
 
+    // agent spotlight — amber rings on highlighted papers
+    if (hlSet.size) {
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = "#f2a900";
+      for (const i of hlSet) {
+        if (!visible(i)) continue;
+        const X = wx(P[i][0]), Y = wy(P[i][1]);
+        if (X < -6 || X > w + 6 || Y < -6 || Y > h + 6) continue;
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        ctx.arc(X, Y, r + 4, 0, 6.2832);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
     // lasso path
     if (lasso.length > 1) {
       ctx.beginPath();
@@ -349,7 +386,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
         // or clear the selection if the click landed on empty space.
         const i = pickAt(drag.x, drag.y);
         if (i >= 0) clickSelect(i);
-        else if (selSet.size) { selSet = new Set(); selAnchor = -1; opts.onSelect?.([]); draw(); }
+        else if (selSet.size) { selSet = new Set(); selAnchor = -1; opts.onSelect?.([], null); draw(); }
       }
       drag = null;
     }
@@ -362,7 +399,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     }
     if (drag) {
       const m = rel(e);
-      if (Math.abs(m.x - drag.x) + Math.abs(m.y - drag.y) > 4) dragMoved = true;
+      if (Math.abs(m.x - drag.x) + Math.abs(m.y - drag.y) > 4) { dragMoved = true; userMoved = true; }
       if (hoverIdx >= 0) hoverIdx = -1;
       view.tx = drag.tx + (m.x - drag.x); view.ty = drag.ty - (m.y - drag.y);
       draw(); hideTip(); return;
@@ -378,6 +415,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   };
 
   function zoomAt(sx: number, sy: number, f: number) {
+    userMoved = true;
     const ns = Math.max(baseS * 0.6, Math.min(baseS * 40, view.s * f));
     const wxp = (sx - view.tx) / view.s, wyp = (ch() - sy - view.ty) / view.s;
     view.s = ns;
@@ -407,7 +445,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     selecting = false;
     cv.classList.remove("selecting");
     opts.onSelectModeChange?.(false);
-    opts.onSelect?.(rows);
+    opts.onSelect?.(rows, null);
     draw();
   }
 
@@ -475,7 +513,42 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       }
       draw();
     },
-    resetView() { fit(); baseS = view.s; draw(); },
+    resetView() { userMoved = false; fit(); baseS = view.s; draw(); },
+    selectByIds(ids: string[]) {
+      const idx = idsToIdx(ids);
+      selSet = new Set(idx);
+      selAnchor = idx.length === 1 ? idx[0] : -1;
+      const rows = idx.map(rowFor).sort((a, b) => b.degree - a.degree || b.year - a.year);
+      opts.onSelect?.(rows, idx.length === 1 ? DATA.ids[idx[0]] : null);
+      draw();
+      return idx.length;
+    },
+    highlightByIds(ids: string[]) {
+      const idx = idsToIdx(ids);
+      hlSet = new Set(idx);
+      draw();
+      return idx.length;
+    },
+    clearHighlight() { hlSet = new Set(); draw(); },
+    zoomToIds(ids: string[], pad = 60) {
+      const idx = idsToIdx(ids);
+      if (!idx.length) return 0;
+      userMoved = true;
+      let mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
+      for (const i of idx) {
+        const p = P[i];
+        if (p[0] < mnx) mnx = p[0]; if (p[0] > mxx) mxx = p[0];
+        if (p[1] < mny) mny = p[1]; if (p[1] > mxy) mxy = p[1];
+      }
+      const bw = Math.max(mxx - mnx, 1e-6), bh = Math.max(mxy - mny, 1e-6);
+      const w = cw(), h = ch();
+      const s = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh);
+      view.s = Math.max(baseS * 0.6, Math.min(baseS * 40, s));
+      view.tx = w / 2 - ((mnx + mxx) / 2) * view.s;
+      view.ty = h / 2 - ((mny + mxy) / 2) * view.s;
+      draw();
+      return idx.length;
+    },
     setFilter(hm: string[], yr: [number, number]) {
       hiddenMajors.clear();
       for (const id of hm) hiddenMajors.add(id);

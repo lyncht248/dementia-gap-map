@@ -5,13 +5,18 @@
   "type": "module",
   "scripts": {
     "gen-data": "cd ../scripts && npm install --silent && node build-map-data.mjs",
+    "gen-parquet": "python3 ../scripts/build-agent-parquet.py",
+    "build:data": "npm run gen-data && npm run gen-parquet",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.32.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

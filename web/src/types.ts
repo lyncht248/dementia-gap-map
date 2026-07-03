@@ -5,6 +5,15 @@ export interface PaperMetrics {
   is_clinical: boolean | null;
 }
 
+/** A trial linked to a paper because its drug targets one of the paper's genes.
+ * `via` = the paper gene(s) the drug hits (the reason for the link). */
+export interface TrialLink {
+  title: string;
+  nct_id: string | null;
+  drug: string | null;
+  via: string[];
+}
+
 export interface Paper {
   paper_id: string;
   pmid: string | null;
@@ -23,6 +32,8 @@ export interface Paper {
   pathways?: string[];
   pathway_group: string;
   trials: string[];
+  /** clickable trial links with the "why" (present on atlas-feed papers) */
+  trialLinks?: TrialLink[];
   metrics: PaperMetrics;
   url?: string;
 }

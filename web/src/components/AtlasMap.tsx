@@ -10,13 +10,17 @@ import {
 export interface AtlasMapHandle {
   clearSelection: () => void;
   resetView: () => void;
+  selectByIds: (ids: string[]) => number;
+  highlightByIds: (ids: string[]) => number;
+  clearHighlight: () => void;
+  zoomToPapers: (ids: string[]) => number;
   setHighlight: (paperIds: string[] | null) => void;
 }
 interface Props {
   selectMode: boolean;
   hiddenMajors: string[];
   yearRange: [number, number];
-  onSelect: (rows: SelectedPaper[]) => void;
+  onSelect: (rows: SelectedPaper[], anchorId?: string | null) => void;
   onSelectModeChange: (on: boolean) => void;
   onReady: (meta: AtlasReady) => void;
   onCount: (n: number) => void;
@@ -49,7 +53,7 @@ const AtlasMap = forwardRef<AtlasMapHandle, Props>(function AtlasMap(
   useEffect(() => {
     if (!data || !elRef.current) return;
     const h = mountAtlas(elRef.current, data, {
-      onSelect: (rows) => cbs.current.onSelect(rows),
+      onSelect: (rows, anchorId) => cbs.current.onSelect(rows, anchorId),
       onSelectModeChange: (on) => cbs.current.onSelectModeChange(on),
       onReady: (m) => cbs.current.onReady(m),
       onCount: (n) => cbs.current.onCount(n),
@@ -64,6 +68,10 @@ const AtlasMap = forwardRef<AtlasMapHandle, Props>(function AtlasMap(
   useImperativeHandle(ref, () => ({
     clearSelection: () => handleRef.current?.clearSelection(),
     resetView: () => handleRef.current?.resetView(),
+    selectByIds: (ids) => handleRef.current?.selectByIds(ids) ?? 0,
+    highlightByIds: (ids) => handleRef.current?.highlightByIds(ids) ?? 0,
+    clearHighlight: () => handleRef.current?.clearHighlight(),
+    zoomToPapers: (ids) => handleRef.current?.zoomToIds(ids) ?? 0,
     setHighlight: (ids: string[] | null) => handleRef.current?.setHighlight(ids),
   }), []);
 

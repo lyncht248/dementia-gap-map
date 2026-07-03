@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AtlasMap, { type AtlasMapHandle } from "./components/AtlasMap";
 import NewsFeed from "./components/NewsFeed";
+import AgentPanel from "./components/AgentPanel";
+import { createController } from "./agent/controller";
+import { warmupDuckDb } from "./lib/duckdb";
 import type { AtlasReady, SelectedPaper } from "./lib/atlasRender";
 import type { AreaInfo, Cluster, Paper } from "./types";
 
@@ -11,12 +14,13 @@ interface FeedData {
 }
 
 // The dementia gap map: the Qwen-embedding theme atlas sits in the map panel;
-// selecting papers on it drives the rich NewsFeed (grouped by the 45 embedding
-// themes, with Track B genes / pathways / trials + emerging topics).
+// selecting papers on it drives the rich NewsFeed. An agent panel on the left
+// queries the Track B evidence (DuckDB) and drives the selection feed.
 export default function App() {
   const [selectMode, setSelectMode] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<Paper[]>([]);
+  const [anchorId, setAnchorId] = useState<string | null>(null);
   const [meta, setMeta] = useState<AtlasReady | null>(null);
   const [hiddenMajors, setHiddenMajors] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
@@ -24,8 +28,15 @@ export default function App() {
   const [feed, setFeed] = useState<FeedData | null>(null);
   const atlasRef = useRef<AtlasMapHandle>(null);
 
+  // Split layout
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentWidth, setAgentWidth] = useState(400);
+  const [dragging, setDragging] = useState(false);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+
   // NewsFeed data: papers regrouped by the atlas themes + Track B evidence.
   useEffect(() => {
+    warmupDuckDb();
     fetch(`${import.meta.env.BASE_URL}atlas/atlas_feed.json`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d: { clusters: Cluster[]; areas?: AreaInfo[]; papers: Paper[] }) => {
@@ -40,6 +51,7 @@ export default function App() {
 
   const clearSelection = () => {
     setSelected([]);
+    setAnchorId(null);
     atlasRef.current?.clearSelection();
   };
 
@@ -48,6 +60,7 @@ export default function App() {
     setHiddenMajors([]);
     if (meta) setYearRange([meta.yearMin, meta.yearMax]);
     setSelected([]);
+    setAnchorId(null);
     setSelectMode(false);
     setFiltersOpen(false);
     atlasRef.current?.clearSelection();
@@ -61,7 +74,9 @@ export default function App() {
   };
 
   // Map the atlas' selected paper ids -> full paper records for the feed.
-  const onSelect = (rows: SelectedPaper[]) => {
+  // `anchor` = the single paper the user clicked (highlighted in the feed).
+  const onSelect = (rows: SelectedPaper[], anchor?: string | null) => {
+    setAnchorId(anchor ?? null);
     const byId = feed?.byId;
     if (!byId) return;
     setSelected(rows.map((r) => byId.get(r.paper_id)).filter((p): p is Paper => !!p));
@@ -78,16 +93,96 @@ export default function App() {
   const clusters = useMemo(() => feed?.clusters ?? [], [feed]);
   const areas = useMemo(() => feed?.areas ?? [], [feed]);
 
-  return (
+  // --- agent controller (reads latest state via refs; stable identity) ------
+  const feedRef = useRef(feed);
+  feedRef.current = feed;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const yearRef = useRef(yearRange);
+  yearRef.current = yearRange;
+
+  const controller = useMemo(
+    () =>
+      createController({
+        getPapers: () => (feedRef.current ? Array.from(feedRef.current.byId.values()) : []),
+        getClusters: () => feedRef.current?.clusters ?? [],
+        getSelectedIds: () => selectedRef.current.map((p) => p.paper_id),
+        getYearRange: () => yearRef.current,
+        setSelectedByIds: (ids) => {
+          const byId = feedRef.current?.byId;
+          if (!byId) return;
+          setSelected(ids.map((id) => byId.get(id)).filter((p): p is Paper => !!p));
+        },
+        clearSelection: () => {
+          setSelected([]);
+          setAnchorId(null);
+          atlasRef.current?.clearSelection();
+        },
+        resetView: () => atlasRef.current?.resetView(),
+        setYearRange: (r) => setYearRange(r),
+        atlas: () => atlasRef.current,
+      }),
+    []
+  );
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      (window as unknown as { mapAgent?: typeof controller }).mapAgent = controller;
+    }
+  }, [controller]);
+
+  // Divider drag
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: PointerEvent) => {
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      const left = rect?.left ?? 0;
+      const max = (rect?.width ?? 1200) - 360;
+      setAgentWidth(Math.max(300, Math.min(Math.max(300, max), e.clientX - left)));
+    };
+    const onUp = () => setDragging(false);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [dragging]);
+
+  // "[" toggles the agent panel (ignored while typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "[" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable)
+        return;
+      e.preventDefault();
+      setAgentOpen((v) => !v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Panel open/close (and the initial split-layout settle) change the map width;
+  // nudge a resize so the atlas re-fits (it auto-fits on resize until the user
+  // pans/zooms).
+  useEffect(() => {
+    const t = setTimeout(() => window.dispatchEvent(new Event("resize")), 60);
+    return () => clearTimeout(t);
+  }, [agentOpen]);
+
+  const mapPage = (
     <div className="app">
       <header className="hero">
         <h1>Dementia Gap Map</h1>
         <p>
-          Explore research papers matching &ldquo;Dementia AND GWAS&rdquo; from PubMed, coloured
-          by disease area and semantically placed using Qwen embeddings, with topic labels
-          added. Each label shows a growth trend (↑ rising, ↓ falling) — papers in the last 3
-          years ÷ the preceding 3 years. Drag to pan, scroll to zoom, then draw a region to
-          inspect a group of papers below.
+          A map of dementia &amp; GWAS research, grouped by theme. Drag to pan, scroll to zoom,
+          and draw a region to inspect papers, or ask the agent on the left.
         </p>
       </header>
 
@@ -174,14 +269,50 @@ export default function App() {
         selected={selected}
         clusters={clusters}
         areas={areas}
+        anchorId={anchorId}
         onClear={clearSelection}
         onFilteredChange={onFilteredChange}
       />
 
       <footer className="foot">
-        Theme atlas of dementia &amp; GWAS literature · Qwen3-Embedding-8B · citation links
-        from PubMed / NIH iCite, GWAS Catalog, Open Targets &amp; ClinicalTrials.gov
+        Dementia Gap Map · research prototype · data from PubMed, GWAS Catalog, Open Targets
+        &amp; ClinicalTrials.gov
       </footer>
+    </div>
+  );
+
+  return (
+    <div className="workspace" ref={workspaceRef}>
+      {/* Kept mounted (hidden when minimized) so open chats are preserved. */}
+      <div
+        className="agent-col"
+        style={{ width: agentWidth, display: agentOpen ? undefined : "none" }}
+      >
+        <AgentPanel controller={controller} onMinimize={() => setAgentOpen(false)} />
+      </div>
+      {agentOpen ? (
+        <div
+          className={`divider ${dragging ? "dragging" : ""}`}
+          onPointerDown={() => setDragging(true)}
+          role="separator"
+          aria-orientation="vertical"
+        >
+          <span className="divider-grip" />
+        </div>
+      ) : (
+        <button
+          className="agent-reopen"
+          onClick={() => setAgentOpen(true)}
+          title="Show the research agent  ( [ )"
+          aria-label="Show the research agent"
+          aria-keyshortcuts="["
+        >
+          <span className="agent-reopen-label">Agent</span>
+          <kbd className="agent-reopen-key" aria-hidden="true">[</kbd>
+        </button>
+      )}
+
+      <div className="right-scroll">{mapPage}</div>
     </div>
   );
 }
