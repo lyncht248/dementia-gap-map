@@ -307,10 +307,10 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     }
   }
 
-  // "  📈 1.3×" / "  📉 0.8×" — the topic's publication-growth trend.
+  // "  ▲ 1.3×" / "  ▼ 0.8×" — the topic's publication-growth trend.
   function trend(g?: number): string {
     if (g == null || !isFinite(g)) return "";
-    return "  " + (g >= 1 ? "📈" : "📉") + " " + g.toFixed(1) + "×";
+    return "  " + (g >= 1 ? "▲" : "▼") + " " + g.toFixed(1) + "×";
   }
 
   function drawLabel(text: string, x: number, y: number, size: number, color: string, alpha: number, bold: boolean) {
