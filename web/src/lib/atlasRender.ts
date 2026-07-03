@@ -307,29 +307,24 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     }
   }
 
-  // "  ↑ 1.3×" / "  ↓ 0.8×" — the topic's publication-growth trend.
+  // "↑ 1.3×" / "↓ 0.8×" — the topic's publication-growth trend.
   function trend(g?: number): string {
     if (g == null || !isFinite(g)) return "";
-    return "  " + (g >= 1 ? "↑" : "↓") + " " + g.toFixed(1) + "×";
+    return (g >= 1 ? "↑" : "↓") + " " + g.toFixed(1) + "×";
   }
 
-  // Draws the topic name (bold) followed by its trend suffix in a lighter
-  // weight, centred as one unit, each with a white halo.
+  // Draws the topic name (bold) with its trend on a centred second line below,
+  // in a smaller, lighter weight; both with a white halo.
   function drawLabel(label: string, suffix: string, x: number, y: number, size: number, color: string, alpha: number, bold: boolean) {
     const face = "-apple-system,Segoe UI,Roboto,sans-serif";
-    const mainFont = `${bold ? "700" : "600"} ${size}px ${face}`;
-    const subFont = `400 ${size}px ${face}`;
-    ctx.textBaseline = "middle"; ctx.lineJoin = "round"; ctx.globalAlpha = alpha;
-    ctx.font = mainFont; const wMain = ctx.measureText(label).width;
-    ctx.font = subFont; const wSub = suffix ? ctx.measureText(suffix).width : 0;
-    ctx.textAlign = "left";
-    const left = x - (wMain + wSub) / 2;
-    ctx.strokeStyle = "rgba(255,255,255,.95)";
-    ctx.font = mainFont; ctx.lineWidth = bold ? 4.5 : 4;
-    ctx.strokeText(label, left, y); ctx.fillStyle = color; ctx.fillText(label, left, y);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+    ctx.globalAlpha = alpha; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.fillStyle = color;
+    ctx.font = `${bold ? "700" : "600"} ${size}px ${face}`; ctx.lineWidth = bold ? 4.5 : 4;
+    ctx.strokeText(label, x, y); ctx.fillText(label, x, y);
     if (suffix) {
-      ctx.font = subFont; ctx.lineWidth = bold ? 3.5 : 3;
-      ctx.strokeText(suffix, left + wMain, y); ctx.fillStyle = color; ctx.fillText(suffix, left + wMain, y);
+      ctx.font = `400 ${Math.round(size * 0.8)}px ${face}`; ctx.lineWidth = bold ? 3.5 : 3;
+      const yy = y + size * 0.9;
+      ctx.strokeText(suffix, x, yy); ctx.fillText(suffix, x, yy);
     }
     ctx.globalAlpha = 1;
   }
