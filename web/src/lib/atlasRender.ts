@@ -8,10 +8,12 @@
 
 export interface AtlasMajor {
   id: string; label: string; color: string; x: number; y: number; count: number;
+  /** last-3-years vs preceding-3-years publication ratio (emergence signal) */
+  growth?: number;
 }
 export interface AtlasMinor {
   id: number; major: string; label: string; color: string;
-  x: number; y: number; count: number;
+  x: number; y: number; count: number; growth?: number;
 }
 export interface AtlasData {
   meta: {
@@ -278,7 +280,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     if (majorAlpha > 0.02) {
       for (const M of DATA.majors) {
         if (hiddenMajors.has(M.id)) continue;
-        drawLabel(M.label, wx(M.x), wy(M.y), 15 + Math.min(7, M.count / 500), M.color, majorAlpha, true);
+        drawLabel(M.label, trend(M.growth), wx(M.x), wy(M.y), 15 + Math.min(7, M.count / 500), M.color, majorAlpha, true);
       }
     }
     if (showMinor) {
@@ -286,7 +288,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       for (const m of DATA.minors) {
         if (hiddenMajors.has(m.major)) continue;
         if (m.count < 40 && zoom < 3) continue;
-        drawLabel(m.label, wx(m.x), wy(m.y), 16, "#22222a", a, false);
+        drawLabel(m.label, trend(m.growth), wx(m.x), wy(m.y), 16, "#22222a", a, false);
       }
     }
 
@@ -305,13 +307,25 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     }
   }
 
-  function drawLabel(text: string, x: number, y: number, size: number, color: string, alpha: number, bold: boolean) {
-    ctx.font = `${bold ? "700" : "600"} ${size}px -apple-system,Segoe UI,Roboto,sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.globalAlpha = alpha;
-    ctx.lineWidth = bold ? 4.5 : 4; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.lineJoin = "round";
-    ctx.strokeText(text, x, y);
-    ctx.fillStyle = color; ctx.fillText(text, x, y);
+  // "↑ 1.3×" / "↓ 0.8×" — the topic's publication-growth trend.
+  function trend(g?: number): string {
+    if (g == null || !isFinite(g)) return "";
+    return (g >= 1 ? "↑" : "↓") + " " + g.toFixed(1) + "×";
+  }
+
+  // Draws the topic name (bold) with its trend on a centred second line below,
+  // in a smaller, lighter weight; both with a white halo.
+  function drawLabel(label: string, suffix: string, x: number, y: number, size: number, color: string, alpha: number, bold: boolean) {
+    const face = "-apple-system,Segoe UI,Roboto,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+    ctx.globalAlpha = alpha; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.fillStyle = color;
+    ctx.font = `${bold ? "700" : "600"} ${size}px ${face}`; ctx.lineWidth = bold ? 4.5 : 4;
+    ctx.strokeText(label, x, y); ctx.fillText(label, x, y);
+    if (suffix) {
+      ctx.font = `400 ${Math.round(size * 0.8)}px ${face}`; ctx.lineWidth = bold ? 3.5 : 3;
+      const yy = y + size * 0.9;
+      ctx.strokeText(suffix, x, yy); ctx.fillText(suffix, x, yy);
+    }
     ctx.globalAlpha = 1;
   }
 

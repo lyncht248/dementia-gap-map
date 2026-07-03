@@ -118,18 +118,6 @@ export default function NewsFeed({ selected, clusters, areas, onClear, onFiltere
     onFilteredChange?.(anyFilter ? filtered.map((p) => p.paper_id) : null);
   }, [filtered, anyFilter, onFilteredChange]);
 
-  // Emerging topics present in the (filtered) view, ranked by their topic-level
-  // emergence score (burst + growth + influence, computed over the whole topic).
-  const emerging = useMemo(
-    () =>
-      [...new Set(filtered.map((p) => p.cluster_id))]
-        .map((id) => clusterById.get(id))
-        .filter((c): c is Cluster => !!c && c.topic_id !== "other" && !!c.emergence)
-        .sort((a, b) => b.emergence!.score - a.emergence!.score)
-        .slice(0, 5),
-    [filtered, clusterById]
-  );
-
   const toggle = (facet: Facet, value: string) =>
     setFilters((prev) => {
       const next = { ...prev, [facet]: new Set(prev[facet]) };
@@ -237,32 +225,6 @@ export default function NewsFeed({ selected, clusters, areas, onClear, onFiltere
 
       <div className="feed-body">
         <aside className="feed-aside">
-          <div className="aside-section">
-            <h4>Emerging topics</h4>
-            {emerging.length ? (
-              emerging.map((c) => {
-                const e = c.emergence!;
-                return (
-                  <div key={c.topic_id} className="emerge-row">
-                    <div className="emerge-head">
-                      <span className="dot" style={{ background: c.color }} />
-                      <span className="chip-label">{c.label}</span>
-                      <span className="emerge-score">{Math.round(e.score * 100)}</span>
-                    </div>
-                    <div className="emerge-bar">
-                      <span style={{ width: `${Math.round(e.score * 100)}%` }} />
-                    </div>
-                    <div className="emerge-meta">
-                      {Math.round(e.pct_new * 100)}% recent · {e.growth}× growth · RCR{" "}
-                      {e.mean_rcr}
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <span className="muted">no emerging topics in view</span>
-            )}
-          </div>
           {FACETS.map((f) => {
             // The facet currently listed in the newsfeed can't filter itself.
             if (view === (f as ViewMode)) return null;

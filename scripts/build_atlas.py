@@ -334,6 +334,17 @@ def main() -> None:
         return (sum(p["px"] for p in pts) / len(pts),
                 sum(p["py"] for p in pts) / len(pts))
 
+    # Per-topic growth: papers from the last 3 years vs. the preceding 3 years —
+    # the emergence signal, surfaced directly on the map labels.
+    _yrs = [p["year"] for p in points if isinstance(p["year"], int)]
+    _max_year = max(_yrs) if _yrs else 2026
+    _recent_from, _prior_lo, _prior_hi = _max_year - 2, _max_year - 5, _max_year - 3
+
+    def growth_of(pts):
+        recent = sum(1 for p in pts if p["year"] >= _recent_from)
+        prior = sum(1 for p in pts if _prior_lo <= p["year"] <= _prior_hi)
+        return round(recent / max(1, prior), 2)
+
     fine_records = []
     for c in fine_ids:
         cx, cy = centroid(by_cluster[c])
@@ -345,6 +356,7 @@ def main() -> None:
             "x": round(cx, 3),
             "y": round(cy, 3),
             "count": len(by_cluster[c]),
+            "growth": growth_of(by_cluster[c]),
         })
 
     major_records = []
@@ -356,6 +368,7 @@ def main() -> None:
         major_records.append({
             "id": mk, "label": label, "color": color,
             "x": round(cx, 3), "y": round(cy, 3), "count": len(member_pts),
+            "growth": growth_of(member_pts),
         })
     major_records.sort(key=lambda m: -m["count"])
 
