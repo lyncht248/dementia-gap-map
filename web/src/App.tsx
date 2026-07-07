@@ -181,8 +181,12 @@ export default function App() {
       <header className="hero">
         <h1>Dementia Gap Map</h1>
         <p>
-          A map of dementia &amp; GWAS research, grouped by theme. Drag to pan, scroll to zoom,
-          and draw a region to inspect papers, or ask the agent on the left.
+          A map of dementia &amp; GWAS research from Pubmed, grouped semantically.
+          Click &lsquo;Select Region&rsquo; and draw a circle.
+        </p>
+        <p>
+          Each paper (node) is linked to its gene target(s), pathway(s), and clinical
+          trial(s). Connections on the map are based on citations.
         </p>
       </header>
 
