@@ -15,6 +15,17 @@ export interface AtlasMinor {
   id: number; major: string; label: string; color: string;
   x: number; y: number; count: number; growth?: number;
 }
+/** One of the 8 mechanistic "Alzheimer's cure" hypotheses (pathway groups). The
+ * map's alternate framing: the same literature coloured by mechanism instead of
+ * disease. x/y are an AD-continent label anchor; the metrics are the Track B
+ * pathway rollup. See scripts/add_hypotheses.mjs. */
+export interface AtlasHypothesis {
+  id: string; label: string; short: string; color: string; statement: string;
+  x: number; y: number; count: number;
+  gene_count: number | null; trial_count: number;
+  combined_support: number | null; clinical_translation: number | null;
+  clinical_saturation: number | null; translation_gap: number | null;
+}
 export interface AtlasData {
   meta: {
     spacing: number; n_papers: number; n_major: number; n_minor: number;
@@ -22,14 +33,24 @@ export interface AtlasData {
   };
   majors: AtlasMajor[];
   minors: AtlasMinor[];
+  /** the 8 mechanistic hypotheses, ranked by translation gap (patched in) */
+  hypotheses?: AtlasHypothesis[];
+  /** papers with no mechanism link (grey in hypothesis mode) */
+  unclassified_count?: number;
   /** [px, py, fineClusterId, year] */
   points: number[][];
   titles: string[];
   /** paper_id per point (e.g. "pmid:12345") */
   ids: string[];
+  /** per-point hypothesis index into `hypotheses` (-1 = unclassified), parallel
+   * to points/ids. Patched in by scripts/add_hypotheses.mjs. */
+  pointHyp?: number[];
   /** [i, j] index pairs into points */
   edges: number[][];
 }
+
+/** The map's two framings of the same literature. */
+export type AtlasMode = "disease" | "hypothesis";
 
 export interface SelectedPaper {
   i: number;
@@ -43,6 +64,8 @@ export interface SelectedPaper {
 
 export interface AtlasReady {
   majors: AtlasMajor[];
+  hypotheses: AtlasHypothesis[];
+  unclassified: number;
   yearMin: number;
   yearMax: number;
   total: number;
@@ -60,7 +83,9 @@ export interface AtlasHandle {
   setSelectMode: (on: boolean) => void;
   clearSelection: () => void;
   resetView: () => void;
-  setFilter: (hiddenMajors: string[], yearRange: [number, number]) => void;
+  /** switch between the disease-region and mechanistic-hypothesis framings */
+  setMode: (mode: AtlasMode) => void;
+  setFilter: (hiddenMajors: string[], hiddenHyp: string[], yearRange: [number, number]) => void;
   /** Agent control: select papers by id (updates the feed), spotlight with a
    * ring, or animate the camera to their bounding box. */
   selectByIds: (ids: string[]) => number;
@@ -158,17 +183,45 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     PC[i] = "rgb(" + Math.round(c[0]) + "," + Math.round(c[1]) + "," + Math.round(c[2]) + ")";
   }
 
+  // ---- mechanistic-hypothesis framing (alternate to the disease regions) -----
+  // Same points, coloured by their pathway-group "cure" hypothesis (patched into
+  // atlas.json by scripts/add_hypotheses.mjs). Unclassified papers (no mechanism
+  // link) recede to a muted grey so the classified ones read as the signal.
+  const HYPS = DATA.hypotheses ?? [];
+  const hasHyp = HYPS.length > 0 && Array.isArray(DATA.pointHyp);
+  const pointHyp = DATA.pointHyp ?? [];
+  const UNCLASSIFIED = "rgb(214,214,220)";
+  const PCH: string[] = new Array(P.length);
+  for (let i = 0; i < P.length; i++) {
+    const h = pointHyp[i];
+    PCH[i] = h != null && h >= 0 && HYPS[h] ? HYPS[h].color : UNCLASSIFIED;
+  }
+  const hypId = (i: number): string | null => {
+    const h = pointHyp[i];
+    return h != null && h >= 0 && HYPS[h] ? HYPS[h].id : null;
+  };
+
   // ---- citation adjacency ----
   const ADJ: number[][] = Array.from({ length: P.length }, () => []);
   for (const e of DATA.edges || []) { ADJ[e[0]].push(e[1]); ADJ[e[1]].push(e[0]); }
   let hoverIdx = -1;
 
-  // ---- filter state ----
+  // ---- filter + view-mode state ----
+  let mode: AtlasMode = "disease";
   const hiddenMajors = new Set<string>();
+  const hiddenHyp = new Set<string>(); // hidden mechanism ids (hypothesis mode)
   let yLo = DATA.meta.year_min, yHi = DATA.meta.year_max;
+  const hiddenAt = (i: number) => {
+    if (mode === "hypothesis") {
+      const h = hypId(i);
+      // an "unclassified" pseudo-group toggle hides the grey background papers
+      return h === null ? hiddenHyp.has("unclassified") : hiddenHyp.has(h);
+    }
+    return hiddenMajors.has(minorMajor[P[i][2]]);
+  };
   const visible = (i: number) => {
     const p = P[i];
-    return !hiddenMajors.has(minorMajor[p[2]]) && p[3] >= yLo && p[3] <= yHi;
+    return !hiddenAt(i) && p[3] >= yLo && p[3] <= yHi;
   };
   function reportCount() {
     if (!opts.onCount) return;
@@ -242,6 +295,8 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const zoom = view.s / baseS;
+    const hypMode = mode === "hypothesis" && hasHyp;
+    const CC = hypMode ? PCH : PC; // per-point colour for the active framing
     const r = Math.min(Math.max(1.0, dotR * view.s), 9);
     const hoverOn = hoverIdx >= 0 && visible(hoverIdx);
     const nb = hoverOn ? new Set(ADJ[hoverIdx]) : null;
@@ -266,7 +321,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       else if (dimOn && !dimSet.has(i)) a = dimAlpha;
       ctx.globalAlpha = a;
       ctx.beginPath(); ctx.arc(X, Y, r, 0, 6.2832);
-      ctx.fillStyle = PC[i]; ctx.fill();
+      ctx.fillStyle = CC[i]; ctx.fill();
     }
     ctx.globalAlpha = 1;
 
@@ -288,28 +343,32 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       for (const j of ADJ[lineAnchor]) {
         if (!visible(j)) continue;
         ctx.beginPath(); ctx.arc(wx(P[j][0]), wy(P[j][1]), r, 0, 6.2832);
-        ctx.fillStyle = PC[j]; ctx.fill();
+        ctx.fillStyle = CC[j]; ctx.fill();
       }
       ctx.beginPath(); ctx.arc(hX, hY, r + 2, 0, 6.2832);
-      ctx.fillStyle = PC[lineAnchor]; ctx.fill();
+      ctx.fillStyle = CC[lineAnchor]; ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = "#1b1b1f"; ctx.stroke();
     }
 
     // labels
-    const showMinor = zoom > 1.7;
-    const majorAlpha = showMinor ? Math.max(0.12, 1 - (zoom - 1.7) / 1.4) : 1;
-    if (majorAlpha > 0.02) {
-      for (const M of DATA.majors) {
-        if (hiddenMajors.has(M.id)) continue;
-        drawLabel(M.label, trend(M.growth), wx(M.x), wy(M.y), 15 + Math.min(7, M.count / 500), M.color, majorAlpha, true);
+    if (hypMode) {
+      drawHypLabels();
+    } else {
+      const showMinor = zoom > 1.7;
+      const majorAlpha = showMinor ? Math.max(0.12, 1 - (zoom - 1.7) / 1.4) : 1;
+      if (majorAlpha > 0.02) {
+        for (const M of DATA.majors) {
+          if (hiddenMajors.has(M.id)) continue;
+          drawLabel(M.label, trend(M.growth), wx(M.x), wy(M.y), 15 + Math.min(7, M.count / 500), M.color, majorAlpha, true);
+        }
       }
-    }
-    if (showMinor) {
-      const a = Math.min(1, (zoom - 1.7) / 0.6);
-      for (const m of DATA.minors) {
-        if (hiddenMajors.has(m.major)) continue;
-        if (m.count < 40 && zoom < 3) continue;
-        drawLabel(m.label, trend(m.growth), wx(m.x), wy(m.y), 16, "#22222a", a, false);
+      if (showMinor) {
+        const a = Math.min(1, (zoom - 1.7) / 0.6);
+        for (const m of DATA.minors) {
+          if (hiddenMajors.has(m.major)) continue;
+          if (m.count < 40 && zoom < 3) continue;
+          drawLabel(m.label, trend(m.growth), wx(m.x), wy(m.y), 16, "#22222a", a, false);
+        }
       }
     }
 
@@ -362,6 +421,58 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       ctx.font = `400 ${Math.round(size * 0.8)}px ${face}`; ctx.lineWidth = bold ? 3.5 : 3;
       const yy = y + size * 0.9;
       ctx.strokeText(suffix, x, yy); ctx.fillText(suffix, x, yy);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // The 8 mechanistic-hypothesis labels. The atlas is laid out by literature
+  // similarity, so the mechanisms don't occupy separate regions — their anchors
+  // cluster inside the Alzheimer's continent. We therefore mark each true anchor
+  // with a colour dot and declutter the text vertically (each label's band
+  // clears its neighbour, so labels never overlap), joining text to dot with a
+  // thin leader. The gap metric on the second line is the gap-map signal.
+  function drawHypLabels() {
+    const face = "-apple-system,Segoe UI,Roboto,sans-serif";
+    const w = cw(), h = ch();
+    const items = HYPS
+      .filter((hyp) => !hiddenHyp.has(hyp.id))
+      .map((hyp) => ({ hyp, sx: wx(hyp.x), sy: wy(hyp.y), ly: 0 }))
+      .filter((it) => it.sx > -60 && it.sx < w + 60 && it.sy > -40 && it.sy < h + 40);
+    if (!items.length) return;
+
+    // vertical declutter: order by true anchor y, push each down to clear the
+    // previous by GAP, then recentre the block on the anchors so it doesn't only
+    // drift downward.
+    const GAP = 32;
+    items.sort((a, b) => a.sy - b.sy);
+    items[0].ly = items[0].sy;
+    for (let k = 1; k < items.length; k++)
+      items[k].ly = Math.max(items[k].sy, items[k - 1].ly + GAP);
+    const shift = (items[items.length - 1].ly - items[items.length - 1].sy) / 2;
+    const pad = 26;
+    for (const it of items)
+      it.ly = Math.min(h - pad, Math.max(pad, it.ly - shift));
+
+    for (const { hyp, sx, sy, ly } of items) {
+      // leader from the true anchor dot to the decluttered label
+      if (Math.abs(ly - sy) > 3) {
+        ctx.globalAlpha = 0.55; ctx.strokeStyle = hyp.color; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, ly + (ly > sy ? -10 : 10)); ctx.stroke();
+      }
+      ctx.globalAlpha = 0.95; ctx.fillStyle = hyp.color;
+      ctx.beginPath(); ctx.arc(sx, sy, 3.4, 0, 6.2832); ctx.fill();
+
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.fillStyle = hyp.color;
+      ctx.font = `700 15px ${face}`; ctx.lineWidth = 4.5;
+      ctx.strokeText(hyp.short, sx, ly); ctx.fillText(hyp.short, sx, ly);
+      const gap = hyp.translation_gap;
+      if (gap != null) {
+        const sub = `gap ${gap.toFixed(2)}`;
+        ctx.font = `600 11px ${face}`; ctx.lineWidth = 3.5;
+        ctx.strokeText(sub, sx, ly + 13); ctx.fillText(sub, sx, ly + 13);
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -462,9 +573,20 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
     if (best !== hoverIdx) { hoverIdx = best; draw(); }
     if (best < 0) { hideTip(); return; }
     const p = P[best], fid = p[2], deg = ADJ[best].length;
+    let where: string;
+    if (mode === "hypothesis" && hasHyp) {
+      const hi = pointHyp[best];
+      const hyp = hi != null && hi >= 0 ? HYPS[hi] : null;
+      const g = hyp?.translation_gap;
+      where = hyp
+        ? `${esc(hyp.label)}${g != null ? ` · gap ${g.toFixed(2)}` : ""}`
+        : "Unclassified";
+    } else {
+      where = `${esc(minorLabel[fid])} · ${esc(majorLabel[minorMajor[fid]])}`;
+    }
     tip.innerHTML =
       `<div class="t">${esc(DATA.titles[best])}</div>` +
-      `<div class="m">${p[3]} · ${esc(minorLabel[fid])} · ${esc(majorLabel[minorMajor[fid]])}</div>` +
+      `<div class="m">${p[3]} · ${where}</div>` +
       `<div class="m">${deg} citation link${deg === 1 ? "" : "s"} in corpus</div>`;
     tip.style.opacity = "1";
     const b = cv.getBoundingClientRect();
@@ -482,7 +604,7 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
   ro.observe(root);
 
   fit(); baseS = view.s; resize();
-  opts.onReady?.({ majors: DATA.majors, yearMin: DATA.meta.year_min, yearMax: DATA.meta.year_max, total: P.length });
+  opts.onReady?.({ majors: DATA.majors, hypotheses: HYPS, unclassified: DATA.unclassified_count ?? 0, yearMin: DATA.meta.year_min, yearMax: DATA.meta.year_max, total: P.length });
   reportCount();
 
   return {
@@ -514,6 +636,12 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       draw();
     },
     resetView() { userMoved = false; fit(); baseS = view.s; draw(); },
+    setMode(m: AtlasMode) {
+      if (m === mode || (m === "hypothesis" && !hasHyp)) return;
+      mode = m;
+      draw();
+      reportCount();
+    },
     selectByIds(ids: string[]) {
       const idx = idsToIdx(ids);
       selSet = new Set(idx);
@@ -549,9 +677,11 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       draw();
       return idx.length;
     },
-    setFilter(hm: string[], yr: [number, number]) {
+    setFilter(hm: string[], hh: string[], yr: [number, number]) {
       hiddenMajors.clear();
       for (const id of hm) hiddenMajors.add(id);
+      hiddenHyp.clear();
+      for (const id of hh) hiddenHyp.add(id);
       yLo = yr[0]; yHi = yr[1];
       draw();
       reportCount();

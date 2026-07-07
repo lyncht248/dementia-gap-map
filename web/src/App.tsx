@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AtlasMap, { type AtlasMapHandle } from "./components/AtlasMap";
 import NewsFeed from "./components/NewsFeed";
 import AgentPanel from "./components/AgentPanel";
+import HypothesisPanel from "./components/HypothesisPanel";
 import { createController } from "./agent/controller";
 import { warmupDuckDb } from "./lib/duckdb";
-import type { AtlasReady, SelectedPaper } from "./lib/atlasRender";
+import type { AtlasMode, AtlasReady, SelectedPaper } from "./lib/atlasRender";
 import type { AreaInfo, Cluster, Paper } from "./types";
 
 interface FeedData {
@@ -22,7 +23,9 @@ export default function App() {
   const [selected, setSelected] = useState<Paper[]>([]);
   const [anchorId, setAnchorId] = useState<string | null>(null);
   const [meta, setMeta] = useState<AtlasReady | null>(null);
+  const [viewMode, setViewMode] = useState<AtlasMode>("disease");
   const [hiddenMajors, setHiddenMajors] = useState<string[]>([]);
+  const [hiddenHyp, setHiddenHyp] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
   const [count, setCount] = useState(0);
   const [feed, setFeed] = useState<FeedData | null>(null);
@@ -58,6 +61,7 @@ export default function App() {
   // Reset view: recenter the map AND clear the filters + any selection.
   const resetAll = () => {
     setHiddenMajors([]);
+    setHiddenHyp([]);
     if (meta) setYearRange([meta.yearMin, meta.yearMax]);
     setSelected([]);
     setAnchorId(null);
@@ -84,6 +88,8 @@ export default function App() {
 
   const toggleMajor = (id: string) =>
     setHiddenMajors((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleHyp = (id: string) =>
+    setHiddenHyp((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   // The NewsFeed's active facet filter (e.g. gene = APOE) drives a map highlight.
   const onFilteredChange = useCallback((ids: string[] | null) => {
@@ -191,6 +197,27 @@ export default function App() {
       </header>
 
       <section className="map-panel">
+        {meta && meta.hypotheses.length > 0 && (
+          <div className="toolbar toolbar-left">
+            <div className="segmented" role="group" aria-label="Map framing">
+              <button
+                className={`seg ${viewMode === "disease" ? "on" : ""}`}
+                onClick={() => setViewMode("disease")}
+                title="Colour the map by disease region"
+              >
+                Disease areas
+              </button>
+              <button
+                className={`seg ${viewMode === "hypothesis" ? "on" : ""}`}
+                onClick={() => setViewMode("hypothesis")}
+                title="Colour the map by the 8 mechanistic Alzheimer's cure hypotheses"
+              >
+                Hypotheses
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="toolbar toolbar-right">
           <button
             className={`btn ${selectMode ? "active" : ""}`}
@@ -209,18 +236,31 @@ export default function App() {
         {filtersOpen && meta && (
           <div className="filters">
             <div className="filters-row">
-              <span className="filters-label">Disease areas</span>
+              <span className="filters-label">
+                {viewMode === "hypothesis" ? "Hypotheses" : "Disease areas"}
+              </span>
               <div className="filters-groups">
-                {meta.majors.map((m) => (
-                  <button
-                    key={m.id}
-                    className={`fchip ${hiddenMajors.includes(m.id) ? "" : "on"}`}
-                    onClick={() => toggleMajor(m.id)}
-                  >
-                    <span className="dot" style={{ background: m.color }} />
-                    {m.label}
-                  </button>
-                ))}
+                {viewMode === "hypothesis"
+                  ? meta.hypotheses.map((h) => (
+                      <button
+                        key={h.id}
+                        className={`fchip ${hiddenHyp.includes(h.id) ? "" : "on"}`}
+                        onClick={() => toggleHyp(h.id)}
+                      >
+                        <span className="dot" style={{ background: h.color }} />
+                        {h.short}
+                      </button>
+                    ))
+                  : meta.majors.map((m) => (
+                      <button
+                        key={m.id}
+                        className={`fchip ${hiddenMajors.includes(m.id) ? "" : "on"}`}
+                        onClick={() => toggleMajor(m.id)}
+                      >
+                        <span className="dot" style={{ background: m.color }} />
+                        {m.label}
+                      </button>
+                    ))}
               </div>
             </div>
             <div className="filters-row">
@@ -252,7 +292,9 @@ export default function App() {
           <AtlasMap
             ref={atlasRef}
             selectMode={selectMode}
+            mode={viewMode}
             hiddenMajors={hiddenMajors}
+            hiddenHyp={hiddenHyp}
             yearRange={yearRange}
             onSelect={onSelect}
             onSelectModeChange={setSelectMode}
@@ -268,6 +310,16 @@ export default function App() {
           Reset view
         </button>
       </section>
+
+      {viewMode === "hypothesis" && meta && meta.hypotheses.length > 0 && (
+        <HypothesisPanel
+          hypotheses={meta.hypotheses}
+          hidden={hiddenHyp}
+          unclassified={meta.unclassified}
+          total={meta.total}
+          onToggle={toggleHyp}
+        />
+      )}
 
       <NewsFeed
         selected={selected}

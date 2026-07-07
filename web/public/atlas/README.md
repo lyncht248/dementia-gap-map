@@ -61,13 +61,46 @@ embedding actually sits between topics.
 cites or is cited by (22,763 undirected in-corpus links, derived from each
 paper's `references` list intersected with the corpus; both directions merged).
 
+## Mechanistic-hypothesis framing (the "Hypotheses" toggle)
+
+The map offers a **second framing of the same literature**: a toggle in the map
+toolbar switches from the 10 disease regions to the **8 mechanistic "Alzheimer's
+cure" hypotheses** (amyloid, tau, lipid / APOE, microglia, endocytosis,
+synaptic, vascular, epigenetic — the pathway groups). In this mode the dots are
+recoloured by each paper's dominant `pathway_group`, unclassified papers recede
+to grey, the 8 hypotheses are labelled on the map (with their translation-gap),
+and a panel under the map ranks them by translation gap with the Track B pathway
+metrics (support, gap, trials, genes).
+
+Because the atlas is laid out by **literature similarity** (which clusters by
+disease and GWAS methodology, not by mechanism), the mechanisms do **not** occupy
+separate regions — their anchors cluster inside the Alzheimer's continent, and
+the real signal (e.g. tau's wide gap with almost no papers here; amyloid's 96
+trials) lives in the pathway metrics, not in paper positions. The framing is
+therefore a colour + metric overlay, not a re-layout.
+
+This layer is patched onto `atlas.json` by `scripts/add_hypotheses.mjs` (it does
+not touch the layout). It adds `hypotheses` (the 8 bets — `label`, short
+on-canvas `short`, categorical `color`, the `statement`, an AD-continent label
+anchor `x`/`y`, the paper `count`, and the Track B rollup metrics `gene_count` /
+`trial_count` / `combined_support` / `clinical_translation` /
+`clinical_saturation` / `translation_gap`, ranked by gap), `pointHyp` (per-paper
+hypothesis index into `hypotheses`, `-1` = unclassified, parallel to
+`points`/`ids`), and `unclassified_count`. The per-paper mechanism assignment is
+reused from `atlas_feed.json` (`pathway_group`, derived from each paper's genes
+via `translational-evidence/map/gene_pathway.csv`); the metrics come from the
+Track B rollup `data/processed/translational-evidence/pathways.jsonl`.
+
 ## Regenerate
 
 ```bash
-python3 scripts/build_atlas.py   # writes atlas.json
-cd web && npm run build          # or `npm run dev` to view the app
+python3 scripts/build_atlas.py     # writes atlas.json (disease layout)
+node scripts/build-atlas-feed.mjs  # writes atlas_feed.json (per-paper pathway_group)
+node scripts/add_hypotheses.mjs    # patches the mechanistic-hypothesis layer onto atlas.json
+cd web && npm run build            # or `npm run dev` to view the app
 ```
 
 `build_atlas.py` reads `data/exports/visual/embeddings/qwen3-8b/{points,clusters}.jsonl`
 + `manifest.json` (and `data/processed/topic-dynamics/papers.jsonl` for the
-citation links) and writes `atlas.json` here.
+citation links) and writes `atlas.json` here. `add_hypotheses.mjs` is a
+non-destructive patch — safe to re-run against the committed `atlas.json`.
