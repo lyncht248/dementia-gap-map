@@ -56,7 +56,12 @@ docs/                         # Notes, embedding benchmark, inspiration
 
 ## Inspiration
 
-The methodological lineage behind this project — using the citation/co-citation graph to detect research topics trending toward breakthroughs and drug approvals years in advance — is collected in [docs/inspiration/](docs/inspiration/README.md).
+The core idea — that the structure of the biomedical citation/co-citation graph, cut into a time series of research topics, carries an early machine-detectable signal of which areas will produce real-world outcomes — comes from two preprints out of the NIH Office of Portfolio Analysis (B. Ian Hutchins and colleagues):
+
+- **Prediction of transformative breakthroughs in biomedical research** (Davis et al., 2025). Finds a signature in co-citation networks that flags topics likely to yield future transformative breakthroughs up to ~12 years ahead (>5 years on average). The signal combines a burst of papers around a novel concept, an unusually high number of very influential papers in specialty journals, and low topical cohesion — and the kinetics hold across two periods 20 years apart.
+- **Forecasting novel therapeutic development in biomedical research** (Arabi & Hutchins, 2026). Extends the same topic-dynamics approach to a translational endpoint: a model over citation activity, publication content, and the "flocking" of scientists into new topics identifies research areas that later yield FDA-approved drugs years before approval (F1 = 0.84) — ~80% of target drugs predicted in advance, 65% predicted 8+ years out, usually before phase-2 trials begin, using only public contemporaneous data.
+
+This map is a dementia-scoped, transparent-heuristic take on that lineage: turn papers → citation links → theme clusters → trajectories over time, then surface the topics whose evidence is trending toward translational payoff (GWAS loci, genes, pathways, drugs, trials). Full notes and the PDFs are in [docs/inspiration/](docs/inspiration/README.md).
 
 ## License
 
