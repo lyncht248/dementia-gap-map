@@ -17,6 +17,7 @@ The goal is not to claim we predict breakthroughs, but to detect emerging, genet
 ## Using the map
 
 - **Pan and zoom.** Zoom out for broad disease regions; zoom in for fine themes (Microglia & Neuroinflammation, TREM2, Fluid Biomarkers, Polygenic Risk Scores, …).
+- **Switch framing** with the *Disease areas · Hypotheses · Flywheel* toggle. **Hypotheses** recolours the same literature by the 8 mechanistic "Alzheimer's cure" bets (amyloid, tau, lipid/APOE, microglia, endocytosis, synaptic, vascular, epigenetic), ranked by *translation gap*. **Flywheel** lays those bets out as a development pipeline — Research → Genetics → Models → Trials → Results — where each dot is one item and hovering traces its lineage across stages (paper → gene → trial and back); the wall where dots stop before Trials is the translation gap made literal.
 - **Hover a paper** to trace its citation links to the rest of the corpus.
 - **Click "Select Region"** and draw a circle to list the papers inside it in the feed below the map.
 - **Ask the agent** (left panel) to query the evidence and drive the map — it can select papers, highlight genes/pathways, zoom, and filter.

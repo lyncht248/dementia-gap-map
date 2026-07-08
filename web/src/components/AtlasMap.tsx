@@ -3,6 +3,7 @@ import {
   mountAtlas,
   type AtlasData,
   type AtlasHandle,
+  type AtlasMode,
   type AtlasReady,
   type SelectedPaper,
 } from "../lib/atlasRender";
@@ -15,10 +16,13 @@ export interface AtlasMapHandle {
   clearHighlight: () => void;
   zoomToPapers: (ids: string[]) => number;
   setHighlight: (paperIds: string[] | null) => void;
+  paperPositionsNorm: () => { id: string; nx: number; ny: number }[];
 }
 interface Props {
   selectMode: boolean;
+  mode: AtlasMode;
   hiddenMajors: string[];
+  hiddenHyp: string[];
   yearRange: [number, number];
   onSelect: (rows: SelectedPaper[], anchorId?: string | null) => void;
   onSelectModeChange: (on: boolean) => void;
@@ -28,7 +32,7 @@ interface Props {
 
 // The dementia theme atlas (Qwen3-Embedding-8B), embedded in the map panel.
 const AtlasMap = forwardRef<AtlasMapHandle, Props>(function AtlasMap(
-  { selectMode, hiddenMajors, yearRange, onSelect, onSelectModeChange, onReady, onCount },
+  { selectMode, mode, hiddenMajors, hiddenHyp, yearRange, onSelect, onSelectModeChange, onReady, onCount },
   ref
 ) {
   const elRef = useRef<HTMLDivElement>(null);
@@ -63,7 +67,10 @@ const AtlasMap = forwardRef<AtlasMapHandle, Props>(function AtlasMap(
   }, [data]);
 
   useEffect(() => { handleRef.current?.setSelectMode(selectMode); }, [selectMode]);
-  useEffect(() => { handleRef.current?.setFilter(hiddenMajors, yearRange); }, [hiddenMajors, yearRange]);
+  useEffect(() => { handleRef.current?.setMode(mode); }, [mode]);
+  useEffect(() => {
+    handleRef.current?.setFilter(hiddenMajors, hiddenHyp, yearRange);
+  }, [hiddenMajors, hiddenHyp, yearRange]);
 
   useImperativeHandle(ref, () => ({
     clearSelection: () => handleRef.current?.clearSelection(),
@@ -73,6 +80,7 @@ const AtlasMap = forwardRef<AtlasMapHandle, Props>(function AtlasMap(
     clearHighlight: () => handleRef.current?.clearHighlight(),
     zoomToPapers: (ids) => handleRef.current?.zoomToIds(ids) ?? 0,
     setHighlight: (ids: string[] | null) => handleRef.current?.setHighlight(ids),
+    paperPositionsNorm: () => handleRef.current?.paperPositionsNorm() ?? [],
   }), []);
 
   if (error) return <div className="atlas-loading"><p>Could not load the map.</p><pre>{error}</pre></div>;

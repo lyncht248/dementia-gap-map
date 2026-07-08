@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AtlasMap, { type AtlasMapHandle } from "./components/AtlasMap";
 import NewsFeed from "./components/NewsFeed";
 import AgentPanel from "./components/AgentPanel";
+import FlywheelMap from "./components/FlywheelMap";
 import { createController } from "./agent/controller";
 import { warmupDuckDb } from "./lib/duckdb";
 import type { AtlasReady, SelectedPaper } from "./lib/atlasRender";
@@ -22,11 +23,22 @@ export default function App() {
   const [selected, setSelected] = useState<Paper[]>([]);
   const [anchorId, setAnchorId] = useState<string | null>(null);
   const [meta, setMeta] = useState<AtlasReady | null>(null);
+  const [view, setView] = useState<"disease" | "flywheel">("disease");
   const [hiddenMajors, setHiddenMajors] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
   const [count, setCount] = useState(0);
   const [feed, setFeed] = useState<FeedData | null>(null);
   const atlasRef = useRef<AtlasMapHandle>(null);
+  // paper positions captured from the atlas when switching to the flywheel, so
+  // its Research dots morph in from where they sat on the Disease-areas map.
+  const entryRef = useRef<Map<string, { nx: number; ny: number }> | null>(null);
+
+  // Switch framing; when entering the flywheel, snapshot the atlas dot positions.
+  const goFlywheel = () => {
+    const pos = atlasRef.current?.paperPositionsNorm() ?? [];
+    entryRef.current = new Map(pos.map((p) => [p.id, { nx: p.nx, ny: p.ny }]));
+    setView("flywheel");
+  };
 
   // Split layout
   const [agentOpen, setAgentOpen] = useState(true);
@@ -190,23 +202,46 @@ export default function App() {
         </p>
       </header>
 
-      <section className="map-panel">
-        <div className="toolbar toolbar-right">
-          <button
-            className={`btn ${selectMode ? "active" : ""}`}
-            onClick={() => setSelectMode((v) => !v)}
-          >
-            {selectMode ? "Click and drag…" : "Select region"}
-          </button>
-          <button
-            className={`btn ${filtersOpen ? "active" : ""}`}
-            onClick={() => setFiltersOpen((v) => !v)}
-          >
-            Filters
-          </button>
-        </div>
+      <section className={`map-panel ${view === "flywheel" ? "has-flywheel" : ""}`}>
+        {meta && meta.hypotheses.length > 0 && (
+          <div className="toolbar toolbar-left">
+            <div className="segmented" role="group" aria-label="Map framing">
+              <button
+                className={`seg ${view === "disease" ? "on" : ""}`}
+                onClick={() => setView("disease")}
+                title="The semantic map, coloured by disease region"
+              >
+                Disease areas
+              </button>
+              <button
+                className={`seg ${view === "flywheel" ? "on" : ""}`}
+                onClick={goFlywheel}
+                title="The development pipeline: hypotheses × stages (Research → Genetics → Models → Trials → Results)"
+              >
+                Flywheel
+              </button>
+            </div>
+          </div>
+        )}
 
-        {filtersOpen && meta && (
+        {view !== "flywheel" && (
+          <div className="toolbar toolbar-right">
+            <button
+              className={`btn ${selectMode ? "active" : ""}`}
+              onClick={() => setSelectMode((v) => !v)}
+            >
+              {selectMode ? "Click and drag…" : "Select region"}
+            </button>
+            <button
+              className={`btn ${filtersOpen ? "active" : ""}`}
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              Filters
+            </button>
+          </div>
+        )}
+
+        {filtersOpen && meta && view !== "flywheel" && (
           <div className="filters">
             <div className="filters-row">
               <span className="filters-label">Disease areas</span>
@@ -249,34 +284,68 @@ export default function App() {
         )}
 
         <div className="map-wrap">
-          <AtlasMap
-            ref={atlasRef}
-            selectMode={selectMode}
-            hiddenMajors={hiddenMajors}
-            yearRange={yearRange}
-            onSelect={onSelect}
-            onSelectModeChange={setSelectMode}
-            onReady={onReady}
-            onCount={setCount}
-          />
+          {/* Atlas stays mounted (holds the agent's map handle); hidden under the
+              flywheel when that framing is active. */}
+          <div
+            style={{ width: "100%", height: "100%", display: view === "flywheel" ? "none" : "block" }}
+          >
+            <AtlasMap
+              ref={atlasRef}
+              selectMode={selectMode}
+              mode="disease"
+              hiddenMajors={hiddenMajors}
+              hiddenHyp={[]}
+              yearRange={yearRange}
+              onSelect={onSelect}
+              onSelectModeChange={setSelectMode}
+              onReady={onReady}
+              onCount={setCount}
+            />
+          </div>
+          {view === "flywheel" && (
+            <div className="fly-wrap">
+              <FlywheelMap entry={entryRef.current ?? undefined} />
+            </div>
+          )}
         </div>
 
-        <div className="toolbar toolbar-bottom">
-          <span className="count-note">{count.toLocaleString()} papers</span>
-        </div>
-        <button className="reset-view" onClick={resetAll} title="Reset view">
-          Reset view
-        </button>
+        {view !== "flywheel" && (
+          <>
+            <div className="toolbar toolbar-bottom">
+              <span className="count-note">{count.toLocaleString()} papers</span>
+            </div>
+            <button className="reset-view" onClick={resetAll} title="Reset view">
+              Reset view
+            </button>
+          </>
+        )}
       </section>
 
-      <NewsFeed
-        selected={selected}
-        clusters={clusters}
-        areas={areas}
-        anchorId={anchorId}
-        onClear={clearSelection}
-        onFilteredChange={onFilteredChange}
-      />
+      {view === "flywheel" && (
+        <section className="fly-caption">
+          <h2>The development flywheel</h2>
+          <p>
+            Each hypothesis (row) across the five pipeline stages (columns), ranked
+            with the most clinically reinforced at the top. Every dot is one
+            item — a <strong>paper</strong>, a genetically-supported <strong>gene</strong>,
+            a <strong>model-validated</strong> gene, a <strong>trial</strong>, or a
+            trial with <strong>results</strong>. Hover a column header or row for what
+            it means, hover a dot to trace its lineage across stages, and click a dot
+            to open it.
+          </p>
+        </section>
+      )}
+
+      {view !== "flywheel" && (
+        <NewsFeed
+          selected={selected}
+          clusters={clusters}
+          areas={areas}
+          anchorId={anchorId}
+          onClear={clearSelection}
+          onFilteredChange={onFilteredChange}
+        />
+      )}
 
       <footer className="foot">
         Dementia Gap Map · research prototype · data from PubMed, GWAS Catalog, Open Targets
