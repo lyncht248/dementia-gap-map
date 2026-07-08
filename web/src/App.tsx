@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AtlasMap, { type AtlasMapHandle } from "./components/AtlasMap";
 import NewsFeed from "./components/NewsFeed";
 import AgentPanel from "./components/AgentPanel";
-import HypothesisPanel from "./components/HypothesisPanel";
 import FlywheelMap from "./components/FlywheelMap";
 import { createController } from "./agent/controller";
 import { warmupDuckDb } from "./lib/duckdb";
-import type { AtlasMode, AtlasReady, SelectedPaper } from "./lib/atlasRender";
+import type { AtlasReady, SelectedPaper } from "./lib/atlasRender";
 import type { AreaInfo, Cluster, Paper } from "./types";
 
 interface FeedData {
@@ -24,10 +23,8 @@ export default function App() {
   const [selected, setSelected] = useState<Paper[]>([]);
   const [anchorId, setAnchorId] = useState<string | null>(null);
   const [meta, setMeta] = useState<AtlasReady | null>(null);
-  const [view, setView] = useState<"disease" | "hypothesis" | "flywheel">("disease");
-  const atlasMode: AtlasMode = view === "hypothesis" ? "hypothesis" : "disease";
+  const [view, setView] = useState<"disease" | "flywheel">("disease");
   const [hiddenMajors, setHiddenMajors] = useState<string[]>([]);
-  const [hiddenHyp, setHiddenHyp] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
   const [count, setCount] = useState(0);
   const [feed, setFeed] = useState<FeedData | null>(null);
@@ -63,7 +60,6 @@ export default function App() {
   // Reset view: recenter the map AND clear the filters + any selection.
   const resetAll = () => {
     setHiddenMajors([]);
-    setHiddenHyp([]);
     if (meta) setYearRange([meta.yearMin, meta.yearMax]);
     setSelected([]);
     setAnchorId(null);
@@ -90,8 +86,6 @@ export default function App() {
 
   const toggleMajor = (id: string) =>
     setHiddenMajors((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  const toggleHyp = (id: string) =>
-    setHiddenHyp((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   // The NewsFeed's active facet filter (e.g. gene = APOE) drives a map highlight.
   const onFilteredChange = useCallback((ids: string[] | null) => {
@@ -205,16 +199,9 @@ export default function App() {
               <button
                 className={`seg ${view === "disease" ? "on" : ""}`}
                 onClick={() => setView("disease")}
-                title="Colour the map by disease region"
+                title="The semantic map, coloured by disease region"
               >
                 Disease areas
-              </button>
-              <button
-                className={`seg ${view === "hypothesis" ? "on" : ""}`}
-                onClick={() => setView("hypothesis")}
-                title="Colour the map by the 8 mechanistic Alzheimer's cure hypotheses"
-              >
-                Hypotheses
               </button>
               <button
                 className={`seg ${view === "flywheel" ? "on" : ""}`}
@@ -247,31 +234,18 @@ export default function App() {
         {filtersOpen && meta && view !== "flywheel" && (
           <div className="filters">
             <div className="filters-row">
-              <span className="filters-label">
-                {view === "hypothesis" ? "Hypotheses" : "Disease areas"}
-              </span>
+              <span className="filters-label">Disease areas</span>
               <div className="filters-groups">
-                {view === "hypothesis"
-                  ? meta.hypotheses.map((h) => (
-                      <button
-                        key={h.id}
-                        className={`fchip ${hiddenHyp.includes(h.id) ? "" : "on"}`}
-                        onClick={() => toggleHyp(h.id)}
-                      >
-                        <span className="dot" style={{ background: h.color }} />
-                        {h.short}
-                      </button>
-                    ))
-                  : meta.majors.map((m) => (
-                      <button
-                        key={m.id}
-                        className={`fchip ${hiddenMajors.includes(m.id) ? "" : "on"}`}
-                        onClick={() => toggleMajor(m.id)}
-                      >
-                        <span className="dot" style={{ background: m.color }} />
-                        {m.label}
-                      </button>
-                    ))}
+                {meta.majors.map((m) => (
+                  <button
+                    key={m.id}
+                    className={`fchip ${hiddenMajors.includes(m.id) ? "" : "on"}`}
+                    onClick={() => toggleMajor(m.id)}
+                  >
+                    <span className="dot" style={{ background: m.color }} />
+                    {m.label}
+                  </button>
+                ))}
               </div>
             </div>
             <div className="filters-row">
@@ -308,9 +282,9 @@ export default function App() {
             <AtlasMap
               ref={atlasRef}
               selectMode={selectMode}
-              mode={atlasMode}
+              mode="disease"
               hiddenMajors={hiddenMajors}
-              hiddenHyp={hiddenHyp}
+              hiddenHyp={[]}
               yearRange={yearRange}
               onSelect={onSelect}
               onSelectModeChange={setSelectMode}
@@ -337,16 +311,6 @@ export default function App() {
         )}
       </section>
 
-      {view === "hypothesis" && meta && meta.hypotheses.length > 0 && (
-        <HypothesisPanel
-          hypotheses={meta.hypotheses}
-          hidden={hiddenHyp}
-          unclassified={meta.unclassified}
-          total={meta.total}
-          onToggle={toggleHyp}
-        />
-      )}
-
       {view === "flywheel" && (
         <section className="fly-caption">
           <h2>The development flywheel</h2>
@@ -355,9 +319,9 @@ export default function App() {
             with the most clinically reinforced at the top. Every dot is one
             item — a <strong>paper</strong>, a genetically-supported <strong>gene</strong>,
             a <strong>model-validated</strong> gene, a <strong>trial</strong>, or a
-            trial with <strong>results</strong>. Hover a dot to trace its lineage
-            across stages; click to open it. The wall where dots stop before Trials
-            (endocytosis, epigenetic, tau) is the translation gap made literal.
+            trial with <strong>results</strong>. Hover a column header or row for what
+            it means, hover a dot to trace its lineage across stages, and click a dot
+            to open it.
           </p>
         </section>
       )}

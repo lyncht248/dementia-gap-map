@@ -269,8 +269,9 @@ body {
 
 /* flywheel (development-pipeline) view */
 .map-panel.has-flywheel .map-wrap {
-  height: 76vh;
-  min-height: 620px;
+  height: 980px;
+  max-height: 92vh;
+  min-height: 760px;
 }
 .fly-wrap {
   position: absolute;

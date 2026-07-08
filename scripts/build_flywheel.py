@@ -69,6 +69,17 @@ TRIAL_MECH = {
     "endocytosis_endosomal": None,
     "epigenetic_transcription": None,
 }
+# Curated mechanism overrides. The automated GO/Reactome IDF assignment
+# (gene_pathway.csv) puts a handful of marquee targets in the wrong mechanistic
+# home — e.g. APP (the amyloid precursor protein) and the secretases land in
+# synaptic/endocytosis rather than amyloid, and MAPT (tau protein) lands in
+# synaptic. That makes an amyloid trial appear to "depend on" a synaptic gene.
+# These are the unambiguous, textbook homes.
+PATHWAY_OVERRIDE = {
+    "APP": "amyloid", "PSEN1": "amyloid", "BACE1": "amyloid", "BACE2": "amyloid",
+    "MAPT": "tau", "GSK3B": "tau",
+}
+
 # a gene "counts" as genetically supported at this bar, and model-validated at this
 GEN_MIN = 0.5           # genetic_support, OR any GWAS association (below)
 MODEL_FUNC_MIN = 0.5    # functional_support, OR any animal-model evidence
@@ -110,16 +121,26 @@ def main() -> None:
     animal = te.groupby("gene_id")["ot_animal_model"].max()
     genes = genes.assign(animal=genes["gene_id"].map(animal))
 
+    # full gene -> mechanism map (all genes, override applied) — drives both the
+    # gene nodes and each paper's Research membership, so the overrides propagate
+    # everywhere (a paper studying APP counts toward amyloid, not synaptic).
+    sym_hyp_all = {}
+    for _, g in genes.iterrows():
+        sym = g["symbol"]
+        h = PATHWAY_OVERRIDE.get(sym, g["pathway_group"])
+        if h in hyp_ids:
+            sym_hyp_all[sym] = h
+
     # ---- gene nodes: genetics (has genetic evidence) and models (also validated)
     gene_hyp = {}       # SYMBOL -> hyp id
     genetics_genes = defaultdict(list)  # hyp -> [SYMBOL...]
     models_genes = defaultdict(list)
     is_model = {}       # SYMBOL -> bool
     for _, g in genes.iterrows():
-        h = g["pathway_group"]
-        if h not in hyp_ids:
-            continue
         sym = g["symbol"]
+        h = sym_hyp_all.get(sym)
+        if h is None:
+            continue
         gs = float(g["genetic_support"] or 0)
         gw = float(g["gwas_association_count"] or 0)
         if not (gs >= GEN_MIN or gw > 0):
@@ -177,11 +198,13 @@ def main() -> None:
                 add_node(f"m:{sym}", kind="gene", stage="models", hyps=[h], label=sym)
                 edges.add((f"g:{sym}", f"m:{sym}"))
 
-    # research paper nodes (multi-membership) + paper->gene edges
+    # research paper nodes (multi-membership) + paper->gene edges. Membership is
+    # derived from the paper's own genes via the override-aware map, so a paper is
+    # in every mechanism it actually studies (and the overrides apply here too).
     paper_meta = {}
     for p in feed["papers"]:
         pid = p["paper_id"]
-        pws = [w for w in (p.get("pathways") or []) if w in hyp_ids]
+        pws = sorted({sym_hyp_all[s] for s in (p.get("genes") or []) if s in sym_hyp_all})
         if not pws:
             continue
         paper_meta[pid] = p
