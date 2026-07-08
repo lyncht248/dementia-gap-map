@@ -34,7 +34,7 @@ across two periods 20 years apart.
 
 **Why it inspires this project:** this is the "topic dynamics" blueprint — build a
 co-citation network, cut it into topics, track each topic's yearly trajectory, and
-learn the shape of a topic that is about to matter. Our Track A layer is a
+learn the shape of a topic that is about to matter. Our literature/topic layer is a
 dementia-scoped, transparent-heuristic version of this idea.
 
 ### 2. Forecasting novel therapeutic development in biomedical research (2026)
@@ -55,9 +55,9 @@ contemporaneous publication/citation data.
 
 **Why it inspires this project:** this closes the loop from topic dynamics to a
 translational endpoint (drug approval). It is the direct motivation for connecting
-our topic trajectories (Track A) to the translational evidence layer — GWAS,
-genes, pathways, drugs, and clinical trials (Track B) — so the map can highlight
-dementia research topics trending toward therapeutic payoff.
+our topic trajectories to the translational evidence layer — GWAS, genes, pathways,
+drugs, and clinical trials — so the map can highlight dementia research topics
+trending toward therapeutic payoff.
 
 ## How they relate to the build
 
