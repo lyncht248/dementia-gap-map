@@ -16,6 +16,7 @@ export interface AtlasMapHandle {
   clearHighlight: () => void;
   zoomToPapers: (ids: string[]) => number;
   setHighlight: (paperIds: string[] | null) => void;
+  paperPositionsNorm: () => { id: string; nx: number; ny: number }[];
 }
 interface Props {
   selectMode: boolean;
@@ -79,6 +80,7 @@ const AtlasMap = forwardRef<AtlasMapHandle, Props>(function AtlasMap(
     clearHighlight: () => handleRef.current?.clearHighlight(),
     zoomToPapers: (ids) => handleRef.current?.zoomToIds(ids) ?? 0,
     setHighlight: (ids: string[] | null) => handleRef.current?.setHighlight(ids),
+    paperPositionsNorm: () => handleRef.current?.paperPositionsNorm() ?? [],
   }), []);
 
   if (error) return <div className="atlas-loading"><p>Could not load the map.</p><pre>{error}</pre></div>;

@@ -29,6 +29,16 @@ export default function App() {
   const [count, setCount] = useState(0);
   const [feed, setFeed] = useState<FeedData | null>(null);
   const atlasRef = useRef<AtlasMapHandle>(null);
+  // paper positions captured from the atlas when switching to the flywheel, so
+  // its Research dots morph in from where they sat on the Disease-areas map.
+  const entryRef = useRef<Map<string, { nx: number; ny: number }> | null>(null);
+
+  // Switch framing; when entering the flywheel, snapshot the atlas dot positions.
+  const goFlywheel = () => {
+    const pos = atlasRef.current?.paperPositionsNorm() ?? [];
+    entryRef.current = new Map(pos.map((p) => [p.id, { nx: p.nx, ny: p.ny }]));
+    setView("flywheel");
+  };
 
   // Split layout
   const [agentOpen, setAgentOpen] = useState(true);
@@ -205,7 +215,7 @@ export default function App() {
               </button>
               <button
                 className={`seg ${view === "flywheel" ? "on" : ""}`}
-                onClick={() => setView("flywheel")}
+                onClick={goFlywheel}
                 title="The development pipeline: hypotheses × stages (Research → Genetics → Models → Trials → Results)"
               >
                 Flywheel
@@ -294,7 +304,7 @@ export default function App() {
           </div>
           {view === "flywheel" && (
             <div className="fly-wrap">
-              <FlywheelMap />
+              <FlywheelMap entry={entryRef.current ?? undefined} />
             </div>
           )}
         </div>
@@ -326,14 +336,16 @@ export default function App() {
         </section>
       )}
 
-      <NewsFeed
-        selected={selected}
-        clusters={clusters}
-        areas={areas}
-        anchorId={anchorId}
-        onClear={clearSelection}
-        onFilteredChange={onFilteredChange}
-      />
+      {view !== "flywheel" && (
+        <NewsFeed
+          selected={selected}
+          clusters={clusters}
+          areas={areas}
+          anchorId={anchorId}
+          onClear={clearSelection}
+          onFilteredChange={onFilteredChange}
+        />
+      )}
 
       <footer className="foot">
         Dementia Gap Map · research prototype · data from PubMed, GWAS Catalog, Open Targets

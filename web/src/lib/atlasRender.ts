@@ -94,6 +94,10 @@ export interface AtlasHandle {
   zoomToIds: (ids: string[], pad?: number) => number;
   /** highlight a subset of papers on the map (the NewsFeed's active facet filter) */
   setHighlight: (paperIds: string[] | null) => void;
+  /** each paper's current on-screen position, normalised to [0,1] of the canvas,
+   * so another view can animate the same dots from where they sit on this map
+   * (the flywheel's switch-in morph). */
+  paperPositionsNorm: () => { id: string; nx: number; ny: number }[];
 }
 
 type Pt = { x: number; y: number };
@@ -676,6 +680,14 @@ export function mountAtlas(root: HTMLElement, DATA: AtlasData, opts: AtlasOption
       view.ty = h / 2 - ((mny + mxy) / 2) * view.s;
       draw();
       return idx.length;
+    },
+    paperPositionsNorm() {
+      const w = cw(), h = ch();
+      const out: { id: string; nx: number; ny: number }[] = [];
+      for (let i = 0; i < P.length; i++) {
+        out.push({ id: DATA.ids[i], nx: wx(P[i][0]) / w, ny: wy(P[i][1]) / h });
+      }
+      return out;
     },
     setFilter(hm: string[], hh: string[], yr: [number, number]) {
       hiddenMajors.clear();

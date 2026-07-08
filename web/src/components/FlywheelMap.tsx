@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { mountFlywheel, type FlyData } from "../lib/flywheelRender";
 
+interface Props {
+  /** paper id -> normalised position on the Disease map, for the switch-in morph */
+  entry?: Map<string, { nx: number; ny: number }>;
+}
+
 // The development-pipeline ("flywheel") view: the 8 hypotheses as rows, the 5
 // stages (Research -> Genetics -> Models -> Trials -> Results) as columns, with
 // typed dots per cell and hover-lineage across stages. Loads its own dataset
 // (flywheel.json) built by scripts/build_flywheel.py.
-export default function FlywheelMap() {
+export default function FlywheelMap({ entry }: Props) {
   const elRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<FlyData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // captured once at mount so a later prop identity change can't retrigger it
+  const entryRef = useRef(entry);
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}atlas/flywheel.json`)
@@ -19,7 +26,7 @@ export default function FlywheelMap() {
 
   useEffect(() => {
     if (!data || !elRef.current) return;
-    const h = mountFlywheel(elRef.current, data);
+    const h = mountFlywheel(elRef.current, data, { entry: entryRef.current });
     return () => h.destroy();
   }, [data]);
 

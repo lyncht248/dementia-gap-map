@@ -33,7 +33,12 @@ export interface FlyData {
   edges: [string, string][];
 }
 
-export interface FlywheelOptions { onReady?: () => void }
+export interface FlywheelOptions {
+  onReady?: () => void;
+  /** paper id -> its normalised position on the Disease-areas map, so Research
+   * dots morph in from where they sat on that map instead of from the row. */
+  entry?: Map<string, { nx: number; ny: number }>;
+}
 export interface FlywheelHandle { destroy: () => void }
 
 const INK = "#22222a";
@@ -128,7 +133,13 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
         const th = (i + 0.5) * GOLDEN;
         const x = cx + rad * Math.cos(th);
         const y = cy + rad * Math.sin(th);
-        const p: P = { node: n, row: r, col: cCol, x, y, sx: LEFT - 40, sy: cy, color: colorOf[hyps[r].id] };
+        // Research dots morph in from their Disease-map position when available.
+        let sx = LEFT - 40, sy = cy;
+        if (cCol === 0 && opts.entry) {
+          const e = opts.entry.get(n.id.slice(2)); // node id "p:<paper_id>" -> paper_id
+          if (e) { sx = e.nx * w; sy = e.ny * h; }
+        }
+        const p: P = { node: n, row: r, col: cCol, x, y, sx, sy, color: colorOf[hyps[r].id] };
         placements.push(p);
         (byNode.get(n.id) ?? byNode.set(n.id, []).get(n.id)!).push(p);
       });
@@ -151,7 +162,7 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
 
   // ---- animation: research dots fly out of the row; the rest fade in ---------
   let animStart = 0;
-  const DUR = 950;
+  const DUR = 1200;
   let raf = 0;
   const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
