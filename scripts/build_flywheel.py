@@ -55,6 +55,7 @@ TRIALS = ROOT / "web/public/data/parquet/trials.parquet"
 DRUGS = ROOT / "web/public/data/parquet/drugs.parquet"
 ROLLUP = ROOT / "data/processed/shared/atlas_evidence_rollup.jsonl"
 REFS = ROOT / "data/interim/flywheel/trial_refs.json"
+OT_TRIALS = ROOT / "data/interim/flywheel/ot_gene_trials.json"  # gene -> AD trials (Open Targets)
 OUT = ROOT / "web/public/atlas/flywheel.json"
 
 # pathway mechanism_group -> trial mechanism_group (from pathways.jsonl crosswalk)
@@ -229,6 +230,25 @@ def main() -> None:
             edges.add((f"t:{nct}", f"r:{nct}"))
             result_count[h] += 1
 
+    # ---- Open Targets gene -> trial lineage edges ------------------------------
+    # OT gives the authoritative target -> drug -> trial link the local data lacks.
+    # We only add edges to trials we already show (mechanism-tagged) and genes we
+    # already show, so the counts stay Nathan's while the backward lineage lights up.
+    ot_links = json.loads(OT_TRIALS.read_text()) if OT_TRIALS.exists() else {}
+    ot_linked_trials = set()
+    for sym, links in ot_links.items():
+        gnode = f"m:{sym}" if is_model.get(sym) else f"g:{sym}"
+        if gnode not in seen_node:
+            continue
+        for l in links:
+            tnode = f"t:{l['nct']}"
+            if tnode in seen_node:
+                edges.add((gnode, tnode))
+                seen_node[tnode].setdefault("targets", [])
+                if sym not in seen_node[tnode]["targets"]:
+                    seen_node[tnode]["targets"] = sorted(set(seen_node[tnode]["targets"]) | {sym})
+                ot_linked_trials.add(tnode)
+
     # ---- hypotheses ranked least-gap first (most reinforced at top) ------------
     ranked = sorted(hyps, key=lambda h: (h["translation_gap"] or 0, -(h["trial_count"] or 0)))
     stages = ["research", "genetics", "models", "trials", "results"]
@@ -256,8 +276,11 @@ def main() -> None:
 
     # ---- report ----------------------------------------------------------------
     ref_edges = sum(1 for a, b in edges if a.startswith("t:") and b.startswith("p:"))
+    gt_edges = sum(1 for a, b in edges if (a[0] in "gm" and b.startswith("t:")) or (b[0] in "gm" and a.startswith("t:")))
     print(f"wrote {OUT.relative_to(ROOT)}  ({OUT.stat().st_size/1e6:.2f} MB)")
-    print(f"  {len(nodes)} nodes, {len(edges)} edges  (trial->paper refs: {ref_edges})")
+    print(f"  {len(nodes)} nodes, {len(edges)} edges")
+    print(f"  lineage: gene->trial {gt_edges} edges ({len(ot_linked_trials)} trials with backward lineage), "
+          f"trial->paper refs {ref_edges}")
     print(f"\n  {'hypothesis':16}{'research':>9}{'genetics':>9}{'models':>8}{'trials':>8}{'results':>8}")
     for h in ranked:
         hid = h["id"]

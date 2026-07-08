@@ -91,12 +91,41 @@ reused from `atlas_feed.json` (`pathway_group`, derived from each paper's genes
 via `translational-evidence/map/gene_pathway.csv`); the metrics come from the
 Track B rollup `data/processed/translational-evidence/pathways.jsonl`.
 
+## Flywheel view (development pipeline)
+
+A third framing (toggle: *Disease areas · Hypotheses · Flywheel*) lays the 8
+hypotheses out as an 8×5 grid — rows are the hypotheses (ranked least-gap-first),
+columns are the pipeline stages **Research → Genetics → Models → Trials →
+Results**. Each cell packs the typed dots that populate that stage (a paper, a
+genetically-supported gene, a model-validated gene, a trial, a trial with
+results); hovering a dot traces its lineage across stages (a paper's genes and
+the trials that target them; a trial's target gene and the research behind it).
+The wall where dots stop before Trials (endocytosis, epigenetic, tau) is the
+translation gap made literal. Rendered by `web/src/lib/flywheelRender.ts` from
+`flywheel.json`.
+
+`flywheel.json` is built by `scripts/build_flywheel.py` (typed nodes + lineage
+edges), enriched by two fetch steps that add the trial-side lineage the local
+data lacks:
+- `scripts/fetch_ot_trials.py` — Open Targets `drugAndClinicalCandidates` gives
+  the authoritative gene → drug → trial(NCT) links (target-to-clinic bridge).
+- `scripts/fetch_trial_refs.py` — ClinicalTrials.gov references → the few trial
+  citations that land in the corpus.
+
+Both write caches under `data/interim/flywheel/`; re-run `build_flywheel.py` to
+merge them. Coverage is honest: most genetic targets have no clinical program
+(endocytosis/tau: zero trials), so backward lineage is rich on the left of the
+pipeline and sparse on the right.
+
 ## Regenerate
 
 ```bash
 python3 scripts/build_atlas.py     # writes atlas.json (disease layout)
 node scripts/build-atlas-feed.mjs  # writes atlas_feed.json (per-paper pathway_group)
 node scripts/add_hypotheses.mjs    # patches the mechanistic-hypothesis layer onto atlas.json
+python3 scripts/fetch_ot_trials.py # (optional) Open Targets gene→trial links
+python3 scripts/fetch_trial_refs.py# (optional) ClinicalTrials.gov trial→paper refs
+python3 scripts/build_flywheel.py  # writes flywheel.json (the pipeline view)
 cd web && npm run build            # or `npm run dev` to view the app
 ```
 

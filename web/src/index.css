@@ -267,6 +267,48 @@ body {
   accent-color: var(--accent);
 }
 
+/* flywheel (development-pipeline) view */
+.map-panel.has-flywheel .map-wrap {
+  height: 76vh;
+  min-height: 620px;
+}
+.fly-wrap {
+  position: absolute;
+  inset: 0;
+  background: var(--panel);
+}
+.fly-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.fly-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.fly-caption {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 22px 18px;
+}
+.fly-caption h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.fly-caption p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 96ch;
+}
+.fly-caption strong {
+  color: var(--ink);
+}
+
 /* mechanistic-hypotheses panel (shown under the map in "Hypotheses" mode) */
 .hyp-panel {
   background: var(--panel);

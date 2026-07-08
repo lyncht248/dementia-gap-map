@@ -3,6 +3,7 @@ import AtlasMap, { type AtlasMapHandle } from "./components/AtlasMap";
 import NewsFeed from "./components/NewsFeed";
 import AgentPanel from "./components/AgentPanel";
 import HypothesisPanel from "./components/HypothesisPanel";
+import FlywheelMap from "./components/FlywheelMap";
 import { createController } from "./agent/controller";
 import { warmupDuckDb } from "./lib/duckdb";
 import type { AtlasMode, AtlasReady, SelectedPaper } from "./lib/atlasRender";
@@ -23,7 +24,8 @@ export default function App() {
   const [selected, setSelected] = useState<Paper[]>([]);
   const [anchorId, setAnchorId] = useState<string | null>(null);
   const [meta, setMeta] = useState<AtlasReady | null>(null);
-  const [viewMode, setViewMode] = useState<AtlasMode>("disease");
+  const [view, setView] = useState<"disease" | "hypothesis" | "flywheel">("disease");
+  const atlasMode: AtlasMode = view === "hypothesis" ? "hypothesis" : "disease";
   const [hiddenMajors, setHiddenMajors] = useState<string[]>([]);
   const [hiddenHyp, setHiddenHyp] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
@@ -196,51 +198,60 @@ export default function App() {
         </p>
       </header>
 
-      <section className="map-panel">
+      <section className={`map-panel ${view === "flywheel" ? "has-flywheel" : ""}`}>
         {meta && meta.hypotheses.length > 0 && (
           <div className="toolbar toolbar-left">
             <div className="segmented" role="group" aria-label="Map framing">
               <button
-                className={`seg ${viewMode === "disease" ? "on" : ""}`}
-                onClick={() => setViewMode("disease")}
+                className={`seg ${view === "disease" ? "on" : ""}`}
+                onClick={() => setView("disease")}
                 title="Colour the map by disease region"
               >
                 Disease areas
               </button>
               <button
-                className={`seg ${viewMode === "hypothesis" ? "on" : ""}`}
-                onClick={() => setViewMode("hypothesis")}
+                className={`seg ${view === "hypothesis" ? "on" : ""}`}
+                onClick={() => setView("hypothesis")}
                 title="Colour the map by the 8 mechanistic Alzheimer's cure hypotheses"
               >
                 Hypotheses
+              </button>
+              <button
+                className={`seg ${view === "flywheel" ? "on" : ""}`}
+                onClick={() => setView("flywheel")}
+                title="The development pipeline: hypotheses × stages (Research → Genetics → Models → Trials → Results)"
+              >
+                Flywheel
               </button>
             </div>
           </div>
         )}
 
-        <div className="toolbar toolbar-right">
-          <button
-            className={`btn ${selectMode ? "active" : ""}`}
-            onClick={() => setSelectMode((v) => !v)}
-          >
-            {selectMode ? "Click and drag…" : "Select region"}
-          </button>
-          <button
-            className={`btn ${filtersOpen ? "active" : ""}`}
-            onClick={() => setFiltersOpen((v) => !v)}
-          >
-            Filters
-          </button>
-        </div>
+        {view !== "flywheel" && (
+          <div className="toolbar toolbar-right">
+            <button
+              className={`btn ${selectMode ? "active" : ""}`}
+              onClick={() => setSelectMode((v) => !v)}
+            >
+              {selectMode ? "Click and drag…" : "Select region"}
+            </button>
+            <button
+              className={`btn ${filtersOpen ? "active" : ""}`}
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              Filters
+            </button>
+          </div>
+        )}
 
-        {filtersOpen && meta && (
+        {filtersOpen && meta && view !== "flywheel" && (
           <div className="filters">
             <div className="filters-row">
               <span className="filters-label">
-                {viewMode === "hypothesis" ? "Hypotheses" : "Disease areas"}
+                {view === "hypothesis" ? "Hypotheses" : "Disease areas"}
               </span>
               <div className="filters-groups">
-                {viewMode === "hypothesis"
+                {view === "hypothesis"
                   ? meta.hypotheses.map((h) => (
                       <button
                         key={h.id}
@@ -289,29 +300,44 @@ export default function App() {
         )}
 
         <div className="map-wrap">
-          <AtlasMap
-            ref={atlasRef}
-            selectMode={selectMode}
-            mode={viewMode}
-            hiddenMajors={hiddenMajors}
-            hiddenHyp={hiddenHyp}
-            yearRange={yearRange}
-            onSelect={onSelect}
-            onSelectModeChange={setSelectMode}
-            onReady={onReady}
-            onCount={setCount}
-          />
+          {/* Atlas stays mounted (holds the agent's map handle); hidden under the
+              flywheel when that framing is active. */}
+          <div
+            style={{ width: "100%", height: "100%", display: view === "flywheel" ? "none" : "block" }}
+          >
+            <AtlasMap
+              ref={atlasRef}
+              selectMode={selectMode}
+              mode={atlasMode}
+              hiddenMajors={hiddenMajors}
+              hiddenHyp={hiddenHyp}
+              yearRange={yearRange}
+              onSelect={onSelect}
+              onSelectModeChange={setSelectMode}
+              onReady={onReady}
+              onCount={setCount}
+            />
+          </div>
+          {view === "flywheel" && (
+            <div className="fly-wrap">
+              <FlywheelMap />
+            </div>
+          )}
         </div>
 
-        <div className="toolbar toolbar-bottom">
-          <span className="count-note">{count.toLocaleString()} papers</span>
-        </div>
-        <button className="reset-view" onClick={resetAll} title="Reset view">
-          Reset view
-        </button>
+        {view !== "flywheel" && (
+          <>
+            <div className="toolbar toolbar-bottom">
+              <span className="count-note">{count.toLocaleString()} papers</span>
+            </div>
+            <button className="reset-view" onClick={resetAll} title="Reset view">
+              Reset view
+            </button>
+          </>
+        )}
       </section>
 
-      {viewMode === "hypothesis" && meta && meta.hypotheses.length > 0 && (
+      {view === "hypothesis" && meta && meta.hypotheses.length > 0 && (
         <HypothesisPanel
           hypotheses={meta.hypotheses}
           hidden={hiddenHyp}
@@ -319,6 +345,21 @@ export default function App() {
           total={meta.total}
           onToggle={toggleHyp}
         />
+      )}
+
+      {view === "flywheel" && (
+        <section className="fly-caption">
+          <h2>The development flywheel</h2>
+          <p>
+            Each hypothesis (row) across the five pipeline stages (columns), ranked
+            with the most clinically reinforced at the top. Every dot is one
+            item — a <strong>paper</strong>, a genetically-supported <strong>gene</strong>,
+            a <strong>model-validated</strong> gene, a <strong>trial</strong>, or a
+            trial with <strong>results</strong>. Hover a dot to trace its lineage
+            across stages; click to open it. The wall where dots stop before Trials
+            (endocytosis, epigenetic, tau) is the translation gap made literal.
+          </p>
+        </section>
       )}
 
       <NewsFeed
