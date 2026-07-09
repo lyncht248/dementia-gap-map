@@ -179,7 +179,7 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
       const hx = LEFT + c * colW + colW / 2;
       ctx.font = "700 12px -apple-system,Segoe UI,Roboto,sans-serif";
       ctx.fillStyle = MUTED;
-      ctx.fillText(s.label.toUpperCase() + "  ⓘ", hx, TOP - 30);
+      ctx.fillText(`${c + 1}. ${s.label.toUpperCase()}  ⓘ`, hx, TOP - 30);
       if (c > 0) {
         ctx.strokeStyle = "#f0f0ed"; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(LEFT + c * colW, TOP - 14); ctx.lineTo(LEFT + c * colW, TOP + hyps.length * rowH); ctx.stroke();
@@ -199,7 +199,7 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
       const lines = wrap(hy.label, LEFT - 30);
       lines.slice(0, 2).forEach((ln, i) => ctx.fillText(ln, 26, cy - 12 + i * 15));
       ctx.fillStyle = MUTED; ctx.font = "400 10.5px -apple-system,Segoe UI,Roboto,sans-serif";
-      ctx.fillText(`gap ${hy.translation_gap?.toFixed(2)} · hover for detail`, 26, cy - 12 + Math.min(2, lines.length) * 15 + 3);
+      ctx.fillText("hover for detail", 26, cy - 12 + Math.min(2, lines.length) * 15 + 3);
       if (r > 0) {
         ctx.strokeStyle = "#efefec"; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(8, TOP + r * rowH); ctx.lineTo(cv.clientWidth - PADR, TOP + r * rowH); ctx.stroke();

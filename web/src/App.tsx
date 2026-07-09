@@ -191,15 +191,38 @@ export default function App() {
   const mapPage = (
     <div className="app">
       <header className="hero">
-        <h1>Dementia Gap Map</h1>
-        <p>
-          A map of dementia &amp; GWAS research from Pubmed, grouped semantically.
-          Click &lsquo;Select Region&rsquo; and draw a circle.
-        </p>
-        <p>
-          Each paper (node) is linked to its gene target(s), pathway(s), and clinical
-          trial(s). Connections on the map are based on citations.
-        </p>
+        {view === "flywheel" ? (
+          <>
+            <h1>The development flywheel</h1>
+            <p>
+              Each hypothesis (row) across the five pipeline stages (columns), ranked
+              with the most clinically reinforced at the top. Every dot is one item — a
+              paper, a genetically-supported gene, a model-validated gene, a trial, or a
+              trial with results. Hover a column header or row for what it means, hover a
+              dot to trace its lineage across stages, and click a dot to open it.
+            </p>
+            <p>
+              The connecting lines read left-to-right, as evidence flows toward the clinic:
+              a <strong>paper</strong> links to the <strong>gene</strong> it studies, a
+              gene to the <strong>model</strong> that validated it and the{" "}
+              <strong>trials</strong> that target it, and a trial to its{" "}
+              <strong>results</strong> — so a chain traces one hypothesis from literature to
+              the clinic, and shows where it stalls.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1>Dementia Gap Map</h1>
+            <p>
+              A map of dementia &amp; GWAS research from Pubmed, grouped semantically.
+              Click &lsquo;Select Region&rsquo; and draw a circle.
+            </p>
+            <p>
+              Each paper (node) is linked to its gene target(s), pathway(s), and clinical
+              trial(s). Connections on the map are based on citations.
+            </p>
+          </>
+        )}
       </header>
 
       <section className={`map-panel ${view === "flywheel" ? "has-flywheel" : ""}`}>
@@ -320,21 +343,6 @@ export default function App() {
           </>
         )}
       </section>
-
-      {view === "flywheel" && (
-        <section className="fly-caption">
-          <h2>The development flywheel</h2>
-          <p>
-            Each hypothesis (row) across the five pipeline stages (columns), ranked
-            with the most clinically reinforced at the top. Every dot is one
-            item — a <strong>paper</strong>, a genetically-supported <strong>gene</strong>,
-            a <strong>model-validated</strong> gene, a <strong>trial</strong>, or a
-            trial with <strong>results</strong>. Hover a column header or row for what
-            it means, hover a dot to trace its lineage across stages, and click a dot
-            to open it.
-          </p>
-        </section>
-      )}
 
       {view !== "flywheel" && (
         <NewsFeed
