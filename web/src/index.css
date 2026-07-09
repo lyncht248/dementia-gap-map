@@ -67,6 +67,12 @@ body {
   max-width: 70ch;
   font-size: 14.5px;
 }
+/* The flywheel blurb is longer; let it use the full width so it wraps to about
+   the same number of lines as the disease blurb — the hero box stays the same
+   height across the toggle and doesn't jump. */
+.hero-flywheel p {
+  max-width: none;
+}
 .note-badge {
   position: absolute;
   top: 16px;
@@ -288,28 +294,6 @@ body {
   width: 100%;
   height: 100%;
 }
-.fly-caption {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 16px 22px 18px;
-}
-.fly-caption h2 {
-  margin: 0;
-  font-size: 17px;
-}
-.fly-caption p {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-  max-width: 96ch;
-}
-.fly-caption strong {
-  color: var(--ink);
-}
-
 /* mechanistic-hypotheses panel (shown under the map in "Hypotheses" mode) */
 .hyp-panel {
   background: var(--panel);

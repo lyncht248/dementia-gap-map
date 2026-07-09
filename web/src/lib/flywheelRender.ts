@@ -179,7 +179,7 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
       const hx = LEFT + c * colW + colW / 2;
       ctx.font = "700 12px -apple-system,Segoe UI,Roboto,sans-serif";
       ctx.fillStyle = MUTED;
-      ctx.fillText(s.label.toUpperCase() + "  ⓘ", hx, TOP - 30);
+      ctx.fillText(`${c + 1}. ${s.label.toUpperCase()}  ⓘ`, hx, TOP - 30);
       if (c > 0) {
         ctx.strokeStyle = "#f0f0ed"; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(LEFT + c * colW, TOP - 14); ctx.lineTo(LEFT + c * colW, TOP + hyps.length * rowH); ctx.stroke();
@@ -188,6 +188,17 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
         ctx.beginPath(); ctx.moveTo(ax - 5, TOP - 33); ctx.lineTo(ax, TOP - 30); ctx.lineTo(ax - 5, TOP - 27); ctx.fill();
       }
     });
+
+    // the row-identity column header — the hypotheses — styled apart from the
+    // stage headers (dark, left-aligned, accent underline) so it reads as the
+    // anchor the pipeline stages describe, not another stage.
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.font = "800 12px -apple-system,Segoe UI,Roboto,sans-serif";
+    ctx.fillStyle = INK;
+    ctx.fillText("HYPOTHESES", 14, TOP - 30);
+    ctx.strokeStyle = "#2f6f57"; ctx.lineWidth = 2;
+    const uw = ctx.measureText("HYPOTHESES").width;
+    ctx.beginPath(); ctx.moveTo(14, TOP - 19); ctx.lineTo(14 + uw, TOP - 19); ctx.stroke();
 
     // row labels (fuller description, wrapped) + gap + separators
     ctx.textAlign = "left";
@@ -199,7 +210,7 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
       const lines = wrap(hy.label, LEFT - 30);
       lines.slice(0, 2).forEach((ln, i) => ctx.fillText(ln, 26, cy - 12 + i * 15));
       ctx.fillStyle = MUTED; ctx.font = "400 10.5px -apple-system,Segoe UI,Roboto,sans-serif";
-      ctx.fillText(`gap ${hy.translation_gap?.toFixed(2)} · hover for detail`, 26, cy - 12 + Math.min(2, lines.length) * 15 + 3);
+      ctx.fillText("hover for detail", 26, cy - 12 + Math.min(2, lines.length) * 15 + 3);
       if (r > 0) {
         ctx.strokeStyle = "#efefec"; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(8, TOP + r * rowH); ctx.lineTo(cv.clientWidth - PADR, TOP + r * rowH); ctx.stroke();
@@ -318,9 +329,10 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
     if (!p) { tip.style.opacity = "0"; cv.style.cursor = "default"; return; }
     const n = p.node;
     cv.style.cursor = n.url ? "pointer" : "default";
+    const resultTxt = n.stage === "results" ? "results posted" : n.has_results ? "has results" : "no results yet";
     const extra =
       n.kind === "trial"
-        ? `<div class="m">${n.phase && n.phase !== "NA" ? n.phase + " · " : ""}${n.has_results ? "has results" : "no results yet"}${n.targets?.length ? " · targets " + esc(n.targets.slice(0, 3).join(", ")) : ""}</div>`
+        ? `<div class="m">${n.phase && n.phase !== "NA" ? n.phase + " · " : ""}${resultTxt}${n.targets?.length ? " · targets " + esc(n.targets.slice(0, 3).join(", ")) : ""}</div>`
         : n.kind === "gene"
         ? `<div class="m">${n.stage === "models" ? "genetic + model-validated target" : "genetically-supported target"}</div>`
         : `<div class="m">${n.year ?? ""}</div>`;

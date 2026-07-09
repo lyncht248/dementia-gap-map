@@ -248,8 +248,9 @@ def main() -> None:
             if pkey in corpus and f"p:{pkey}" in seen_node:
                 edges.add((f"t:{nct}", f"p:{pkey}"))
         if hasres:
+            # a results-stage node exists only for trials that have posted results
             add_node(f"r:{nct}", kind="trial", stage="results", hyps=[h], label=str(t["brief_title"]),
-                     phase=ph, url=f"https://clinicaltrials.gov/study/{nct}")
+                     phase=ph, has_results=True, url=f"https://clinicaltrials.gov/study/{nct}")
             edges.add((f"t:{nct}", f"r:{nct}"))
             result_count[h] += 1
 
