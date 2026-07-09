@@ -67,6 +67,12 @@ body {
   max-width: 70ch;
   font-size: 14.5px;
 }
+/* The flywheel blurb is longer; let it use the full width so it wraps to about
+   the same number of lines as the disease blurb — the hero box stays the same
+   height across the toggle and doesn't jump. */
+.hero-flywheel p {
+  max-width: none;
+}
 .note-badge {
   position: absolute;
   top: 16px;

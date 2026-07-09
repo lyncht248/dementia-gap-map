@@ -190,24 +190,20 @@ export default function App() {
 
   const mapPage = (
     <div className="app">
-      <header className="hero">
+      <header className={`hero ${view === "flywheel" ? "hero-flywheel" : ""}`}>
         {view === "flywheel" ? (
           <>
-            <h1>The development flywheel</h1>
+            <h1>The Development Flywheel</h1>
             <p>
-              Each hypothesis (row) across the five pipeline stages (columns), ranked
-              with the most clinically reinforced at the top. Every dot is one item — a
-              paper, a genetically-supported gene, a model-validated gene, a trial, or a
-              trial with results. Hover a column header or row for what it means, hover a
-              dot to trace its lineage across stages, and click a dot to open it.
+              Each hypothesis (row) across the five pipeline stages (columns). Every dot is
+              one item: a paper, a genetically-supported gene, a model-validated gene, a
+              trial, or a trial with results.
             </p>
             <p>
-              The connecting lines read left-to-right, as evidence flows toward the clinic:
-              a <strong>paper</strong> links to the <strong>gene</strong> it studies, a
-              gene to the <strong>model</strong> that validated it and the{" "}
-              <strong>trials</strong> that target it, and a trial to its{" "}
-              <strong>results</strong> — so a chain traces one hypothesis from literature to
-              the clinic, and shows where it stalls.
+              The connecting lines read left-to-right: a paper links to the gene it studies,
+              a gene to the model that validated it and the trials that target it, and a
+              trial to its results — so a chain traces one hypothesis from literature to the
+              clinic.
             </p>
           </>
         ) : (
