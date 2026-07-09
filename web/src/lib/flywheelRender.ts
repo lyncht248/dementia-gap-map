@@ -189,6 +189,17 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
       }
     });
 
+    // the row-identity column header — the hypotheses — styled apart from the
+    // stage headers (dark, left-aligned, accent underline) so it reads as the
+    // anchor the pipeline stages describe, not another stage.
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.font = "800 12px -apple-system,Segoe UI,Roboto,sans-serif";
+    ctx.fillStyle = INK;
+    ctx.fillText("HYPOTHESES", 14, TOP - 30);
+    ctx.strokeStyle = "#2f6f57"; ctx.lineWidth = 2;
+    const uw = ctx.measureText("HYPOTHESES").width;
+    ctx.beginPath(); ctx.moveTo(14, TOP - 19); ctx.lineTo(14 + uw, TOP - 19); ctx.stroke();
+
     // row labels (fuller description, wrapped) + gap + separators
     ctx.textAlign = "left";
     hyps.forEach((hy, r) => {
@@ -318,9 +329,10 @@ export function mountFlywheel(root: HTMLElement, DATA: FlyData, opts: FlywheelOp
     if (!p) { tip.style.opacity = "0"; cv.style.cursor = "default"; return; }
     const n = p.node;
     cv.style.cursor = n.url ? "pointer" : "default";
+    const resultTxt = n.stage === "results" ? "results posted" : n.has_results ? "has results" : "no results yet";
     const extra =
       n.kind === "trial"
-        ? `<div class="m">${n.phase && n.phase !== "NA" ? n.phase + " · " : ""}${n.has_results ? "has results" : "no results yet"}${n.targets?.length ? " · targets " + esc(n.targets.slice(0, 3).join(", ")) : ""}</div>`
+        ? `<div class="m">${n.phase && n.phase !== "NA" ? n.phase + " · " : ""}${resultTxt}${n.targets?.length ? " · targets " + esc(n.targets.slice(0, 3).join(", ")) : ""}</div>`
         : n.kind === "gene"
         ? `<div class="m">${n.stage === "models" ? "genetic + model-validated target" : "genetically-supported target"}</div>`
         : `<div class="m">${n.year ?? ""}</div>`;
