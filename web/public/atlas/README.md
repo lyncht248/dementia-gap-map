@@ -117,6 +117,30 @@ merge them. Coverage is honest: most genetic targets have no clinical program
 (endocytosis/tau: zero trials), so backward lineage is rich on the left of the
 pipeline and sparse on the right.
 
+## Paper-roles view (papers on the flywheel)
+
+A fourth framing (toggle: *Disease areas · Flywheel · Paper roles*) re-draws the
+same loop as a **wheel** and answers a different question — *what job does each
+individual paper do on the way to a drug?* — the framing Nathan Skene proposed.
+Instead of anonymous dots, a **curated set** of high-influence papers is placed
+on the step it plays (**Human anchor → Cell state & mechanism → Perturbation →
+Clinical trial → Results & feedback**, and Results feeds back to the anchor),
+coloured by the mechanism it argues for and sized by influence (RCR). Clicking a
+paper opens a "role card": **role, inputs, outputs, method** (with a badge for
+whether that method is a candidate to be *FRO'd* — spun out to a Focused Research
+Organization), the **assumption** it makes about how dementia gets cured, and how
+that assumption is **challenged** — including dashed arcs to the specific papers
+that question it. Rendered by `web/src/components/PaperFlywheel.tsx` from
+`paperflow.json`.
+
+`paperflow.json` is built by `scripts/build_paperflow.py`. Only the *annotations*
+(role / inputs / outputs / method / FRO flag / assumption / challenge, plus the
+step and mechanism of each paper, and the "questions" edges) are curated in that
+script; every hard number — RCR, gene links, trial count, drugs, title, journal,
+year, URL — is pulled live from `atlas_feed.json` so a card can never drift from
+the data behind the map. To extend it, add a pmid to the `CURATED` dict and
+re-run the builder.
+
 ## Regenerate
 
 ```bash
@@ -126,6 +150,7 @@ node scripts/add_hypotheses.mjs    # patches the mechanistic-hypothesis layer on
 python3 scripts/fetch_ot_trials.py # (optional) Open Targets gene→trial links
 python3 scripts/fetch_trial_refs.py# (optional) ClinicalTrials.gov trial→paper refs
 python3 scripts/build_flywheel.py  # writes flywheel.json (the pipeline view)
+python3 scripts/build_paperflow.py # writes paperflow.json (the paper-roles wheel)
 cd web && npm run build            # or `npm run dev` to view the app
 ```
 

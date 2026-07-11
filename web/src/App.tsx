@@ -3,6 +3,7 @@ import AtlasMap, { type AtlasMapHandle } from "./components/AtlasMap";
 import NewsFeed from "./components/NewsFeed";
 import AgentPanel from "./components/AgentPanel";
 import FlywheelMap from "./components/FlywheelMap";
+import PaperFlywheel from "./components/PaperFlywheel";
 import { createController } from "./agent/controller";
 import { warmupDuckDb } from "./lib/duckdb";
 import type { AtlasReady, SelectedPaper } from "./lib/atlasRender";
@@ -23,7 +24,7 @@ export default function App() {
   const [selected, setSelected] = useState<Paper[]>([]);
   const [anchorId, setAnchorId] = useState<string | null>(null);
   const [meta, setMeta] = useState<AtlasReady | null>(null);
-  const [view, setView] = useState<"disease" | "flywheel">("disease");
+  const [view, setView] = useState<"disease" | "flywheel" | "paperflow">("disease");
   const [hiddenMajors, setHiddenMajors] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([2000, 2100]);
   const [count, setCount] = useState(0);
@@ -202,7 +203,11 @@ export default function App() {
         </p>
       </header>
 
-      <section className={`map-panel ${view === "flywheel" ? "has-flywheel" : ""}`}>
+      <section
+        className={`map-panel ${
+          view === "flywheel" ? "has-flywheel" : view === "paperflow" ? "has-paperflow" : ""
+        }`}
+      >
         {meta && meta.hypotheses.length > 0 && (
           <div className="toolbar toolbar-left">
             <div className="segmented" role="group" aria-label="Map framing">
@@ -220,11 +225,18 @@ export default function App() {
               >
                 Flywheel
               </button>
+              <button
+                className={`seg ${view === "paperflow" ? "on" : ""}`}
+                onClick={() => setView("paperflow")}
+                title="Individual papers mapped onto the drug-discovery loop: each paper's role, inputs/outputs, method, assumption, and who questions it"
+              >
+                Paper roles
+              </button>
             </div>
           </div>
         )}
 
-        {view !== "flywheel" && (
+        {view === "disease" && (
           <div className="toolbar toolbar-right">
             <button
               className={`btn ${selectMode ? "active" : ""}`}
@@ -241,7 +253,7 @@ export default function App() {
           </div>
         )}
 
-        {filtersOpen && meta && view !== "flywheel" && (
+        {filtersOpen && meta && view === "disease" && (
           <div className="filters">
             <div className="filters-row">
               <span className="filters-label">Disease areas</span>
@@ -287,7 +299,7 @@ export default function App() {
           {/* Atlas stays mounted (holds the agent's map handle); hidden under the
               flywheel when that framing is active. */}
           <div
-            style={{ width: "100%", height: "100%", display: view === "flywheel" ? "none" : "block" }}
+            style={{ width: "100%", height: "100%", display: view === "disease" ? "block" : "none" }}
           >
             <AtlasMap
               ref={atlasRef}
@@ -307,9 +319,14 @@ export default function App() {
               <FlywheelMap entry={entryRef.current ?? undefined} />
             </div>
           )}
+          {view === "paperflow" && (
+            <div className="fly-wrap">
+              <PaperFlywheel />
+            </div>
+          )}
         </div>
 
-        {view !== "flywheel" && (
+        {view === "disease" && (
           <>
             <div className="toolbar toolbar-bottom">
               <span className="count-note">{count.toLocaleString()} papers</span>
@@ -336,7 +353,25 @@ export default function App() {
         </section>
       )}
 
-      {view !== "flywheel" && (
+      {view === "paperflow" && (
+        <section className="fly-caption">
+          <h2>The paper flywheel — what job does each paper do?</h2>
+          <p>
+            The same loop, but every dot is one <strong>individual paper</strong>,
+            placed on the step it plays and coloured by the mechanism it argues for.
+            A flywheel because each turn should make the next cheaper and sharper:{" "}
+            <strong>Human anchor → Cell state → Perturbation → Trial → Results</strong>,
+            and Results feeds back to the anchor. Click a paper for its{" "}
+            <strong>role</strong>, <strong>inputs / outputs</strong>,{" "}
+            <strong>method</strong> (and whether it is <strong>FRO-able</strong>), the{" "}
+            <strong>assumption</strong> it makes about how dementia gets cured, and{" "}
+            <strong>who questions that assumption</strong> — the dashed red arcs.
+            Dot size is influence (RCR).
+          </p>
+        </section>
+      )}
+
+      {view === "disease" && (
         <NewsFeed
           selected={selected}
           clusters={clusters}

@@ -310,6 +310,491 @@ body {
   color: var(--ink);
 }
 
+/* ===== paper flywheel (individual papers mapped onto the loop) ============ */
+.map-panel.has-paperflow .map-wrap {
+  height: 860px;
+  max-height: 88vh;
+  min-height: 680px;
+}
+.pf-root {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 120% at 50% 35%, #fbfbf8 0%, #f2f2ee 70%, #ececE7 100%);
+  overflow: hidden;
+}
+.pf-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: default;
+}
+
+/* rim */
+.pf-rim-ring {
+  fill: none;
+  stroke: #d8c99b;
+  stroke-width: 2;
+}
+.pf-rim-ring2 {
+  fill: none;
+  stroke: #e7dcbd;
+  stroke-width: 1;
+}
+.pf-tick {
+  stroke: #cdbc8c;
+  stroke-width: 1.4;
+}
+
+/* wedges */
+.pf-wedge {
+  fill: #ffffff;
+  stroke: #ecebe6;
+  stroke-width: 1;
+  opacity: 0.55;
+  transition: opacity 0.15s, fill 0.15s;
+  cursor: pointer;
+}
+.pf-wedge.on {
+  opacity: 1;
+  fill: #fffdf5;
+}
+.pf-divider {
+  stroke: #e6e5df;
+  stroke-width: 1;
+}
+
+/* step headers */
+.pf-steplab {
+  cursor: pointer;
+}
+.pf-stepnum {
+  fill: var(--ink);
+}
+.pf-stepnum-t {
+  fill: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.pf-steptext {
+  fill: #55555c;
+  font-size: 16px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  transition: fill 0.15s;
+}
+.pf-steptext.on {
+  fill: var(--ink);
+}
+
+/* hub */
+.pf-hubc {
+  stroke: #d8c485;
+  stroke-width: 1.5;
+}
+.pf-hubinner {
+  fill: none;
+  stroke: #eadfb8;
+  stroke-width: 1;
+}
+.pf-chevron {
+  fill: none;
+  stroke: #b79a52;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
+.pf-hub-title {
+  fill: #6b5a24;
+  font-size: 22px;
+  font-weight: 800;
+  text-anchor: middle;
+  letter-spacing: 0.2px;
+}
+.pf-hub-sub {
+  fill: #8a7739;
+  font-size: 13px;
+  text-anchor: middle;
+}
+.pf-hub-hint {
+  fill: #a9974f;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-anchor: middle;
+  text-transform: lowercase;
+}
+.pf-hub-kicker {
+  fill: #7a6828;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-anchor: middle;
+}
+.pf-hub-q {
+  fill: #4a3f18;
+  font-size: 16px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+.pf-hub-io {
+  fill: #8a7739;
+  font-size: 11.5px;
+  text-anchor: middle;
+}
+
+/* nodes */
+.pf-node {
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.pf-node.dim {
+  opacity: 0.28;
+}
+.pf-dot {
+  stroke: #fff;
+  stroke-width: 2;
+  transition: transform 0.12s;
+}
+.pf-node:hover .pf-dot {
+  filter: brightness(1.05);
+}
+.pf-halo {
+  fill: none;
+  stroke-width: 2.5;
+  opacity: 0.9;
+}
+.pf-halo.chal {
+  stroke-dasharray: 3 3;
+}
+.pf-star {
+  fill: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+.pf-nodelabel {
+  fill: #4a4a50;
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #f4f4f0;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* challenge edges */
+.pf-edge {
+  fill: none;
+  stroke: #d24b4b;
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+  opacity: 0.28;
+  transition: opacity 0.15s, stroke-width 0.15s;
+}
+.pf-edge.lit {
+  opacity: 0.95;
+  stroke-width: 2.4;
+}
+
+/* tooltip */
+.pf-tip {
+  position: absolute;
+  z-index: 8;
+  max-width: 280px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: none;
+}
+.pf-tip strong {
+  font-size: 13px;
+}
+.pf-tip-meta {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.pf-tip-title {
+  font-size: 11.5px;
+  color: var(--ink);
+  line-height: 1.35;
+}
+.pf-tip-hint {
+  font-size: 10.5px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* legend */
+.pf-legend {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 6;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 12px;
+  backdrop-filter: blur(3px);
+  max-width: min(420px, calc(100% - 28px));
+}
+.pf-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.pf-lchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.pf-lchip i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.pf-legend-note {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.pf-edge-key {
+  color: #d24b4b;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+
+/* role card */
+.pf-card {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  bottom: 14px;
+  width: min(390px, calc(100% - 28px));
+  z-index: 7;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.14);
+  padding: 18px 20px 16px;
+  overflow-y: auto;
+  animation: pf-slide 0.18s ease-out;
+}
+@keyframes pf-slide {
+  from { transform: translateX(12px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.pf-card-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: #f2f2ef;
+  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pf-card-close:hover {
+  background: #e8e8e4;
+  color: var(--ink);
+}
+.pf-card-step {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.pf-card-title {
+  margin: 3px 0 8px;
+  font-size: 20px;
+  line-height: 1.2;
+  padding-right: 28px;
+}
+.pf-card-star {
+  color: #e0a52a;
+  margin-right: 4px;
+}
+.pf-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.pf-chip {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.pf-chip.ghost {
+  background: #f2f2ef !important;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.pf-card-fulltitle {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.pf-card-grid {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+}
+.pf-card-grid dt {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding-top: 2px;
+}
+.pf-card-grid dd {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.pf-assume {
+  font-style: italic;
+  color: #33333a;
+}
+.pf-fro {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  border-radius: 999px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
+.pf-fro.yes {
+  background: #e7f3ec;
+  color: #1c6b45;
+  border: 1px solid #bfe0cd;
+}
+.pf-fro.no {
+  background: #f2f2ef;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.pf-fro-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.pf-chal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+.pf-chal-chip {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b23b3b;
+  background: #fbeeee;
+  border: 1px solid #f0d3d3;
+  border-radius: 999px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.pf-chal-chip:hover {
+  background: #f7e0e0;
+}
+.pf-chal-chip.q {
+  color: #7a6828;
+  background: #f8f2df;
+  border-color: #e8dcb5;
+}
+.pf-card-foot {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pf-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.pf-tag-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-right: 2px;
+}
+.pf-gene {
+  font-size: 11px;
+  font-weight: 600;
+  background: #f2f2ef;
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+.pf-gene.none {
+  color: #b23b3b;
+  background: #fbeeee;
+}
+.pf-gene.more {
+  color: var(--muted);
+}
+.pf-drug {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: #eaf3ef;
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+.pf-card-link {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+  margin-top: 2px;
+}
+.pf-card-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .pf-card {
+    width: calc(100% - 28px);
+  }
+}
+
 /* mechanistic-hypotheses panel (shown under the map in "Hypotheses" mode) */
 .hyp-panel {
   background: var(--panel);
